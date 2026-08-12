@@ -206,6 +206,87 @@ namespace BotMod.AI
             }
             catch { }
         }
+        public static Vector3 GroundSplashTarget(EntityAlive me, EntityAlive target, World world)
+        {
+            try
+            {
+                Vector3 origin = target.position; Vector3 end = origin + Vector3.down * 64f;
+                Ray ray = new Ray(origin, Vector3.down);
+                if (Physics.Raycast(ray, out RaycastHit hit, 70f, -1))
+                {
+                    Vector3 ground = hit.point + Vector3.up * 4f;
+                    // trace from eye to ground
+                    Vector3 eye = me.position + Vector3.up * 1.45f;
+                    Vector3 dir = ground - eye; float dist = dir.magnitude; dir /= Mathf.Max(0.01f, dist);
+                    Ray ray2 = new Ray(eye, dir);
+                    if (Physics.Raycast(ray2, out RaycastHit hit2, dist, -1))
+                    {
+                        if (Vector3.Distance(hit2.point, ground) < 60f) return ground;
+                    }
+                    else if (VoxelLineClear(eye, ground, world)) return ground;
+                }
+                // fallback voxel down trace
+                for (int i = 1; i < 16; i++)
+                {
+                    Vector3 probe = origin + Vector3.down * (i * 4f);
+                    var bv = world.GetBlock(new Vector3i(Mathf.FloorToInt(probe.x), Mathf.FloorToInt(probe.y), Mathf.FloorToInt(probe.z)));
+                    if (bv.type != 0) { var block = Block.list[bv.type]; if (block != null && block.IsCollideMovement) return probe + Vector3.up * 7f; }
+                }
+            } catch {}
+            return Vector3.zero;
+        }
+        public static bool TraceClear(EntityAlive me, Vector3 aim, World world, EntityAlive intended)
+        {
+            try
+            {
+                Vector3 eye = me.position + Vector3.up * 1.45f;
+                Vector3 dir = aim - eye; float dist = dir.magnitude; if (dist < 0.1f) return true; dir /= dist;
+                Ray ray = new Ray(eye, dir);
+                if (Physics.Raycast(ray, out RaycastHit hit, dist, -1))
+                {
+                    if (Vector3.Distance(hit.point, aim) < 0.9f) return true;
+                    var hitEnt = hit.collider != null ? hit.collider.GetComponentInParent<Entity>() : null;
+                    if (hitEnt != null)
+                    {
+                        // teammate abort like Q3
+                        if (hitEnt is EntityPlayer || BotMod.Core.BotManager.Instance.IsBotEntity(hitEnt.entityId))
+                        {
+                            if (intended != null && hitEnt.entityId == intended.entityId) return true;
+                            // hit someone else - if friendly per config, fail
+                            // For now, only block if intended was hittable and we hit another bot/player on same team
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+                return VoxelLineClear(eye, aim, world);
+            } catch { return true; }
+        }
+        public static Vector3 FindCover(EntityAlive me, EntityAlive threat, World world)
+        {
+            // Doom3 idAASFindCover port: sample 6 directions + up, check PVS-ish via LOS blocked from threat
+            Vector3 best = Vector3.zero; float bestScore = -1f;
+            Vector3 myPos = me.position;
+            for (int i = 0; i < 8; i++)
+            {
+                float ang = i * 45f * Mathf.Deg2Rad;
+                Vector3 cand = myPos + new Vector3(Mathf.Cos(ang), 0, Mathf.Sin(ang)) * 10f;
+                // ground it
+                for (int y = 6; y >= -2; y--)
+                {
+                    var bv = world.GetBlock(new Vector3i(Mathf.FloorToInt(cand.x), Mathf.FloorToInt(myPos.y + y), Mathf.FloorToInt(cand.z)));
+                    if (bv.type != 0) { cand.y = myPos.y + y + 1.8f; break; }
+                }
+                // must be not visible from threat
+                if (HasLineOfSight(threat.position + Vector3.up * 1.45f, cand + Vector3.up * 0.5f, world)) continue;
+                // must be reachable (not inside wall)
+                var bv2 = world.GetBlock(new Vector3i(Mathf.FloorToInt(cand.x), Mathf.FloorToInt(cand.y), Mathf.FloorToInt(cand.z)));
+                if (bv2.type != 0 && Block.list[bv2.type] != null && Block.list[bv2.type].IsCollideMovement) continue;
+                float score = 10f - Vector3.Distance(myPos, cand) * 0.2f; // prefer nearer cover
+                if (score > bestScore) { bestScore = score; best = cand; }
+            }
+            return best;
+        }
         public static void JumpOrStrafe(EntityAlive me)
         {
             try

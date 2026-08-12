@@ -24,6 +24,7 @@ if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && dotne
     -p:BotModOutput="$OUT/"
   cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
   cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
+  if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
   echo "OK -> $OUT/BotMod.dll"
   ls -la "$OUT"
   exit 0
@@ -52,5 +53,6 @@ mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 \
   -out:"$OUT/BotMod.dll" "${refs[@]}" "${sources[@]}"
 cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
 cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
+if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
 echo "OK -> $OUT/BotMod.dll"
 ls -la "$OUT"

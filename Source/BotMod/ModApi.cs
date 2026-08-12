@@ -23,6 +23,7 @@ namespace BotMod
                 ModPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
                 Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
                 Config.Normalize();
+                try { BotCharacterDB.Load(Config); } catch {}
                 Log($"BotMod v0.1.0 loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
 
                 if (!Config.Enabled)
@@ -89,6 +90,7 @@ namespace BotMod
         {
             Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
             Config.Normalize();
+            try { BotMod.Config.BotCharacterDB.Load(Config); } catch {}
             Log($"Config reloaded: Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
         }
 

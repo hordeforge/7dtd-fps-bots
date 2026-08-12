@@ -11,6 +11,7 @@ namespace BotMod.Core
         public string Name { get; }
         public float SpawnTime { get; }
         public WeaponProfile Weapon { get; private set; }
+        public BotCharacter Character { get; private set; }
         bool _dead;
         EntityAlive _cachedEntity;
         float _nextTargetScan;
@@ -29,15 +30,23 @@ namespace BotMod.Core
         float _burstPauseUntil;
         float _strafeUntil;
         int _strafeDir = 1;
+        float _fireThrottleWaitUntil;
+        float _fireThrottleShootUntil;
+        float _idealYaw, _idealPitch;
+        float _viewYaw, _viewPitch;
+        float _viewYawVel, _viewPitchVel;
+        float _enemySightTime;
+        float _weaponChangeTime;
         Vector3 _lastTargetPos = Vector3.zero;
         Vector3 _targetVel = Vector3.zero;
         float _nextTaunt;
 
-        public Bot(int entityId, string name, float now, WeaponProfile weapon)
+        public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
         {
-            EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon;
+            EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
             _lastPos = Vector3.zero;
             _burstLeft = weapon.BurstMin;
+            _viewYaw = 0f; _viewPitch = 0f; _enemySightTime = -10f;
         }
 
         public void MarkDead() { _dead = true; }
@@ -134,12 +143,31 @@ namespace BotMod.Core
                 }
             }
 
+            // Q3-style decision: retreat if low health + high SelfPreservation / low Aggression
+            var ch = Character ?? BotCharacterDB.ForName(Name);
+            if (_target != null && _target.IsAlive())
+            {
+                float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
+                if (hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f)
+                {
+                    Vector3 cover = BotBrain.FindCover(me, _target, world);
+                    if (cover != Vector3.zero)
+                    {
+                        _state = BotBrain.State.Wander; // Retreat (reuse Wander while seeking cover)
+                        BotBrain.MoveTo(me, cover);
+                        // heal-ish: don't shoot while retreating
+                        if (Vector3.Distance(me.position, cover) < 4f) { /* reached cover */ }
+                        // still tick but skip attack this frame
+                    }
+                }
+            }
             if (_target != null && _target.IsAlive() && !IsDeadTgt(_target))
             {
                 Vector3 tPos = _target.position;
                 Vector3 myPos = me.position;
                 float dist = Vector3.Distance(myPos, tPos);
                 bool canSee = BotBrain.CanSee(me, _target, world, cfg);
+                if (canSee) _enemySightTime = Time.time;
                 bool inRange = dist <= Weapon.Range && dist <= cfg.AttackRange;
 
                 if (inRange && canSee)

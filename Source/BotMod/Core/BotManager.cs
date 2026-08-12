@@ -63,9 +63,10 @@ namespace BotMod.Core
             string gun = weaponOverride;
             var wp = BotSpawner.PickWeapon(cfg, gun);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
+            var character = BotMod.Config.BotCharacterDB.ForName(name);
             if (e == null) { ModApi.Log("Spawn failed at " + pos); return false; }
             BotSpawner.ConfigureBotEntity(e, cfg, wp);
-            var bot = new Bot(e.entityId, name, Time.time, wp);
+            var bot = new Bot(e.entityId, name, Time.time, wp, character);
             _bots.Add(bot); _botEntityIds.Add(e.entityId);
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
             return true;
