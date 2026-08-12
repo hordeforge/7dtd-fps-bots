@@ -37,6 +37,7 @@ namespace BotMod.Core
         float _viewYawVel, _viewPitchVel;
         float _enemySightTime;
         float _weaponChangeTime;
+        uint _rngState; // deterministic LCG seeded from entityId (like zdtd_bot per-slot RNG)
         Vector3 _lastTargetPos = Vector3.zero;
         Vector3 _targetVel = Vector3.zero;
         float _nextTaunt;
@@ -47,9 +48,13 @@ namespace BotMod.Core
             _lastPos = Vector3.zero;
             _burstLeft = weapon.BurstMin;
             _viewYaw = 0f; _viewPitch = 0f; _enemySightTime = -10f;
+            _rngState = (uint)entityId * 2654435761u + 97u;
         }
 
         public void MarkDead() { _dead = true; }
+        uint RngNext() { _rngState = _rngState * 1103515245u + 12345u; return _rngState; }
+        float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
+        float RngSym() { return 2f * Rng01() - 1f; }
         public bool IsDeadOrUnloaded(World world)
         {
             if (_dead) return true;
@@ -252,7 +257,7 @@ namespace BotMod.Core
             if (_burstLeft <= 0)
             {
                 _burstLeft = UnityEngine.Random.Range(Weapon.BurstMin, Weapon.BurstMax + 1);
-                _burstPauseUntil = Time.time + Weapon.BurstPause * (0.85f + UnityEngine.Random.value * 0.3f);
+                _burstPauseUntil = Time.time + Weapon.BurstPause * (0.85f + Rng01() * 0.3f); // deterministic vs Unity Random (zdtd_bot parity)
                 // vary strafe dir between bursts
                 if (UnityEngine.Random.value < 0.6f) _strafeDir = -_strafeDir;
                 return;
@@ -292,7 +297,7 @@ namespace BotMod.Core
                     }
                     // Damage per pellet: spread damage for shotguns
                     int dmg = pellets > 1 ? Mathf.Max(3, Weapon.Damage) : Weapon.Damage;
-                    bool head = pellets == 1 && UnityEngine.Random.value < cfg.HeadshotChance;
+                    bool head = pellets == 1 && Rng01() < cfg.HeadshotChance;
                     if (head) dmg = Mathf.RoundToInt(dmg * cfg.HeadshotMultiplier);
                     int hpBefore = target.Health;
                     DamageSource ds;
