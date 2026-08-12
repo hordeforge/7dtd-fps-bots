@@ -267,7 +267,6 @@ namespace BotMod.Core
                     }
                 }
                 if (classId < 0) { ModApi.Log("Unknown entity class: " + entityClassName); return null; }
-                // Always set entityName via creation data so world sees [Bot] prefix.
                 Entity e = null;
                 try
                 {
@@ -279,19 +278,18 @@ namespace BotMod.Core
                 if (e == null)
                 {
                     try { e = EntityFactory.CreateEntity(classId, pos, Vector3.zero); } catch { }
-                    if (e != null) try { e.EntityName = botName; } catch { }
                 }
                 if (e == null) return null;
-                try { e.EntityName = botName; } catch { }
+                TrySetEntityName(e, botName);
                 try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.Log("SpawnEntityInWorld failed: " + ex.Message); return null; }
                 var ent = world.GetEntity(e.entityId);
-                try { if (ent != null) ent.EntityName = botName; } catch { }
+                if (ent != null) TrySetEntityName(ent, botName);
                 return ent ?? e;
             }
             catch (Exception ex) { ModApi.Log("SpawnBotEntity failed: " + ex); return null; }
         }
 
-        public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp)
+        public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp, string botName = null)
         {
             try
             {
@@ -336,12 +334,32 @@ namespace BotMod.Core
                         // Health/stamina already set above; ensure not cheating with speed
                         try { alive.speedModifier = 1f; } catch {}
                     } catch {}
-                    try { alive.EntityName = botName ?? alive.EntityName; } catch { }
+                    TrySetEntityName(alive, botName);
                     try { alive.Buffs.SetCustomVar("botmod_isBot", 1f); } catch { }
                     try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
                 }
             }
             catch (Exception ex) { ModApi.Log("ConfigureBotEntity failed: " + ex.Message); }
+        }
+
+        static void TrySetEntityName(Entity e, string name)
+        {
+            if (e == null || string.IsNullOrEmpty(name)) return;
+            try
+            {
+                if (e is EntityAlive alive) { try { alive.SetEntityName(name); return; } catch { } }
+                try { e.SetEntityName(name); } catch { }
+                // Fallback reflection: field _entityName / entityName
+                try
+                {
+                    var t = e.GetType();
+                    var fi = t.GetField("_entityName", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)
+                          ?? t.GetField("entityName", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                    if (fi != null && fi.FieldType == typeof(string)) fi.SetValue(e, name);
+                }
+                catch { }
+            }
+            catch { }
         }
     }
 }

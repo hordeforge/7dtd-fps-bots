@@ -1,6 +1,6 @@
 # 7DTD Bot - Dedicated FPS Bots (like Quake 3)
 
-Server-side mod that spawns real FPS bots. They spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Bots obey the same physics/collision/move caps as a normal player (no godmode, no no-clip, same weight/drag/capsule bounds) — only spawn loadout differs. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
+Server-side mod that spawns real FPS bots. Names are prefixed `[Bot] Grunt_42` so they are instantly distinguishable in the player list and HUD. Bots spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Bots obey the same physics/collision/move caps as a normal player (no godmode, no no-clip, same weight/drag/capsule bounds) — only spawn loadout differs. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
 
 ## What it does
 
@@ -54,9 +54,9 @@ Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).
 make build && make install
 ./7DaysToDieServer.x86_64 -logfile /tmp/bot.log -quit -batchmode -nographics -dedicated -configfile /tmp/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.1.0 loading... diff=2 weapon=mixed
+# [BotMod] BotMod v0.2.0 loading... diff=2 weapon=mixed
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
-# [BotMod] Bot spawned: Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) ...
+# [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) ...
 # [BotMod] Bots alive: 6/6
 ```
 
