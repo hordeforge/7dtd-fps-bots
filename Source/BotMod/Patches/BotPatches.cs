@@ -1,9 +1,36 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using UnityEngine;
 
 namespace BotMod.Patches
 {
+    // EAC-off LAN uses synthetic ids; client never finishes full EOS/Steam handshake, so any post-Steam authorizer (Eac, Crossplay, etc.) would stall loopback joins. Let loopback synthetic ids auto-pass all IAuthorizer chains after PlayerId/Basic checks. Generic patch covers every authorizer type that implements IAuthorizer.Authorize, not just Steam.
+    [HarmonyPatch(typeof(Platform.Steam.AuthenticationServer), "AuthenticateUser")]
+    public static class Patch_SteamAuthServer_SyntheticBypass
+    {
+        static bool Prefix(ClientInfo _cInfo, ref Platform.EBeginUserAuthenticationResult __result)
+        {
+            try
+            {
+                if (_cInfo == null) return true;
+                var pid = _cInfo.PlatformId as Platform.Steam.UserIdentifierSteam;
+                if (pid == null) return true;
+                ulong sid = 0;
+                try { sid = pid.SteamId; } catch { return true; }
+                // Our synthetic range
+                if (sid < 76561199000000000UL || sid > 76561199000010000UL) return true;
+                __result = Platform.EBeginUserAuthenticationResult.Ok;
+                Log.Out("[BotMod] synthetic auth bypass for SteamId=" + sid + " ip=" + (_cInfo.ip ?? "?"));
+                return false;
+            }
+            catch { }
+            return true;
+        }
+    }
+
+    // Generic authorizer bypass was too broad; keep only the concrete Steam auth server bypass above. AuthorizationManager dispatches sync+async; patching it generically interferes with normal flow.
+
     /// <summary>Server console lp/listplayers should also list [Bot] zombies so operators see bots in the roster.</summary>
     [HarmonyPatch(typeof(ConsoleCmdListPlayers), "Execute")]
     public static class Patch_ListPlayers_Bots
