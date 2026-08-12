@@ -15,8 +15,11 @@ namespace BotMod.Core
 
         public static string PickName(BotConfig cfg)
         {
-            if (cfg.BotNames == null || cfg.BotNames.Length == 0) return "Bot_" + Rng.Next(1000, 9999);
-            return cfg.BotNames[Rng.Next(cfg.BotNames.Length)] + "_" + Rng.Next(10, 99);
+            string raw;
+            if (cfg.BotNames == null || cfg.BotNames.Length == 0) raw = "Bot_" + Rng.Next(1000, 9999);
+            else raw = cfg.BotNames[Rng.Next(cfg.BotNames.Length)] + "_" + Rng.Next(10, 99);
+            if (raw.StartsWith("[Bot] ")) return raw;
+            return "[Bot] " + raw;
         }
         public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride = null)
         {
@@ -264,15 +267,25 @@ namespace BotMod.Core
                     }
                 }
                 if (classId < 0) { ModApi.Log("Unknown entity class: " + entityClassName); return null; }
+                // Always set entityName via creation data so world sees [Bot] prefix.
                 Entity e = null;
-                try { e = EntityFactory.CreateEntity(classId, pos, Vector3.zero); } catch { }
+                try
+                {
+                    var ed = EntityFactory.SetupEntityCreationData(classId, pos);
+                    try { ed.entityName = botName; } catch { }
+                    e = EntityFactory.CreateEntity(ed);
+                }
+                catch { }
                 if (e == null)
                 {
-                    try { var ed = EntityFactory.SetupEntityCreationData(classId, pos); try { ed.entityName = botName; } catch { } e = EntityFactory.CreateEntity(ed); } catch { }
+                    try { e = EntityFactory.CreateEntity(classId, pos, Vector3.zero); } catch { }
+                    if (e != null) try { e.EntityName = botName; } catch { }
                 }
                 if (e == null) return null;
+                try { e.EntityName = botName; } catch { }
                 try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.Log("SpawnEntityInWorld failed: " + ex.Message); return null; }
                 var ent = world.GetEntity(e.entityId);
+                try { if (ent != null) ent.EntityName = botName; } catch { }
                 return ent ?? e;
             }
             catch (Exception ex) { ModApi.Log("SpawnBotEntity failed: " + ex); return null; }
@@ -323,6 +336,7 @@ namespace BotMod.Core
                         // Health/stamina already set above; ensure not cheating with speed
                         try { alive.speedModifier = 1f; } catch {}
                     } catch {}
+                    try { alive.EntityName = botName ?? alive.EntityName; } catch { }
                     try { alive.Buffs.SetCustomVar("botmod_isBot", 1f); } catch { }
                     try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
                 }
