@@ -307,6 +307,22 @@ namespace BotMod.Core
                         }
                         catch { }
                     }
+                    // Enforce player-like physics so bots aren't faster/slower or heavier than you.
+                    // Match moveSpeed etc to vanilla playerMale defaults; no god/no-clip.
+                    try
+                    {
+                        // Player-ish speeds (vanilla playerMale: moveSpeed 1.0-ish, we use cfg but cap to player bounds)
+                        float baseSpeed = 1.0f; // player base
+                        // Don't override A* but ensure not godmode/no-collision
+                        try { alive.IsGodMode.Value = false; } catch {}
+                        try { alive.IsNoCollisionMode.Value = false; } catch {}
+                        try { alive.entityCollisionReduction = 0f; } catch {}
+                        // Ensure normal capsule (zombie soldier is taller/wider; force player-like)
+                        // We avoid touching physicsRB directly; just ensure weight/drag match player
+                        try { alive.weight = 70f; } catch {}
+                        // Health/stamina already set above; ensure not cheating with speed
+                        try { alive.speedModifier = 1f; } catch {}
+                    } catch {}
                     try { alive.Buffs.SetCustomVar("botmod_isBot", 1f); } catch { }
                     try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
                 }

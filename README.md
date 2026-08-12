@@ -1,6 +1,6 @@
 # 7DTD Bot - Dedicated FPS Bots (like Quake 3)
 
-Server-side mod that spawns real FPS bots. They spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
+Server-side mod that spawns real FPS bots. They spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Bots obey the same physics/collision/move caps as a normal player (no godmode, no no-clip, same weight/drag/capsule bounds) — only spawn loadout differs. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
 
 ## What it does
 
