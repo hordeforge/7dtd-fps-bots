@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xml>
+	<Name value="BotMod" />
+	<DisplayName value="7DTD Bot - FPS Bots" />
+	<Description value="Server-side FPS bots like Quake 3: spawn with weapons, pathfind, hunt and shoot players, zombies and each other." />
+	<Author value="7dtd-bot" />
+	<Version value="0.1.0" />
+	<Website value="" />
+</xml>

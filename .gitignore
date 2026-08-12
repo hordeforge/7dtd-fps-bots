@@ -1,0 +1,7 @@
+dist/
+Source/BotMod/bin/
+Source/BotMod/obj/
+*.user
+*.suo
+.vs/
+.idea/
