@@ -80,6 +80,25 @@ namespace BotMod.AI
             return best;
         }
 
+        // Q3 LTG/NBG analog: long-term seek (kill/item/camp) + nearby pickup weight
+        public enum GoalType { Kill, GetItem, Camp, Roam }
+        public static GoalType DecideGoal(EntityAlive me, BotConfig cfg, BotCharacter ch)
+        {
+            float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);
+            if (ch.WantsToRetreat(hp, 12f, false)) return GoalType.Camp;
+            if (ch.Camper > 0.6f && hp > 0.7f && UnityEngine.Random.value < 0.12f) return GoalType.Camp;
+            if (ch.EasyFragger > 0.5f && UnityEngine.Random.value < ch.EasyFragger * 0.25f) return GoalType.Kill; // quick frag
+            return GoalType.Kill;
+        }
+        public static bool ShouldChase(EntityAlive me, EntityAlive enemy, BotConfig cfg, BotCharacter ch)
+        {
+            float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);
+            float dist = UnityEngine.Vector3.Distance(me.position, enemy.position);
+            // Low health + high selfpreservation => don't chase far
+            if (hp < 0.3f && ch.SelfPreservation > 0.6f && dist > 26f) return false;
+            if (ch.Aggression < 0.35f && dist > 34f) return false;
+            return true;
+        }
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {
             bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);

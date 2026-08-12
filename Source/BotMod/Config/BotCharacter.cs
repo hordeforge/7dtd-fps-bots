@@ -73,6 +73,10 @@ namespace BotMod.Config
             if (AimSkillWeapon != null && AimSkillWeapon.TryGetValue(weaponKey.ToLowerInvariant(), out float v)) return v;
             return AimSkill;
         }
+        // Q3-style decisions (BotWantsToRetreat/Chase/Camp helpers) - used by BotBrain
+        public bool WantsToRetreat(float healthFrac, float enemyDist, bool hasBetterWeapon) { return healthFrac < 0.35f + SelfPreservation * 0.18f && (enemyDist < 22f || !hasBetterWeapon); }
+        public bool WantsToCamp(float healthFrac) { return Camper > 0.45f && healthFrac > 0.55f && UnityEngine.Random.value < Camper * 0.4f; }
+        public bool WantsToRoam() { return UnityEngine.Random.value < (1f - Camper) * 0.7f; }
     }
 
     // Loads config/characters.json which mirrors Q3 bots/*.c skill blocks. Fallback is defaults lerped by Difficulty.

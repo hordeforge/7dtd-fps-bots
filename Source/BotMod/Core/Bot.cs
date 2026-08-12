@@ -206,12 +206,28 @@ namespace BotMod.Core
             }
             else
             {
-                _state = BotBrain.State.Wander;
-                if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
+                // Q3 LTG decision: camp vs roam (BotWantsToRetreat/Camp)
+                var campCh = Character ?? BotCharacterDB.ForName(Name);
+                if (ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth)) && BotBrain.DecideGoal(me, cfg, campCh) == BotBrain.GoalType.Camp)
                 {
-                    _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + UnityEngine.Random.value * 0.6f);
-                    _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius);
-                    BotBrain.MoveTo(me, _wanderTarget);
+                    _state = BotBrain.State.Wander;
+                    if (_wanderTarget == UnityEngine.Vector3.zero || Time.time >= _nextWander)
+                    {
+                        _wanderTarget = BotBrain.FindCover(me, me, world);
+                        if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f);
+                        _nextWander = Time.time + 9f + UnityEngine.Random.value * 5f;
+                        BotBrain.MoveTo(me, _wanderTarget);
+                    }
+                }
+                else
+                {
+                    _state = BotBrain.State.Wander;
+                    if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
+                    {
+                        _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + UnityEngine.Random.value * 0.6f);
+                        _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius);
+                        BotBrain.MoveTo(me, _wanderTarget);
+                    }
                 }
             }
         }
