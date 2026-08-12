@@ -77,7 +77,7 @@ namespace BotMod.Core
             if (attacker == null || attacker.IsDead()) return;
             var cfg = ModApi.Config;
             // Aggro swap: if not targeting anyone or under fire from closer threat, switch
-            if (_target == null || _target.IsDead() || UnityEngine.Random.value < 0.65f)
+            if (_target == null || _target.IsDead() || Rng01() < 0.65f)
             {
                 var me = _cachedEntity;
                 if (me != null && Vector3.Distance(me.position, attacker.position) < cfg.VisionRange * 1.1f)
@@ -90,10 +90,10 @@ namespace BotMod.Core
                 }
             }
             // Strafe-dodge
-            if (UnityEngine.Random.value < cfg.DodgeOnHitChance)
+            if (Rng01() < cfg.DodgeOnHitChance)
             {
-                _strafeUntil = Time.time + 0.7f + UnityEngine.Random.value * 0.6f;
-                _strafeDir = UnityEngine.Random.value < 0.5f ? -1 : 1;
+                _strafeUntil = Time.time + 0.7f + Rng01() * 0.6f;
+                _strafeDir = Rng01() < 0.5f ? -1 : 1;
                 _nextPathRecalc = Time.time; // force move tick
             }
         }
@@ -130,9 +130,9 @@ namespace BotMod.Core
                         _state = BotBrain.State.Chase;
                         _reactionUntil = Time.time + cfg.ReactionTimeSec;
                         // announce occasionally
-                        if (Time.time > _nextTaunt && UnityEngine.Random.value < 0.12f)
+                        if (Time.time > _nextTaunt && Rng01() < 0.12f)
                         {
-                            _nextTaunt = Time.time + 12f + UnityEngine.Random.value * 10f;
+                            _nextTaunt = Time.time + 12f + Rng01() * 10f;
                             ModApi.Log($"{Name} acquired target #{found.entityId}");
                         }
                     }
@@ -182,7 +182,7 @@ namespace BotMod.Core
                     BotBrain.FaceTowards(me, aim);
                     TryShootBurst(me, _target, aim, world, cfg);
                     // Continuous FPS strafe when in attack range
-                    if (_strafeUntil > Time.time || UnityEngine.Random.value < cfg.StrafeChance * 0.35f)
+                    if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
                     {
                         if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
                     }
@@ -190,7 +190,7 @@ namespace BotMod.Core
                     {
                         if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
                     }
-                    else if (UnityEngine.Random.value < 0.12f) _strafeDir = -_strafeDir;
+                    else if (Rng01() < 0.12f) _strafeDir = -_strafeDir;
                 }
                 else
                 {
@@ -220,7 +220,7 @@ namespace BotMod.Core
                     {
                         _wanderTarget = BotBrain.FindCover(me, me, world);
                         if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f);
-                        _nextWander = Time.time + 9f + UnityEngine.Random.value * 5f;
+                        _nextWander = Time.time + 9f + Rng01() * 5f;
                         BotBrain.MoveTo(me, _wanderTarget);
                     }
                 }
@@ -229,7 +229,7 @@ namespace BotMod.Core
                     _state = BotBrain.State.Wander;
                     if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
                     {
-                        _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + UnityEngine.Random.value * 0.6f);
+                        _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
                         _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius);
                         BotBrain.MoveTo(me, _wanderTarget);
                     }
@@ -256,14 +256,14 @@ namespace BotMod.Core
             if (Time.time < _burstPauseUntil) return;
             if (_burstLeft <= 0)
             {
-                _burstLeft = UnityEngine.Random.Range(Weapon.BurstMin, Weapon.BurstMax + 1);
+                _burstLeft = Weapon.BurstMin + (int)(Rng01() * (Weapon.BurstMax - Weapon.BurstMin + 1));
                 _burstPauseUntil = Time.time + Weapon.BurstPause * (0.85f + Rng01() * 0.3f); // deterministic vs Unity Random (zdtd_bot parity)
                 // vary strafe dir between bursts
-                if (UnityEngine.Random.value < 0.6f) _strafeDir = -_strafeDir;
+                if (Rng01() < 0.6f) _strafeDir = -_strafeDir;
                 return;
             }
             // Weapon fire rate gate
-            float fireGate = Weapon.FireRate * (0.9f + UnityEngine.Random.value * 0.2f);
+            float fireGate = Weapon.FireRate * (0.9f + Rng01() * 0.2f);
             // Use a per-bot accumulator instead of global _nextFire for burst fidelity
             // Reuse burstPauseUntil as fire gate when bursting
             if (Time.time < _burstPauseUntil - Weapon.BurstPause + fireGate && _burstLeft != Weapon.BurstMin)
@@ -285,8 +285,8 @@ namespace BotMod.Core
                     spread *= diffScale;
                     if (spread > 0.4f)
                     {
-                        float yaw = (UnityEngine.Random.value - 0.5f) * spread;
-                        float pitch = (UnityEngine.Random.value - 0.5f) * spread * 0.6f;
+                        float yaw = RngSym() * spread * 0.5f;
+                        float pitch = RngSym() * spread * 0.5f * 0.6f;
                         Vector3 dir = (shotAim - (me.position + Vector3.up * 1.45f)).normalized;
                         // apply yaw/pitch
                         Quaternion rot = Quaternion.AngleAxis(yaw, Vector3.up) * Quaternion.AngleAxis(pitch, Vector3.Cross(dir, Vector3.up).normalized);
@@ -305,8 +305,8 @@ namespace BotMod.Core
                     catch { ds = new DamageSource(EnumDamageSource.External, EnumDamageTypes.Piercing); }
                     int dmgResult = target.DamageEntity(ds, dmg, head, 1f);
                     int hpAfter = target.Health;
-                    if (hpBefore != hpAfter && UnityEngine.Random.value < 0.04f) ModApi.Log($"{Name} -> {target.entityId} dmg={dmg} res={dmgResult} hp {hpBefore}->{hpAfter} weap={Weapon.GunId}");
-                    if (hpBefore == hpAfter && dmgResult == 0 && UnityEngine.Random.value < 0.02f) ModApi.Log($"{Name} shot {target.entityId} blocked dmg={dmg} res=0 weap={Weapon.GunId} burst={_burstLeft}");
+                    if (hpBefore != hpAfter && Rng01() < 0.04f) ModApi.Log($"{Name} -> {target.entityId} dmg={dmg} res={dmgResult} hp {hpBefore}->{hpAfter} weap={Weapon.GunId}");
+                    if (hpBefore == hpAfter && dmgResult == 0 && Rng01() < 0.02f) ModApi.Log($"{Name} shot {target.entityId} blocked dmg={dmg} res=0 weap={Weapon.GunId} burst={_burstLeft}");
                     if (target.IsDead()) { try { BotCombat.OnKilled(me, target); } catch { } ModApi.Log($"{Name} KILLED {target.entityId} with {Weapon.GunId}"); break; }
                     if (pellets > 1) break; // only one target hit per pellet grouping - avoid multi-hit on same frame (vanilla handles pellets via ray)
                     // For multi-pellet we coalesce to one hit with scaled damage to avoid insta-kill

@@ -86,8 +86,8 @@ namespace BotMod.AI
         {
             float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);
             if (ch.WantsToRetreat(hp, 12f, false)) return GoalType.Camp;
-            if (ch.Camper > 0.6f && hp > 0.7f && UnityEngine.Random.value < 0.12f) return GoalType.Camp;
-            if (ch.EasyFragger > 0.5f && UnityEngine.Random.value < ch.EasyFragger * 0.25f) return GoalType.Kill; // quick frag
+            if (ch.Camper > 0.6f && hp > 0.7f && ((me.entityId * 2654435761u) % 100 < (uint)(ch.Camper*12))) return GoalType.Camp;
+            if (ch.EasyFragger > 0.5f && ((me.entityId * 1103515245u) % 100 < (uint)(ch.EasyFragger*25))) return GoalType.Kill; // quick frag
             return GoalType.Kill;
         }
         public static bool ShouldChase(EntityAlive me, EntityAlive enemy, BotConfig cfg, BotCharacter ch)
@@ -313,7 +313,7 @@ namespace BotMod.AI
                 try { me.StartJump(); } catch { }
                 Vector3 fwd = me.transform != null ? me.transform.forward : new Vector3(0, 0, 1);
                 fwd.y = 0; fwd.Normalize();
-                Vector3 strafe = Vector3.Cross(Vector3.up, fwd) * (UnityEngine.Random.value < 0.5f ? -1 : 1);
+                Vector3 strafe = Vector3.Cross(Vector3.up, fwd) * (((me.entityId ^ 0x9E3779B9) & 1) == 0 ? -1 : 1);
                 me.MoveEntityHeaded(strafe, false);
             }
             catch { }
