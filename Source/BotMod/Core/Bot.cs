@@ -40,6 +40,10 @@ namespace BotMod.Core
         uint _rngState; // deterministic LCG seeded from entityId (like zdtd_bot per-slot RNG)
         Vector3 _lastTargetPos = Vector3.zero;
         Vector3 _targetVel = Vector3.zero;
+        // zdtd_bot lost-sight combat memory, ported: keep the last position we SAW
+        // the target so pursuit continues toward it around a corner, not its live position.
+        Vector3 _lastKnownTargetPos = Vector3.zero;
+        bool _hasLastKnownTarget;
         float _nextTaunt;
 
         public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
@@ -49,6 +53,7 @@ namespace BotMod.Core
             _burstLeft = weapon.BurstMin;
             _viewYaw = 0f; _viewPitch = 0f; _enemySightTime = -10f;
             _rngState = (uint)entityId * 2654435761u + 97u;
+            _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
         }
 
         public void MarkDead() { _dead = true; }
@@ -129,6 +134,7 @@ namespace BotMod.Core
                         _loseTargetTimer = 0f;
                         _state = BotBrain.State.Chase;
                         _reactionUntil = Time.time + cfg.ReactionTimeSec;
+                        _hasLastKnownTarget = false; // fresh target: no last-known until we see it again (zdtd_bot lost-sight combat memory, ported)
                         // announce occasionally
                         if (Time.time > _nextTaunt && Rng01() < 0.12f)
                         {
@@ -144,6 +150,7 @@ namespace BotMod.Core
                     if (_target.IsDead() || !IsValidTarget(_target, cfg) || dist > cfg.LoseTargetRange || _loseTargetTimer > cfg.LoseTargetTimeSec || !BotBrain.CanSee(me, _target, world, cfg) && dist > 18f)
                     {
                         _target = null; _state = BotBrain.State.Wander;
+                        _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
                     }
                 }
             }
@@ -173,6 +180,11 @@ namespace BotMod.Core
                 float dist = Vector3.Distance(myPos, tPos);
                 bool canSee = BotBrain.CanSee(me, _target, world, cfg);
                 if (canSee) _enemySightTime = Time.time;
+                if (canSee) // update the last-known position we saw the target at (zdtd_bot lost-sight combat memory, ported)
+                {
+                    _lastKnownTargetPos = tPos;
+                    _hasLastKnownTarget = true;
+                }
                 bool inRange = dist <= Weapon.Range && dist <= cfg.AttackRange;
 
                 if (inRange && canSee)
@@ -195,10 +207,13 @@ namespace BotMod.Core
                 else
                 {
                     _state = BotBrain.State.Chase;
+                    // pursue where we last SAW the target, not its current unseen position
+                    // (zdtd_bot lost-sight combat memory, ported)
+                    Vector3 chaseDest = _hasLastKnownTarget ? _lastKnownTargetPos : tPos;
                     if (Time.time >= _nextPathRecalc)
                     {
                         _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
-                        BotBrain.MoveTo(me, tPos);
+                        BotBrain.MoveTo(me, chaseDest);
                     }
                     float moved = Vector3.Distance(myPos, _lastPos);
                     if (moved < 0.18f)
