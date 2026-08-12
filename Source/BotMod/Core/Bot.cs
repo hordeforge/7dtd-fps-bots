@@ -45,6 +45,9 @@ namespace BotMod.Core
         Vector3 _lastKnownTargetPos = Vector3.zero;
         bool _hasLastKnownTarget;
         float _nextTaunt;
+        // zdtd_bot per-engagement aim bias, ported: fixed skill-scaled yaw error
+        // held for the current target engagement (rolled on acquisition).
+        float _aimBiasYaw;
 
         public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
         {
@@ -135,6 +138,11 @@ namespace BotMod.Core
                         _state = BotBrain.State.Chase;
                         _reactionUntil = Time.time + cfg.ReactionTimeSec;
                         _hasLastKnownTarget = false; // fresh target: no last-known until we see it again (zdtd_bot lost-sight combat memory, ported)
+                        // zdtd_bot skill_aimerr, ported: roll a fixed per-engagement
+                        // aim bias so bots are imperfect-but-stable shots; better
+                        // aim skill (BotCharacter.AimAccuracy) shrinks the bias.
+                        float acc = Character?.AimAccuracy ?? 0.75f;
+                        _aimBiasYaw = RngSym() * Mathf.Max(0.03f, (1f - acc) * 0.45f);
                         // announce occasionally
                         if (Time.time > _nextTaunt && Rng01() < 0.12f)
                         {
@@ -191,6 +199,14 @@ namespace BotMod.Core
                 {
                     _state = BotBrain.State.Attack;
                     Vector3 aim = BotBrain.LeadAimPoint(myPos, tPos, _targetVel, cfg, Weapon);
+                    // zdtd_bot skill_aimerr, ported: rotate the aim by the fixed
+                    // per-engagement bias so the bot is imperfect but stable.
+                    if (_aimBiasYaw != 0f)
+                    {
+                        Vector3 dir = aim - myPos;
+                        dir = Quaternion.AngleAxis(_aimBiasYaw * Mathf.Rad2Deg, Vector3.up) * dir;
+                        aim = myPos + dir;
+                    }
                     BotBrain.FaceTowards(me, aim);
                     TryShootBurst(me, _target, aim, world, cfg);
                     // Continuous FPS strafe when in attack range
