@@ -37,3 +37,21 @@ See `chars.h`, `ai_main.c:BotChangeViewAngles/BotAimAtEnemy/BotCheckAttack`,
 
 These are the references for `BotCharacter`, `WeaponProfile`, `Bot.AimModel`,
 `BotBrain` goal selection and the AAS shims.
+
+## Cross-pollinated with zdtd_bot (the sibling Zig Wasm server)
+
+Improvements travel both ways with `../zdtd`'s `mods/zdtd_bot` Wasm brain
+(`docs/q3-inspiration-notes.md` there). Everything stays deterministic via the
+per-bot LCG (`Bot.RngNext/Rng01/RngSym`, seeded from entity id).
+
+- **Lost-sight combat memory (from zdtd_bot).** While a target stays retained
+  but out of sight, chase where it was last SEEN instead of its live position
+  (`Bot._lastKnownTargetPos` / `_hasLastKnownTarget`), so a bot corners/flanks
+  around cover; zdtd's `BOT_MEMORY_TICKS` equivalent is `LoseTargetTimeSec`.
+- **Per-engagement aim bias (from zdtd_bot skill_aimerr).** On target
+  acquisition, roll a fixed skill-scaled yaw bias
+  (`Bot._aimBiasYaw = RngSym() * (1 - AimAccuracy) * 0.45`) and rotate the lead
+  aim by it each attack tick: imperfect but stable shots, not perfect aimers.
+- **Already shared:** per-slot LCG + deterministic burst cadence (ported from
+  zdtd_bot in `cross:` commits), headshot chance/multiplier, dodge-on-hit,
+  player-preference targeting (0.82), backpedal, low-hp retreat, lead-fire.
