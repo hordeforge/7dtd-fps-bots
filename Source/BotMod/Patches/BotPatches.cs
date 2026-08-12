@@ -13,10 +13,7 @@ namespace BotMod.Patches
                 if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId))
                 {
                     BotMod.Core.BotManager.Instance.NotifyBotDeath(__instance.entityId);
-                    if (!ModApi.Config.DropLootOnDeath)
-                    {
-                        try { __instance.lootList = null; } catch { }
-                    }
+                    if (!ModApi.Config.DropLootOnDeath) try { __instance.lootList = null; } catch { }
                 }
             }
             catch { }
@@ -40,6 +37,18 @@ namespace BotMod.Patches
                         if (__instance is EntityPlayer && !cfg.BotVsPlayer) return false;
                         if (__instance is EntityZombie && !cfg.BotVsZombie) return false;
                         if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && !cfg.BotVsBot) return false;
+                    }
+                }
+                // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)
+                if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && _damageSource is DamageSourceEntity ds2)
+                {
+                    int aid = ds2.CreatorEntityId != 0 ? ds2.CreatorEntityId : ds2.ownerEntityId;
+                    var world = GameManager.Instance?.World;
+                    if (world != null)
+                    {
+                        var attacker = world.GetEntity(aid) as EntityAlive;
+                        var victim = BotMod.Core.BotManager.Instance.GetBot(__instance.entityId);
+                        if (victim != null) try { victim.OnDamaged(attacker); } catch { }
                     }
                 }
             }

@@ -43,7 +43,9 @@ refs=(
   -r:"$MANAGED/UnityEngine.AIModule.dll"
   -r:"$HARMONY"
   -r:"$MANAGED/Newtonsoft.Json.dll"
+  -r:"$MANAGED/System.Xml.dll"
   -r:"$MANAGED/LogLibrary.dll"
+  -r:"$MANAGED/System.Xml.dll"
 )
 mapfile -d '' sources < <(find "$SRC" -type f -name '*.cs' -print0)
 mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 \

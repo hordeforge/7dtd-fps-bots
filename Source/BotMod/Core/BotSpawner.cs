@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Xml;
 using BotMod.Config;
 using UnityEngine;
 
@@ -8,15 +10,59 @@ namespace BotMod.Core
     public static class BotSpawner
     {
         static readonly System.Random Rng = new System.Random();
+        static List<Vector3> _dmSpawns;
+        static string _dmSpawnsWorld;
 
         public static string PickName(BotConfig cfg)
         {
             if (cfg.BotNames == null || cfg.BotNames.Length == 0) return "Bot_" + Rng.Next(1000, 9999);
             return cfg.BotNames[Rng.Next(cfg.BotNames.Length)] + "_" + Rng.Next(10, 99);
         }
+        public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride = null)
+        {
+            string pick = gunOverride ?? cfg.BotWeapon;
+            if (pick != null && pick != "mixed" && !string.IsNullOrEmpty(pick))
+                return WeaponProfile.ForGun(pick, cfg);
+            string gun = cfg.LoadoutPool[Rng.Next(cfg.LoadoutPool.Length)];
+            return WeaponProfile.ForGun(gun, cfg);
+        }
 
         public static Vector3 PickSpawnPosition(World world, BotConfig cfg)
         {
+            // DM: pick world spawnpoints first
+            if (cfg.UseSpawnpoints)
+            {
+                var dm = GetDmSpawns(world, cfg);
+                if (dm != null && dm.Count > 0)
+                {
+                    // Farthest-from-players spawn (avoid spawn stacking on someone) - FPS-like farthest spawn
+                    Vector3 best = dm[Rng.Next(dm.Count)]; float bestDist = -1f;
+                    List<Vector3> playerPos = new List<Vector3>();
+                    try { if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null && !p.IsDead()) playerPos.Add(p.position); } catch { }
+                    if (playerPos.Count == 0) best = dm[Rng.Next(dm.Count)];
+                    else
+                    {
+                        for (int tries = 0; tries < Math.Min(6, dm.Count); tries++)
+                        {
+                            var cand = dm[Rng.Next(dm.Count)];
+                            float minDist = float.MaxValue;
+                            foreach (var pp in playerPos) minDist = Mathf.Min(minDist, Vector3.Distance(cand, pp));
+                            // Also avoid spawning on top of existing bots
+                            try
+                            {
+                                var bots = BotManager.Instance.Bots;
+                                foreach (var b in bots) { var e = world.GetEntity(b.EntityId) as EntityAlive; if (e != null) minDist = Mathf.Min(minDist, Vector3.Distance(cand, e.position)); }
+                            }
+                            catch { }
+                            if (minDist > bestDist) { bestDist = minDist; best = cand; }
+                        }
+                    }
+                    Vector3 pos = FindGround(world, best);
+                    if (pos != Vector3.zero) return pos;
+                    return best + Vector3.up * 1f;
+                }
+            }
+            // Near-player fallback with avoidance
             try
             {
                 if (world.Players != null && world.Players.list != null && world.Players.list.Count > 0 && Rng.NextDouble() < cfg.SpawnNearPlayerChance)
@@ -27,46 +73,96 @@ namespace BotMod.Core
                     if (list.Count > 0)
                     {
                         var pl = list[Rng.Next(list.Count)];
-                        Vector3 pp = pl.position;
-                        float ang = (float)(Rng.NextDouble() * Math.PI * 2);
-                        float dist = (float)(Rng.NextDouble() * cfg.SpawnRadius + 6f);
-                        Vector3 pos = pp + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
-                        pos = FindGround(world, pos);
-                        if (pos != Vector3.zero) return pos;
-                        return pp + new Vector3(Mathf.Cos(ang) * dist, 2f, Mathf.Sin(ang) * dist);
+                        for (int attempt = 0; attempt < 6; attempt++)
+                        {
+                            float ang = (float)(Rng.NextDouble() * Math.PI * 2);
+                            float dist = (float)(Rng.NextDouble() * cfg.SpawnRadius + 10f);
+                            Vector3 pos = pl.position + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
+                            pos = FindGround(world, pos);
+                            if (pos != Vector3.zero && IsSpawnClear(world, pos, pl.position, cfg)) return pos;
+                        }
                     }
                 }
             }
             catch { }
-
-            try
+            // Near world spawn / 0,0
+            for (int a = 0; a < 8; a++)
             {
-                Vector3 center = Vector3.zero;
                 float ang = (float)(Rng.NextDouble() * Math.PI * 2);
-                float dist = (float)(Rng.NextDouble() * cfg.SpawnRadius + 4f);
-                Vector3 pos = center + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
+                float dist = (float)(Rng.NextDouble() * cfg.SpawnRadius + 6f);
+                Vector3 pos = new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                 pos = FindGround(world, pos);
                 if (pos != Vector3.zero) return pos;
-                return pos;
             }
-            catch { return Vector3.zero; }
+            return new Vector3(Rng.Next(-20, 20), 61f, Rng.Next(-20, 20));
+        }
+
+        static bool IsSpawnClear(World world, Vector3 pos, Vector3 avoid, BotConfig cfg)
+        {
+            if (Vector3.Distance(pos, avoid) < 8f) return false;
+            try
+            {
+                var bv = world.GetBlock(new Vector3i(Mathf.FloorToInt(pos.x), Mathf.FloorToInt(pos.y), Mathf.FloorToInt(pos.z)));
+                if (bv.type != 0 && Block.list[bv.type] != null && Block.list[bv.type].IsCollideMovement) return false;
+                var bv2 = world.GetBlock(new Vector3i(Mathf.FloorToInt(pos.x), Mathf.FloorToInt(pos.y + 1), Mathf.FloorToInt(pos.z)));
+                if (bv2.type != 0 && Block.list[bv2.type] != null && Block.list[bv2.type].IsCollideMovement) return false;
+            }
+            catch { }
+            return true;
         }
 
         static Vector3 FindGround(World world, Vector3 pos)
         {
             try
             {
-                int x = Mathf.FloorToInt(pos.x);
-                int z = Mathf.FloorToInt(pos.z);
+                int x = Mathf.FloorToInt(pos.x), z = Mathf.FloorToInt(pos.z);
                 for (int y = 250; y >= 0; y--)
                 {
                     var bv = world.GetBlock(new Vector3i(x, y, z));
-                    if (bv.type != 0)
-                        return new Vector3(pos.x, y + 2f, pos.z);
+                    if (bv.type != 0) return new Vector3(pos.x, y + 2f, pos.z);
                 }
             }
             catch { }
-            return new Vector3(pos.x, 60f, pos.z);
+            return Vector3.zero;
+        }
+
+        static List<Vector3> GetDmSpawns(World world, BotConfig cfg)
+        {
+            try
+            {
+                string worldName = GamePrefs.GetString(EnumGamePrefs.GameWorld) ?? GamePrefs.GetString(EnumGamePrefs.GameName) ?? "";
+                if (!string.IsNullOrEmpty(worldName) && worldName == _dmSpawnsWorld && _dmSpawns != null) return _dmSpawns;
+                // Try spawnpoints.xml under Data/Worlds/<WorldName> and under saves
+                string managed = Path.GetDirectoryName(typeof(World).Assembly.Location) ?? "";
+                string dataWorld = Path.Combine(Path.GetDirectoryName(managed) ?? "", "..", "Data", "Worlds", worldName, "spawnpoints.xml");
+                // normalize ".." via GetFullPath
+                try { dataWorld = Path.GetFullPath(dataWorld); } catch { }
+                string[] roots = new[]
+                {
+                    dataWorld,
+                    Path.Combine(GameIO.GetUserGameDataDir(), "GeneratedWorlds", worldName, "spawnpoints.xml"),
+                    Path.Combine(GameIO.GetGameDir("Data"), "Worlds", worldName, "spawnpoints.xml"),
+                };
+                foreach (var path in roots)
+                {
+                    if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
+                    var doc = new XmlDocument(); doc.Load(path);
+                    var list = new List<Vector3>();
+                    foreach (XmlNode n in doc.SelectNodes("//spawnpoint"))
+                    {
+                        var posAttr = n.Attributes["position"];
+                        if (posAttr == null) continue;
+                        var parts = posAttr.Value.Split(',');
+                        if (parts.Length < 3) continue;
+                        if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y) && float.TryParse(parts[2], out float z))
+                            list.Add(new Vector3(x, y, z));
+                    }
+                    if (list.Count > 0) { _dmSpawns = list; _dmSpawnsWorld = worldName; ModApi.Log($"DM spawns: {list.Count} from {path} (world={worldName})"); return list; }
+                }
+            }
+            catch (Exception ex) { ModApi.Log("GetDmSpawns failed: " + ex.Message); }
+            // Fallback: scan trader POI-ish spots via world prefabs? skip
+            return _dmSpawns;
         }
 
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)
@@ -76,78 +172,42 @@ namespace BotMod.Core
                 int classId = EntityClass.FromString(entityClassName);
                 if (classId < 0)
                 {
-                    // Fallback aliases: old default was npcSurvivorRanged which is //commented in vanilla
                     foreach (var alias in new[] { "zombieSoldier", "zombieSoldierFeral", "zombieArlene", "zombieNurse" })
                     {
                         classId = EntityClass.FromString(alias);
                         if (classId >= 0) { ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
                     }
                 }
-                if (classId < 0)
-                {
-                    ModApi.Log("Unknown entity class: " + entityClassName);
-                    return null;
-                }
-                // 3-arg overload: (classId, pos, rot) exists and is the most reliable on dedi
+                if (classId < 0) { ModApi.Log("Unknown entity class: " + entityClassName); return null; }
                 Entity e = null;
                 try { e = EntityFactory.CreateEntity(classId, pos, Vector3.zero); } catch { }
                 if (e == null)
                 {
-                    try
-                    {
-                        var ed = EntityFactory.SetupEntityCreationData(classId, pos);
-                        try { ed.entityName = botName; } catch { }
-                        e = EntityFactory.CreateEntity(ed);
-                    }
-                    catch { }
+                    try { var ed = EntityFactory.SetupEntityCreationData(classId, pos); try { ed.entityName = botName; } catch { } e = EntityFactory.CreateEntity(ed); } catch { }
                 }
                 if (e == null) return null;
-
-                // Try to set entityName on creation data style if still default
-                // Entity itself has no entityName field; use world spawn path then try EntityName via reflection/game API
-                try
-                {
-                    world.SpawnEntityInWorld(e);
-                }
-                catch (Exception ex)
-                {
-                    ModApi.Log("SpawnEntityInWorld failed: " + ex.Message);
-                    return null;
-                }
-                // EntityName is not a direct field on Entity on this build; leave default. We track name in BotManager.
+                try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.Log("SpawnEntityInWorld failed: " + ex.Message); return null; }
                 var ent = world.GetEntity(e.entityId);
                 return ent ?? e;
             }
-            catch (Exception ex)
-            {
-                ModApi.Log("SpawnBotEntity failed: " + ex);
-                return null;
-            }
+            catch (Exception ex) { ModApi.Log("SpawnBotEntity failed: " + ex); return null; }
         }
 
-        public static void ConfigureBotEntity(Entity e, BotConfig cfg)
+        public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp)
         {
             try
             {
                 if (e is EntityAlive alive)
                 {
                     try { alive.Health = Mathf.RoundToInt(cfg.BotHealth); } catch { }
-                    if (!string.IsNullOrEmpty(cfg.BotWeapon))
+                    if (!string.IsNullOrEmpty(wp.GunId))
                     {
                         try
                         {
                             ItemValue iv = null;
-                            try { iv = ItemClass.GetItem(cfg.BotWeapon, false); } catch { }
-                            if (iv == null || iv.type == 0)
-                            {
-                                var ic = ItemClass.GetItemClass(cfg.BotWeapon, false);
-                                if (ic != null) iv = new ItemValue(ic.Id, false);
-                            }
-                            if (iv != null && iv.type != 0)
-                            {
-                                var stack = new ItemStack(iv, 1);
-                                try { alive.inventory.AddItem(stack); } catch { }
-                            }
+                            try { iv = ItemClass.GetItem(wp.GunId, false); } catch { }
+                            if (iv == null || iv.type == 0) { var ic = ItemClass.GetItemClass(wp.GunId, false); if (ic != null) iv = new ItemValue(ic.Id, false); }
+                            if (iv != null && iv.type != 0) { var stack = new ItemStack(iv, 1); try { alive.inventory.AddItem(stack); } catch { } }
                         }
                         catch (Exception ex) { ModApi.Log("Give weapon failed: " + ex.Message); }
                     }
@@ -157,21 +217,13 @@ namespace BotMod.Core
                         {
                             ItemValue iv = null;
                             try { iv = ItemClass.GetItem(cfg.BotAmmo, false); } catch { }
-                            if (iv == null || iv.type == 0)
-                            {
-                                var ic = ItemClass.GetItemClass(cfg.BotAmmo, false);
-                                if (ic != null) iv = new ItemValue(ic.Id, false);
-                            }
-                            if (iv != null && iv.type != 0)
-                            {
-                                var stack = new ItemStack(iv, cfg.BotAmmoCount);
-                                try { alive.bag.AddItem(stack); } catch { }
-                                try { alive.inventory.AddItem(stack); } catch { }
-                            }
+                            if (iv == null || iv.type == 0) { var ic = ItemClass.GetItemClass(cfg.BotAmmo, false); if (ic != null) iv = new ItemValue(ic.Id, false); }
+                            if (iv != null && iv.type != 0) { var stack = new ItemStack(iv, cfg.BotAmmoCount); try { alive.bag.AddItem(stack); } catch { } try { alive.inventory.AddItem(stack); } catch { } }
                         }
                         catch { }
                     }
                     try { alive.Buffs.SetCustomVar("botmod_isBot", 1f); } catch { }
+                    try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
                 }
             }
             catch (Exception ex) { ModApi.Log("ConfigureBotEntity failed: " + ex.Message); }
