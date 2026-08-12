@@ -27,7 +27,10 @@ Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`). 
 bot help
 bot status            # config + alive (class/weapon/diff/vision/attack/BotVs)
 bot list              # id, weapon, state, pos, target, hp, burst
-bot spawn [n] [x z] [weapon]  # e.g. bot spawn 2 gunShotgunT1DoubleBarrel
+bot spawn [n] [x z] [weapon] | bot player <name|id> [n] [weapon]  # e.g. bot spawn 2 gunShotgunT1DoubleBarrel
+bot player Kira              # 1 bot near Kira (12-30m, out-of-sight preferred)
+bot player Kira 3 gunMGT1AK47 # 3 AK bots near Kira
+bot player me               # from in-game console, spawns near you
 bot weapon <gunId|mixed>      # default for next spawns
 bot skill <0-4>               # 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare
 bot count <n>                 # keep n alive

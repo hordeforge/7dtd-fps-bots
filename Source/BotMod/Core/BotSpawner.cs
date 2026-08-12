@@ -27,6 +27,91 @@ namespace BotMod.Core
             return WeaponProfile.ForGun(gun, cfg);
         }
 
+        // Spawn near a specific player: FPS-like, 12-28m away, line-of-sight blocked, not on top of player
+        public static Vector3 PickSpawnNearPlayer(World world, EntityPlayer player, BotConfig cfg)
+        {
+            if (player == null) return PickSpawnPosition(world, cfg);
+            Vector3 pp = player.position;
+            // Prefer DM spawnpoints that are near but not too near the player
+            if (cfg.UseSpawnpoints)
+            {
+                var dm = GetDmSpawns(world, cfg);
+                if (dm != null && dm.Count > 0)
+                {
+                    Vector3 best = Vector3.zero; float bestScore = float.MinValue;
+                    for (int tries = 0; tries < Math.Min(10, dm.Count); tries++)
+                    {
+                        var cand = dm[Rng.Next(dm.Count)];
+                        float d = Vector3.Distance(cand, pp);
+                        if (d < 11f || d > 42f) continue; // not too close / not too far
+                        // Prefer out-of-sight spawn (FPS spawn protection)
+                        bool los = HasLineOfSightForSpawn(pp + Vector3.up * 1.45f, cand + Vector3.up * 0.5f, world);
+                        float score = 0f;
+                        if (!los) score += 9f;
+                        score += 6f - Math.Abs(d - 22f) * 0.3f; // sweet spot ~22m
+                        // Avoid stacking on other bots
+                        try { foreach (var b in BotManager.Instance.Bots) { var e = world.GetEntity(b.EntityId) as EntityAlive; if (e != null && Vector3.Distance(cand, e.position) < 9f) score -= 7f; } } catch {}
+                        if (score > bestScore) { bestScore = score; best = cand; }
+                    }
+                    if (best != Vector3.zero)
+                    {
+                        Vector3 pos = FindGround(world, best);
+                        if (pos != Vector3.zero) return pos;
+                        return best + Vector3.up * 1f;
+                    }
+                }
+            }
+            // Radial fallback: ring around player, try several angles/distances
+            for (int attempt = 0; attempt < 12; attempt++)
+            {
+                float ang = (float)(Rng.NextDouble() * Math.PI * 2);
+                float dist = 14f + (float)Rng.NextDouble() * 16f; // 14-30m
+                Vector3 pos = pp + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
+                pos = FindGround(world, pos);
+                if (pos == Vector3.zero) continue;
+                if (Vector3.Distance(pos, pp) < 10f) continue;
+                // Prefer not in direct sight (so bot doesn't spawn in your face)
+                if (HasLineOfSightForSpawn(pp + Vector3.up * 1.45f, pos + Vector3.up * 0.9f, world)) continue;
+                if (!IsSpawnClear(world, pos, pp, cfg)) continue;
+                return pos;
+            }
+            // Last resort: any ring even if visible
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                float ang = (float)(Rng.NextDouble() * Math.PI * 2);
+                float dist = 16f + (float)Rng.NextDouble() * 14f;
+                Vector3 pos = pp + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
+                pos = FindGround(world, pos);
+                if (pos != Vector3.zero && Vector3.Distance(pos, pp) >= 10f && IsSpawnClear(world, pos, pp, cfg)) return pos;
+            }
+            // Fallback to generic
+            return PickSpawnPosition(world, cfg);
+        }
+        static bool HasLineOfSightForSpawn(Vector3 from, Vector3 to, World world)
+        {
+            try
+            {
+                Vector3 dir = to - from; float d = dir.magnitude; if (d < 0.1f) return true; dir /= d;
+                Ray ray = new Ray(from, dir);
+                if (Physics.Raycast(ray, out RaycastHit hit, d, -1))
+                {
+                    if (Vector3.Distance(hit.point, to) < 0.8f) return true;
+                    var hitEnt = hit.collider != null ? hit.collider.GetComponentInParent<Entity>() : null;
+                    if (hitEnt != null) return true;
+                    return false;
+                }
+                // Voxel fallback - cheap
+                int steps = Mathf.Clamp(Mathf.RoundToInt(d * 0.9f), 4, 40);
+                for (int i = 1; i < steps; i++)
+                {
+                    Vector3 p = Vector3.Lerp(from, to, (float)i / steps);
+                    var bv = world.GetBlock(new Vector3i(Mathf.FloorToInt(p.x), Mathf.FloorToInt(p.y), Mathf.FloorToInt(p.z)));
+                    if (bv.type != 0) { var block = Block.list[bv.type]; if (block != null && block.IsCollideMovement) return false; }
+                }
+                return true;
+            } catch { return false; }
+        }
+
         public static Vector3 PickSpawnPosition(World world, BotConfig cfg)
         {
             // DM: pick world spawnpoints first

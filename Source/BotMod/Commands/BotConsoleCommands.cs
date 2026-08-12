@@ -10,7 +10,8 @@ namespace BotMod.Commands
         public override string[] getCommands() => new[] { "bot" };
         public override string getDescription() => "FPS bots: spawn, list, remove, config.";
         public override string getHelp() =>
-            "Usage: bot <help|list|spawn [count] [x z] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | reload | enable | disable | status>\n" +
+            "Usage: bot <help|list|spawn [count] [x z] [weapon] | player <name/id> [count] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | reload | enable | disable | status>\n" +
+            "  bot player <nameOrId> [count] [weapon] - spawn bots near that player (DM-safe, not too close)\n" +
             "  bot spawn 4                    - spawn 4 mixed bots\n" +
             "  bot spawn 1 0 0 gunMGT1AK47    - spawn AK bot at x,z\n" +
             "  bot weapon gunShotgunT1DoubleBarrel - default for next spawns\n" +
@@ -34,6 +35,7 @@ namespace BotMod.Commands
                     case "count": case "set": DoCount(_params); break;
                     case "weapon": case "gun": DoWeapon(_params); break;
                     case "skill": case "difficulty": DoSkill(_params); break;
+                    case "player": case "near": case "at": DoPlayer(_params, _senderInfo); break;
                     case "reload": ModApi.ReloadConfig(); SdtdConsole.Instance.Output("BotMod config reloaded. diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon); break;
                     case "enable": ModApi.Config.Enabled = true; SdtdConsole.Instance.Output("BotMod enabled."); break;
                     case "disable": ModApi.Config.Enabled = false; SdtdConsole.Instance.Output("BotMod disabled. Existing bots remain until removed."); break;
@@ -82,6 +84,75 @@ namespace BotMod.Commands
         {
             if (p.Count < 2 || !int.TryParse(p[1], out int n)) { SdtdConsole.Instance.Output("Usage: bot count <n>  (0..16)"); return; }
             n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n; SdtdConsole.Instance.Output($"Target bot count set to {n}. Will converge within a few seconds.");
+        }
+        void DoPlayer(List<string> p, CommandSenderInfo sender)
+        {
+            if (p.Count < 2) { SdtdConsole.Instance.Output("Usage: bot player <nameOrId> [count] [weapon]\n  e.g. bot player Kira / bot player 171 3 gunShotgunT1DoubleBarrel"); return; }
+            string ident = p[1];
+            int count = 1; string weapon = null;
+            // parse: bot player <ident> [count] [weapon]
+            if (p.Count >= 3 && int.TryParse(p[2], out int c)) { count = Math.Max(1, Math.Min(16, c)); if (p.Count >= 4) { string last = p[p.Count - 1]; if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last; } }
+            else if (p.Count >= 3) { string last = p[p.Count - 1]; if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last; }
+            var world = GameManager.Instance?.World;
+            if (world == null) { SdtdConsole.Instance.Output("No world."); return; }
+            EntityPlayer target = FindPlayerByNameOrId(world, ident);
+            // Also try via sender fallback: if ident is "me" and sender has RemoteClientInfo
+            if (target == null && (ident == "me" || ident == "self"))
+                target = FindPlayerBySender(world, sender);
+            if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game).\n  Online: " + ListPlayerNames(world)); return; }
+            int spawned = 0;
+            for (int i = 0; i < count; i++) {
+                UnityEngine.Vector3 pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config);
+                if (pos == UnityEngine.Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
+                if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;
+            }
+            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {target.EntityName ?? target.PlayerDisplayName ?? ident} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
+        }
+        static EntityPlayer FindPlayerByNameOrId(World world, string ident)
+        {
+            if (world == null || string.IsNullOrEmpty(ident)) return null;
+            // by entityId
+            if (int.TryParse(ident, out int eid)) {
+                var e = world.GetEntity(eid) as EntityPlayer;
+                if (e != null) return e;
+                // also try ClientInfo entityId lookup
+                var cm = ConnectionManager.Instance;
+                if (cm != null) {
+                    var ci = cm.Clients.ForEntityId(eid);
+                    if (ci != null) { var ep = world.GetEntity(ci.entityId) as EntityPlayer; if (ep != null) return ep; }
+                }
+            }
+            string low = ident.ToLowerInvariant();
+            if (world.Players != null && world.Players.list != null) {
+                foreach (var p in world.Players.list) if (p != null) {
+                    string name = p.EntityName ?? p.PlayerDisplayName ?? "";
+                    if (name.ToLowerInvariant() == low || name.ToLowerInvariant().Contains(low)) return p;
+                }
+                // exact entityId string already tried; try prefix match
+                foreach (var p in world.Players.list) if (p != null) {
+                    if (p.entityId.ToString() == ident) return p;
+                }
+            }
+            return null;
+        }
+        static EntityPlayer FindPlayerBySender(World world, CommandSenderInfo sender)
+        {
+            try {
+                var ci = sender.RemoteClientInfo;
+                if (ci != null) {
+                    var e = world.GetEntity(ci.entityId) as EntityPlayer;
+                    if (e != null) return e;
+                }
+            } catch {}
+            return null;
+        }
+        static string ListPlayerNames(World world)
+        {
+            try {
+                var names = new List<string>();
+                if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{p.EntityName ?? p.PlayerDisplayName ?? "?"}#{p.entityId}");
+                return names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none online)";
+            } catch { return "(unknown)"; }
         }
         void DoWeapon(List<string> p)
         {
