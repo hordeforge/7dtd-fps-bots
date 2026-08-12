@@ -1,7 +1,38 @@
+using System;
+using System.Collections.Generic;
 using HarmonyLib;
 
 namespace BotMod.Patches
 {
+    /// <summary>Server console lp/listplayers should also list [Bot] zombies so operators see bots in the roster.</summary>
+    [HarmonyPatch(typeof(ConsoleCmdListPlayers), "Execute")]
+    public static class Patch_ListPlayers_Bots
+    {
+        static void Postfix(ConsoleCmdListPlayers __instance, List<string> _params, CommandSenderInfo _senderInfo)
+        {
+            try
+            {
+                var mgr = BotMod.Core.BotManager.Instance;
+                if (mgr == null || mgr.BotCount == 0) return;
+                var world = GameManager.Instance?.World;
+                if (world == null) return;
+                foreach (var bot in mgr.Bots)
+                {
+                    try
+                    {
+                        var ent = world.GetEntity(bot.EntityId) as EntityAlive;
+                        if (ent == null) continue;
+                        string pos = ent.GetPosition().ToString();
+                        string line = $"[Bot] {bot.Name} id={bot.EntityId} pos={pos} health={ent.Health} deaths={ent.Died} zombies={ent.KilledZombies} players={ent.KilledPlayers} score={ent.Score} level={(ent.Progression!=null?ent.Progression.GetLevel():1)}";
+                        SdtdConsole.Instance.Output(line);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+    }
+
     [HarmonyPatch(typeof(EntityAlive), "OnEntityDeath")]
     public static class BotDeathPatch
     {
