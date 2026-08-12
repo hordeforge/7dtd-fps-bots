@@ -294,11 +294,15 @@ namespace BotMod.Core
                     int dmg = pellets > 1 ? Mathf.Max(3, Weapon.Damage) : Weapon.Damage;
                     bool head = pellets == 1 && UnityEngine.Random.value < cfg.HeadshotChance;
                     if (head) dmg = Mathf.RoundToInt(dmg * cfg.HeadshotMultiplier);
+                    int hpBefore = target.Health;
                     DamageSource ds;
                     try { ds = new DamageSourceEntity(EnumDamageSource.External, EnumDamageTypes.Piercing, me.entityId); }
                     catch { ds = new DamageSource(EnumDamageSource.External, EnumDamageTypes.Piercing); }
-                    target.DamageEntity(ds, dmg, head, 1f);
-                    if (target.IsDead()) { try { BotCombat.OnKilled(me, target); } catch { } break; }
+                    int dmgResult = target.DamageEntity(ds, dmg, head, 1f);
+                    int hpAfter = target.Health;
+                    if (hpBefore != hpAfter && UnityEngine.Random.value < 0.04f) ModApi.Log($"{Name} -> {target.entityId} dmg={dmg} res={dmgResult} hp {hpBefore}->{hpAfter} weap={Weapon.GunId}");
+                    if (hpBefore == hpAfter && dmgResult == 0 && UnityEngine.Random.value < 0.02f) ModApi.Log($"{Name} shot {target.entityId} blocked dmg={dmg} res=0 weap={Weapon.GunId} burst={_burstLeft}");
+                    if (target.IsDead()) { try { BotCombat.OnKilled(me, target); } catch { } ModApi.Log($"{Name} KILLED {target.entityId} with {Weapon.GunId}"); break; }
                     if (pellets > 1) break; // only one target hit per pellet grouping - avoid multi-hit on same frame (vanilla handles pellets via ray)
                     // For multi-pellet we coalesce to one hit with scaled damage to avoid insta-kill
                     if (pellets > 1) { target.DamageEntity(ds, dmg * (pellets - 1), false, 0.5f); break; }

@@ -7,7 +7,7 @@
   "BotWeapon": "mixed",
   "BotAmmo": "ammo762mmBulletBall",
   "BotAmmoCount": 300,
-  "BotHealth": 100,
+  "BotHealth": 50,
   "BotNames": [
     "Grunt",
     "Ranger",
@@ -30,7 +30,7 @@
     "gunShotgunT3AutoShotgun",
     "gunHandgunT3SMG5"
   ],
-  "Difficulty": 2,
+  "Difficulty": 4,
   "VisionRange": 70,
   "VisionAngle": 190,
   "LoseTargetRange": 85,
