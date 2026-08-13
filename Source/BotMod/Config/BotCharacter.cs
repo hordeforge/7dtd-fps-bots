@@ -75,8 +75,14 @@ namespace BotMod.Config
         }
         // Q3-style decisions (BotWantsToRetreat/Chase/Camp helpers) - used by BotBrain
         public bool WantsToRetreat(float healthFrac, float enemyDist, bool hasBetterWeapon) { return healthFrac < 0.35f + SelfPreservation * 0.18f && (enemyDist < 22f || !hasBetterWeapon); }
-        public bool WantsToCamp(float healthFrac) { return Camper > 0.45f && healthFrac > 0.55f && UnityEngine.Random.value < Camper * 0.4f; }
-        public bool WantsToRoam() { return UnityEngine.Random.value < (1f - Camper) * 0.7f; }
+        // Deterministic overloads: caller supplies a 0..1 roll from the bot's per-slot LCG (zdtd parity).
+        public bool WantsToCamp(float healthFrac, float roll01) { return Camper > 0.45f && healthFrac > 0.55f && roll01 < Camper * 0.4f; }
+        public bool WantsToRoam(float roll01) { return roll01 < (1f - Camper) * 0.7f; }
+        // Back-compat wrappers (kept for external callers): hash the name so the result is still
+        // deterministic and does not depend on UnityEngine.Random / System.Random.
+        public bool WantsToCamp(float healthFrac) { uint h = StableHash(Name); h = h * 1103515245u + 12345u; float r = (h >> 8 & 0x00ffffffu) / 16777216f; return WantsToCamp(healthFrac, r); }
+        public bool WantsToRoam() { uint h = StableHash(Name) ^ 0x9E3779B9u; h = h * 1103515245u + 12345u; float r = (h >> 8 & 0x00ffffffu) / 16777216f; return WantsToRoam(r); }
+        static uint StableHash(string s) { if (string.IsNullOrEmpty(s)) return 0x811C9DC5u; uint h = 0x811C9DC5u; foreach (char c in s) { h ^= (byte)c; h *= 0x01000193u; } return h; }
     }
 
     // Loads config/characters.json which mirrors Q3 bots/*.c skill blocks. Fallback is defaults lerped by Difficulty.

@@ -9,15 +9,22 @@ namespace BotMod.Core
 {
     public static class BotSpawner
     {
-        static readonly System.Random Rng = new System.Random();
+        // Deterministic LCG (zdtd parity: no wall-clock noise). Spawn helpers advance this
+        // monotonically so consecutive `bot spawn` in the same tick still pick distinct
+        // names/weapons/spots. Not per-bot (no entity yet) — global is fine for spawns.
+        static uint _rng = 0xC0FFEEu;
+        static uint RngNext() { _rng = _rng * 1103515245u + 12345u; return _rng; }
+        static float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
+        static int RngInt(int lo, int hi) { if (hi <= lo) return lo; return lo + (int)((RngNext() >> 8 & 0x00ffffffu) % (uint)(hi - lo)); }
+        static int RngPick(int n) { if (n <= 0) return 0; return (int)((RngNext() >> 8 & 0x00ffffffu) % (uint)n); }
         static List<Vector3> _dmSpawns;
         static string _dmSpawnsWorld;
 
         public static string PickName(BotConfig cfg)
         {
             string raw;
-            if (cfg.BotNames == null || cfg.BotNames.Length == 0) raw = "Bot_" + Rng.Next(1000, 9999);
-            else raw = cfg.BotNames[Rng.Next(cfg.BotNames.Length)] + "_" + Rng.Next(10, 99);
+            if (cfg.BotNames == null || cfg.BotNames.Length == 0) raw = "Bot_" + RngInt(1000, 9999);
+            else raw = cfg.BotNames[RngPick(cfg.BotNames.Length)] + "_" + RngInt(10, 99);
             if (raw.StartsWith("[Bot] ")) return raw;
             return "[Bot] " + raw;
         }
@@ -26,7 +33,7 @@ namespace BotMod.Core
             string pick = gunOverride ?? cfg.BotWeapon;
             if (pick != null && pick != "mixed" && !string.IsNullOrEmpty(pick))
                 return WeaponProfile.ForGun(pick, cfg);
-            string gun = cfg.LoadoutPool[Rng.Next(cfg.LoadoutPool.Length)];
+            string gun = cfg.LoadoutPool[RngPick(cfg.LoadoutPool.Length)];
             return WeaponProfile.ForGun(gun, cfg);
         }
 
@@ -44,7 +51,7 @@ namespace BotMod.Core
                     Vector3 best = Vector3.zero; float bestScore = float.MinValue;
                     for (int tries = 0; tries < Math.Min(10, dm.Count); tries++)
                     {
-                        var cand = dm[Rng.Next(dm.Count)];
+                        var cand = dm[RngPick(dm.Count)];
                         float d = Vector3.Distance(cand, pp);
                         if (d < 11f || d > 42f) continue; // not too close / not too far
                         // Prefer out-of-sight spawn (FPS spawn protection)
@@ -67,8 +74,8 @@ namespace BotMod.Core
             // Radial fallback: ring around player, try several angles/distances
             for (int attempt = 0; attempt < 12; attempt++)
             {
-                float ang = (float)(Rng.NextDouble() * Math.PI * 2);
-                float dist = 14f + (float)Rng.NextDouble() * 16f; // 14-30m
+                float ang = (float)(Rng01() * Math.PI * 2);
+                float dist = 14f + (float)Rng01() * 16f; // 14-30m
                 Vector3 pos = pp + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                 pos = FindGround(world, pos);
                 if (pos == Vector3.zero) continue;
@@ -81,8 +88,8 @@ namespace BotMod.Core
             // Last resort: any ring even if visible
             for (int attempt = 0; attempt < 8; attempt++)
             {
-                float ang = (float)(Rng.NextDouble() * Math.PI * 2);
-                float dist = 16f + (float)Rng.NextDouble() * 14f;
+                float ang = (float)(Rng01() * Math.PI * 2);
+                float dist = 16f + (float)Rng01() * 14f;
                 Vector3 pos = pp + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                 pos = FindGround(world, pos);
                 if (pos != Vector3.zero && Vector3.Distance(pos, pp) >= 10f && IsSpawnClear(world, pos, pp, cfg)) return pos;
@@ -124,15 +131,15 @@ namespace BotMod.Core
                 if (dm != null && dm.Count > 0)
                 {
                     // Farthest-from-players spawn (avoid spawn stacking on someone) - FPS-like farthest spawn
-                    Vector3 best = dm[Rng.Next(dm.Count)]; float bestDist = -1f;
+                    Vector3 best = dm[RngPick(dm.Count)]; float bestDist = -1f;
                     List<Vector3> playerPos = new List<Vector3>();
                     try { if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null && !p.IsDead()) playerPos.Add(p.position); } catch { }
-                    if (playerPos.Count == 0) best = dm[Rng.Next(dm.Count)];
+                    if (playerPos.Count == 0) best = dm[RngPick(dm.Count)];
                     else
                     {
                         for (int tries = 0; tries < Math.Min(6, dm.Count); tries++)
                         {
-                            var cand = dm[Rng.Next(dm.Count)];
+                            var cand = dm[RngPick(dm.Count)];
                             float minDist = float.MaxValue;
                             foreach (var pp in playerPos) minDist = Mathf.Min(minDist, Vector3.Distance(cand, pp));
                             // Also avoid spawning on top of existing bots
@@ -153,18 +160,18 @@ namespace BotMod.Core
             // Near-player fallback with avoidance
             try
             {
-                if (world.Players != null && world.Players.list != null && world.Players.list.Count > 0 && Rng.NextDouble() < cfg.SpawnNearPlayerChance)
+                if (world.Players != null && world.Players.list != null && world.Players.list.Count > 0 && Rng01() < cfg.SpawnNearPlayerChance)
                 {
                     var players = world.Players.list;
                     var list = new List<EntityPlayer>(players.Count);
                     foreach (var p in players) if (p != null && !p.IsDead() && p.IsAlive()) list.Add(p);
                     if (list.Count > 0)
                     {
-                        var pl = list[Rng.Next(list.Count)];
+                        var pl = list[RngPick(list.Count)];
                         for (int attempt = 0; attempt < 6; attempt++)
                         {
-                            float ang = (float)(Rng.NextDouble() * Math.PI * 2);
-                            float dist = (float)(Rng.NextDouble() * cfg.SpawnRadius + 10f);
+                            float ang = (float)(Rng01() * Math.PI * 2);
+                            float dist = (float)(Rng01() * cfg.SpawnRadius + 10f);
                             Vector3 pos = pl.position + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                             pos = FindGround(world, pos);
                             if (pos != Vector3.zero && IsSpawnClear(world, pos, pl.position, cfg)) return pos;
@@ -176,13 +183,13 @@ namespace BotMod.Core
             // Near world spawn / 0,0
             for (int a = 0; a < 8; a++)
             {
-                float ang = (float)(Rng.NextDouble() * Math.PI * 2);
-                float dist = (float)(Rng.NextDouble() * cfg.SpawnRadius + 6f);
+                float ang = (float)(Rng01() * Math.PI * 2);
+                float dist = (float)(Rng01() * cfg.SpawnRadius + 6f);
                 Vector3 pos = new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                 pos = FindGround(world, pos);
                 if (pos != Vector3.zero) return pos;
             }
-            return new Vector3(Rng.Next(-20, 20), 61f, Rng.Next(-20, 20));
+            return new Vector3(RngInt(-20, 20), 61f, RngInt(-20, 20));
         }
 
         static bool IsSpawnClear(World world, Vector3 pos, Vector3 avoid, BotConfig cfg)

@@ -134,9 +134,21 @@ namespace BotMod.Config
         public float Range; // effective
         public int Pellets; // shotgun
         public float ProjectileSpeed; // hitscan=0
+        static uint _pickCtr = 0x5A17B243u;
         public static WeaponProfile ForGun(string gunId, BotConfig cfg)
         {
-            if (string.IsNullOrEmpty(gunId) || gunId == "mixed") gunId = cfg.LoadoutPool != null && cfg.LoadoutPool.Length > 0 ? cfg.LoadoutPool[new System.Random().Next(cfg.LoadoutPool.Length)] : "gunMGT1AK47";
+            if (string.IsNullOrEmpty(gunId) || gunId == "mixed")
+            {
+                if (cfg.LoadoutPool != null && cfg.LoadoutPool.Length > 0)
+                {
+                    // Deterministic per-call LCG counter (zdtd parity: no wall-clock noise)
+                    // so mixed spawns in the same tick still pick distinct entries.
+                    _pickCtr = _pickCtr * 1103515245u + 12345u;
+                    int idx = (int)((_pickCtr >> 8 & 0x00ffffffu) % (uint)cfg.LoadoutPool.Length);
+                    gunId = cfg.LoadoutPool[idx];
+                }
+                else gunId = "gunMGT1AK47";
+            }
             string g = gunId.ToLowerInvariant();
             if (g.Contains("shotgun"))
             {

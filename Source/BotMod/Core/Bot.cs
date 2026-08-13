@@ -242,15 +242,15 @@ namespace BotMod.Core
             }
             else
             {
-                // Q3 LTG decision: camp vs roam (BotWantsToRetreat/Camp)
+                // Q3 LTG decision: camp vs roam (BotWantsToRetreat/Camp) — deterministic roll (zdtd parity)
                 var campCh = Character ?? BotCharacterDB.ForName(Name);
-                if (ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth)) && BotBrain.DecideGoal(me, cfg, campCh) == BotBrain.GoalType.Camp)
+                if (ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01()) && BotBrain.DecideGoal(me, cfg, campCh) == BotBrain.GoalType.Camp)
                 {
                     _state = BotBrain.State.Wander;
                     if (_wanderTarget == UnityEngine.Vector3.zero || Time.time >= _nextWander)
                     {
                         _wanderTarget = BotBrain.FindCover(me, me, world);
-                        if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f);
+                        if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
                         _nextWander = Time.time + 9f + Rng01() * 5f;
                         BotBrain.MoveTo(me, _wanderTarget);
                     }
@@ -261,7 +261,7 @@ namespace BotMod.Core
                     if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
                     {
                         _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
-                        _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius);
+                        _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius, Rng01(), Rng01());
                         BotBrain.MoveTo(me, _wanderTarget);
                     }
                 }

@@ -318,13 +318,19 @@ namespace BotMod.AI
             }
             catch { }
         }
-        public static Vector3 PickWanderTarget(EntityAlive me, World world, float radius)
+        static float WanderHash01(int entityId, int salt) { uint h = (uint)entityId * 2654435761u + (uint)salt * 97u + 1u; h = h * 1103515245u + 12345u; return (h >> 8 & 0x00ffffffu) / 16777216f; }
+        public static Vector3 PickWanderTarget(EntityAlive me, World world, float radius, float rollAng01 = -1f, float rollDist01 = -1f)
         {
-            var rng = new System.Random();
+            // Deterministic when rolls are supplied (from the bot's per-slot LCG, zdtd parity);
+            // fall back to a cheap hash of (entityId, pos) so the result is still not wall-clock noise.
+            if (rollAng01 < 0f) rollAng01 = WanderHash01(me.entityId, 11);
+            if (rollDist01 < 0f) rollDist01 = WanderHash01(me.entityId, 23);
+            float ang0 = rollAng01 * (float)Math.PI * 2f;
+            float dist0 = rollDist01 * radius * 0.7f + radius * 0.3f;
             for (int attempt = 0; attempt < 8; attempt++)
             {
-                float ang = (float)(rng.NextDouble() * Math.PI * 2);
-                float dist = (float)(rng.NextDouble() * radius * 0.7f + radius * 0.3f);
+                float ang = attempt == 0 ? ang0 : WanderHash01(me.entityId, 31 + attempt) * (float)Math.PI * 2f;
+                float dist = attempt == 0 ? dist0 : WanderHash01(me.entityId, 71 + attempt) * radius * 0.7f + radius * 0.3f;
                 Vector3 cand = me.position + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                 cand = new Vector3(cand.x, me.position.y, cand.z);
                 try
@@ -337,7 +343,9 @@ namespace BotMod.AI
                 }
                 catch { return cand; }
             }
-            return me.position + new Vector3((float)(rng.NextDouble() * 6 - 3), 0, (float)(rng.NextDouble() * 6 - 3));
+            // Fallback jitter is also deterministic (hash-based).
+            float jx = WanderHash01(me.entityId, 101) * 6f - 3f, jz = WanderHash01(me.entityId, 103) * 6f - 3f;
+            return me.position + new Vector3(jx, 0, jz);
         }
     }
 }
