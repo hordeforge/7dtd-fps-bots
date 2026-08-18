@@ -61,6 +61,6 @@
   "DropLootOnDeath": false,
   "StrafeChance": 0.9,
   "DodgeOnHitChance": 0.75,
-  "UseNeuralBrain": false,
+  "UseNeuralBrain": true,
   "BotNeuralWeightPath": "evolved/best.json"
 }

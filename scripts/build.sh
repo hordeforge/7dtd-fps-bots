@@ -25,6 +25,7 @@ if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && dotne
   cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
   cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
   if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
+  if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
   echo "OK -> $OUT/BotMod.dll"
   ls -la "$OUT"
   exit 0
@@ -54,5 +55,6 @@ mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 \
 cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
 cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
 if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
+if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
 echo "OK -> $OUT/BotMod.dll"
 ls -la "$OUT"
