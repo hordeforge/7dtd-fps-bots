@@ -339,9 +339,7 @@ namespace BotMod.Core
                     if (hpBefore != hpAfter && Rng01() < 0.04f) ModApi.Log($"{Name} -> {target.entityId} dmg={dmg} res={dmgResult} hp {hpBefore}->{hpAfter} weap={Weapon.GunId}");
                     if (hpBefore == hpAfter && dmgResult == 0 && Rng01() < 0.02f) ModApi.Log($"{Name} shot {target.entityId} blocked dmg={dmg} res=0 weap={Weapon.GunId} burst={_burstLeft}");
                     if (target.IsDead()) { try { BotCombat.OnKilled(me, target); } catch { } ModApi.Log($"{Name} KILLED {target.entityId} with {Weapon.GunId}"); break; }
-                    if (pellets > 1) break; // only one target hit per pellet grouping - avoid multi-hit on same frame (vanilla handles pellets via ray)
-                    // For multi-pellet we coalesce to one hit with scaled damage to avoid insta-kill
-                    if (pellets > 1) { target.DamageEntity(ds, dmg * (pellets - 1), false, 0.5f); break; }
+                    if (pellets > 1) break; // one hit per pellet volley (vanilla groups pellets via ray)
                 }
             }
             catch { }
