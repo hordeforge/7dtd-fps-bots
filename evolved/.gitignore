@@ -1,0 +1,7 @@
+runs/
+archive/
+*.bin
+*.csv
+*.jsonl
+!best.json
+!best.meta.json
