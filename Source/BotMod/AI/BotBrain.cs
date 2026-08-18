@@ -9,7 +9,7 @@ namespace BotMod.AI
     {
         public enum State { Wander, Chase, Attack }
 
-        public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg)
+        public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg, int preferredId = -1, float preferredScale = 1f)
         {
             if (world == null || me == null) return null;
             EntityAlive best = null;
@@ -43,6 +43,10 @@ namespace BotMod.AI
                         if (alive is EntityPlayer) score *= 0.82f;
                         if (BotManager.Instance.IsBotEntity(alive.entityId)) score *= 0.9f;
                         score -= (alive.Health / 100f) * -2f; // prefer wounded slightly
+                        // Retaliation bias (zdtd_bot grudge parity): the bot keeps
+                        // re-acquiring whoever shot it while the grudge is fresh,
+                        // instead of forgetting the instant they leave LOS.
+                        if (preferredId >= 0 && alive.entityId == preferredId) score *= preferredScale;
                         if (score < bestScore) { bestScore = score; best = alive; }
                     }
                 }
@@ -61,7 +65,9 @@ namespace BotMod.AI
                             float dist = Vector3.Distance(myPos, p.position);
                             if (dist > cfg.VisionRange) continue;
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, p.position + Vector3.up * 1.05f, world)) continue;
-                            if (dist * 0.82f < bestScore) { bestScore = dist * 0.82f; best = p; }
+                            float score = dist * 0.82f;
+                            if (preferredId >= 0 && p.entityId == preferredId) score *= preferredScale;
+                            if (score < bestScore) { bestScore = score; best = p; }
                         }
                     var alives = world.EntityAlives;
                     if (alives != null)
@@ -72,7 +78,9 @@ namespace BotMod.AI
                             float dist = Vector3.Distance(myPos, a.position);
                             if (dist > cfg.VisionRange) continue;
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, a.position + Vector3.up * 1.05f, world)) continue;
-                            if (dist < bestScore) { bestScore = dist; best = a; }
+                            float score = dist;
+                            if (preferredId >= 0 && a.entityId == preferredId) score *= preferredScale;
+                            if (score < bestScore) { bestScore = score; best = a; }
                         }
                 }
                 catch { }

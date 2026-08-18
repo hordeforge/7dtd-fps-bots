@@ -10,12 +10,14 @@ namespace BotMod.Commands
         public override string[] getCommands() => new[] { "bot" };
         public override string getDescription() => "FPS bots: spawn, list, remove, config.";
         public override string getHelp() =>
-            "Usage: bot <help|list|spawn [count] [x z] [weapon] | player <name/id> [count] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | reload | enable | disable | status>\n" +
+            "Usage: bot <help|list|spawn [count] [x z] [weapon] | player <name/id> [count] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | neural <on|off|reload|status> | reload | enable | disable | status>\n" +
             "  bot player <nameOrId> [count] [weapon] - spawn bots near that player (DM-safe, not too close)\n" +
             "  bot spawn 4                    - spawn 4 mixed bots\n" +
             "  bot spawn 1 0 0 gunMGT1AK47    - spawn AK bot at x,z\n" +
             "  bot weapon gunShotgunT1DoubleBarrel - default for next spawns\n" +
             "  bot skill 3                  - nightmare aim/reaction\n" +
+            "  bot neural status            - neural brain loaded? path, weights\n" +
+            "  bot neural reload            - re-read evolved/best.json (or BotNeuralWeightPath)\n" +
             "  bot list                     - alive bots (weapon/state/target)\n" +
             "  bot count 8                  - keep 8 alive\n" +
             "  bot reload                   - reload Config/botmod.json";
@@ -36,9 +38,10 @@ namespace BotMod.Commands
                     case "weapon": case "gun": DoWeapon(_params); break;
                     case "skill": case "difficulty": DoSkill(_params); break;
                     case "player": case "near": case "at": DoPlayer(_params, _senderInfo); break;
-                    case "reload": ModApi.ReloadConfig(); SdtdConsole.Instance.Output("BotMod config reloaded. diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon); break;
+                    case "reload": ModApi.ReloadConfig(); SdtdConsole.Instance.Output("BotMod config reloaded. diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon + " neural=" + (ModApi.Config.UseNeuralBrain ? "on" : "off") + " (" + BotMod.AI.BotNeuralBrain.LastReason + ")"); break;
                     case "enable": ModApi.Config.Enabled = true; SdtdConsole.Instance.Output("BotMod enabled."); break;
                     case "disable": ModApi.Config.Enabled = false; SdtdConsole.Instance.Output("BotMod disabled. Existing bots remain until removed."); break;
+                    case "neural": DoNeural(_params); break;
                     default: SdtdConsole.Instance.Output("Unknown bot subcommand: " + sub + ". Try: bot help"); break;
                 }
             }
@@ -163,6 +166,42 @@ namespace BotMod.Commands
         {
             if (p.Count < 2 || !int.TryParse(p[1], out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
             d = Math.Max(0, Math.Min(4, d)); ModApi.Config.Difficulty = d; ModApi.Config.Normalize(); SdtdConsole.Instance.Output($"Skill set to {d}. Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
+        }
+        void DoNeural(List<string> p)
+        {
+            string sub2 = p.Count >= 2 ? p[1].ToLowerInvariant() : "status";
+            switch (sub2)
+            {
+                case "status":
+                    SdtdConsole.Instance.Output($"Neural: use={ModApi.Config.UseNeuralBrain} loaded={BotMod.AI.BotNeuralBrain.Loaded} weights={BotMod.AI.BotNeuralBrain.WeightCount} hidden={BotMod.AI.BotNeuralBrain.Hidden} inputs={BotMod.AI.BotNeuralBrain.Inputs} outputs={BotMod.AI.BotNeuralBrain.Outputs}");
+                    SdtdConsole.Instance.Output($"  path={BotMod.AI.BotNeuralBrain.LoadedPath} hash={BotMod.AI.BotNeuralBrain.LoadedHash}");
+                    SdtdConsole.Instance.Output($"  last={BotMod.AI.BotNeuralBrain.LastReason}");
+                    SdtdConsole.Instance.Output($"  config path={ModApi.Config.BotNeuralWeightPath}");
+                    break;
+                case "on": case "enable": case "true": case "1":
+                    ModApi.Config.UseNeuralBrain = true;
+                    {
+                        string why2; bool ok = BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why2);
+                        ModApi.Log("BotNeuralBrain: " + (ok ? "loaded " + why2 : "not loaded (" + why2 + ")"));
+                        SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + why2 : "Neural ON but load failed: " + why2 + " — heuristic until reload succeeds.");
+                    }
+                    break;
+                case "off": case "disable": case "false": case "0":
+                    ModApi.Config.UseNeuralBrain = false;
+                    SdtdConsole.Instance.Output("Neural OFF — using heuristic. (weights stay cached; `bot neural on` re-enables)");
+                    break;
+                case "reload": case "load":
+                    {
+                        string custom = p.Count >= 3 ? p[2] : ModApi.Config.BotNeuralWeightPath;
+                        string why3; bool ok = BotMod.AI.BotNeuralBrain.TryLoad(custom, out why3);
+                        ModApi.Log("BotNeuralBrain reload: " + (ok ? "loaded " + why3 : "failed " + why3));
+                        SdtdConsole.Instance.Output(ok ? "Neural reloaded: " + why3 : "Neural reload failed: " + why3);
+                    }
+                    break;
+                default:
+                    SdtdConsole.Instance.Output("Usage: bot neural <on|off|reload [path]|status>");
+                    break;
+            }
         }
     }
 }

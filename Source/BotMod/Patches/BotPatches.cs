@@ -106,7 +106,7 @@ namespace BotMod.Patches
                     {
                         var attacker = world.GetEntity(aid) as EntityAlive;
                         var victim = BotMod.Core.BotManager.Instance.GetBot(__instance.entityId);
-                        if (victim != null) try { victim.OnDamaged(attacker); } catch { }
+                        if (victim != null) try { victim.OnDamaged(attacker, _strength); } catch { }
                     }
                 }
             }

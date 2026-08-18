@@ -1,6 +1,10 @@
 dist/
 Source/BotMod/bin/
 Source/BotMod/obj/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
 *.user
 *.suo
 .vs/

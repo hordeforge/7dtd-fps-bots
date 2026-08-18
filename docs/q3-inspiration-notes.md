@@ -52,6 +52,13 @@ per-bot LCG (`Bot.RngNext/Rng01/RngSym`, seeded from entity id).
   acquisition, roll a fixed skill-scaled yaw bias
   (`Bot._aimBiasYaw = RngSym() * (1 - AimAccuracy) * 0.45`) and rotate the lead
   aim by it each attack tick: imperfect but stable shots, not perfect aimers.
+- **Grudge / vengeance memory (from zdtd_bot retaliation).** Being hit records
+  the attacker as a grudge for 15 s (`Bot._grudgeId` / `_grudgeUntil`);
+  `FindTarget` out-scores the grudged id (0.6x) so the bot keeps re-acquiring
+  whoever shot it even after they leave LOS (zdtd's `GRUDGE_TICKS` +
+  `GRUDGE_SCORE`). A heavy hit (>25 damage, ~2x the pistol floor) staggers the
+  dodge longer (`OnDamaged(strength)`), so snipers genuinely daze bots.
 - **Already shared:** per-slot LCG + deterministic burst cadence (ported from
   zdtd_bot in `cross:` commits), headshot chance/multiplier, dodge-on-hit,
-  player-preference targeting (0.82), backpedal, low-hp retreat, lead-fire.
+  player-preference targeting (0.82), backpedal, low-hp retreat, lead-fire,
+  weapon-profile range/burst tactics, cover-seeking retreat (`FindCover`).

@@ -60,5 +60,7 @@
   "AnnounceSpawns": true,
   "DropLootOnDeath": false,
   "StrafeChance": 0.9,
-  "DodgeOnHitChance": 0.75
+  "DodgeOnHitChance": 0.75,
+  "UseNeuralBrain": false,
+  "BotNeuralWeightPath": "evolved/best.json"
 }

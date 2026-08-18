@@ -59,6 +59,12 @@ namespace BotMod
                 if (!ShouldRun()) return;
                 BotManager.Instance.OnGameStartDone();
                 Log("GameStartDone -> BotManager started.");
+                if (Config.UseNeuralBrain)
+                {
+                    string why;
+                    bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
+                    Log("BotNeuralBrain: " + (ok ? "loaded " + why : "not loaded (" + why + "), using heuristic."));
+                }
             }
             catch (Exception ex) { Log("OnGameStartDone failed: " + ex); }
         }
@@ -92,6 +98,12 @@ namespace BotMod
             Config.Normalize();
             try { BotMod.Config.BotCharacterDB.Load(Config); } catch {}
             Log($"Config reloaded: Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
+            if (Config.UseNeuralBrain)
+            {
+                string why;
+                bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
+                Log("BotNeuralBrain: " + (ok ? "reloaded " + why : "not loaded (" + why + "), using heuristic."));
+            }
         }
 
         public static void Log(string msg)

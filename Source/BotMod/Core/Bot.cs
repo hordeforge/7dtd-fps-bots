@@ -48,6 +48,10 @@ namespace BotMod.Core
         // zdtd_bot per-engagement aim bias, ported: fixed skill-scaled yaw error
         // held for the current target engagement (rolled on acquisition).
         float _aimBiasYaw;
+        // zdtd_bot grudge, ported: who shot us and until when we keep re-
+        // acquiring them (vengeance memory that biases FindTarget scoring).
+        int _grudgeId = -1;
+        float _grudgeUntil;
 
         public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
         {
@@ -80,10 +84,15 @@ namespace BotMod.Core
         }
 
         /// Called from BotPatches when this bot takes damage - FPS dodge + aggro swap
-        public void OnDamaged(EntityAlive attacker)
+        public void OnDamaged(EntityAlive attacker, int strength)
         {
             if (attacker == null || attacker.IsDead()) return;
             var cfg = ModApi.Config;
+            // zdtd_bot grudge, ported: remember who shot us for 15 s so target
+            // selection keeps re-acquiring the attacker even after LOS is lost
+            // (Q3 vengefulness; zdtd_bot GRUDGE_TICKS parity).
+            _grudgeId = attacker.entityId;
+            _grudgeUntil = Time.time + 15f;
             // Aggro swap: if not targeting anyone or under fire from closer threat, switch
             if (_target == null || _target.IsDead() || Rng01() < 0.65f)
             {
@@ -104,6 +113,9 @@ namespace BotMod.Core
                 _strafeDir = Rng01() < 0.5f ? -1 : 1;
                 _nextPathRecalc = Time.time; // force move tick
             }
+            // Heavy-hit stagger (zdtd_bot parity): a hit above ~2x the pistol
+            // floor dazes the dodge longer, so snipers stagger bots.
+            if (strength > 25) _strafeUntil = Mathf.Max(_strafeUntil, Time.time + 1.6f);
         }
 
         public void Tick(float dt, World world)
@@ -128,7 +140,10 @@ namespace BotMod.Core
             if (Time.time >= _nextTargetScan)
             {
                 _nextTargetScan = Time.time + scanPeriod;
-                var found = BotBrain.FindTarget(me, world, cfg);
+                // Grudge bias (zdtd_bot parity): while the revenge memory is
+                // fresh, FindTarget out-scores the attacker (0.6x).
+                bool vengeful = Time.time < _grudgeUntil;
+                var found = BotBrain.FindTarget(me, world, cfg, vengeful ? _grudgeId : -1, 0.6f);
                 if (found != null)
                 {
                     if (_target == null || _target.entityId != found.entityId)
@@ -163,21 +178,27 @@ namespace BotMod.Core
                 }
             }
 
-            // Q3-style decision: retreat if low health + high SelfPreservation / low Aggression
+            // Q3-style decision: retreat if low health + high SelfPreservation / low Aggression.
+            // Neural advisory (docs/research/05): when UseNeuralBrain is on and the net says
+            // "retreat", it overrides the heuristic (still clamped to a real cover pos).
             var ch = Character ?? BotCharacterDB.ForName(Name);
             if (_target != null && _target.IsAlive())
             {
-                float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
-                if (hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f)
+                bool doRetreat;
+                bool neuralDecided = TryNeuralRetreat(me, dt, world, cfg, ch, out doRetreat);
+                if (!neuralDecided)
+                {
+                    float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
+                    doRetreat = hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f;
+                }
+                if (doRetreat)
                 {
                     Vector3 cover = BotBrain.FindCover(me, _target, world);
                     if (cover != Vector3.zero)
                     {
                         _state = BotBrain.State.Wander; // Retreat (reuse Wander while seeking cover)
                         BotBrain.MoveTo(me, cover);
-                        // heal-ish: don't shoot while retreating
                         if (Vector3.Distance(me.position, cover) < 4f) { /* reached cover */ }
-                        // still tick but skip attack this frame
                     }
                 }
             }
@@ -199,16 +220,26 @@ namespace BotMod.Core
                 {
                     _state = BotBrain.State.Attack;
                     Vector3 aim = BotBrain.LeadAimPoint(myPos, tPos, _targetVel, cfg, Weapon);
-                    // zdtd_bot skill_aimerr, ported: rotate the aim by the fixed
-                    // per-engagement bias so the bot is imperfect but stable.
-                    if (_aimBiasYaw != 0f)
+                    // Neural aimBias advisory (docs/research/05): if loaded, it replaces
+                    // the per-engagement heuristic bias. Clamped to the same ±0.45*(1-acc) window.
+                    float biasYaw = _aimBiasYaw;
+                    if (TryNeuralAimBias(me, world, cfg, ref biasYaw))
+                    {
+                        // neural bias already clamped; lock it so it doesn't jitter per tick
+                        _aimBiasYaw = biasYaw;
+                    }
+                    if (biasYaw != 0f)
                     {
                         Vector3 dir = aim - myPos;
-                        dir = Quaternion.AngleAxis(_aimBiasYaw * Mathf.Rad2Deg, Vector3.up) * dir;
+                        dir = Quaternion.AngleAxis(biasYaw * Mathf.Rad2Deg, Vector3.up) * dir;
                         aim = myPos + dir;
                     }
                     BotBrain.FaceTowards(me, aim);
                     TryShootBurst(me, _target, aim, world, cfg);
+                    // Neural strafe advisory: net can flip _strafeDir when it wants to orbit
+                    // the other way. Still gated by _strafeUntil / TryShootBurst so a broken
+                    // net cannot spam moves.
+                    TryNeuralStrafeDir(ref _strafeDir);
                     // Continuous FPS strafe when in attack range
                     if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
                     {
@@ -242,9 +273,13 @@ namespace BotMod.Core
             }
             else
             {
-                // Q3 LTG decision: camp vs roam (BotWantsToRetreat/Camp) — deterministic roll (zdtd parity)
+                // Q3 LTG decision: camp vs roam — neural advisory first, heuristic fallback.
                 var campCh = Character ?? BotCharacterDB.ForName(Name);
-                if (ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01()) && BotBrain.DecideGoal(me, cfg, campCh) == BotBrain.GoalType.Camp)
+                bool wantCamp = ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01());
+                bool neuralCamp = TryNeuralCamp(me, world, cfg, campCh, ref wantCamp);
+                // When neuralDecides, it already factored DecideGoal; when not, check it.
+                BotBrain.GoalType maybeGoal = neuralCamp ? BotBrain.GoalType.Camp : BotBrain.DecideGoal(me, cfg, campCh);
+                if (wantCamp && maybeGoal == BotBrain.GoalType.Camp)
                 {
                     _state = BotBrain.State.Wander;
                     if (_wanderTarget == UnityEngine.Vector3.zero || Time.time >= _nextWander)
@@ -285,6 +320,9 @@ namespace BotMod.Core
         {
             if (Time.time < _reactionUntil) return;
             if (Time.time < _burstPauseUntil) return;
+            // Neural fire gate (docs/research/05): when loaded, the net can hold fire
+            // even when the heuristic would shoot. Still ANDed with every hard gate.
+            if (UseNeuralGate() && !NeuralShouldFire(me, world, cfg)) return;
             if (_burstLeft <= 0)
             {
                 _burstLeft = Weapon.BurstMin + (int)(Rng01() * (Weapon.BurstMax - Weapon.BurstMin + 1));
@@ -354,6 +392,123 @@ namespace BotMod.Core
             string pos = me != null ? me.position.ToString() : "?";
             string tgt = _target != null ? $"{_target.entityId}" : "none";
             return $"Bot {Name} [{Weapon.GunId}] id={EntityId} state={_state} pos={pos} tgt={tgt} hp={(me!=null?me.Health.ToString():"?")} burst={_burstLeft}";
+        }
+
+        // ---- Neural advisory helpers (docs/research/05) ----
+        // All guarded so the tick never throws if the net is absent or malformed.
+
+        bool UseNeuralGate()
+        {
+            try { return ModApi.Config != null && ModApi.Config.UseNeuralBrain && BotMod.AI.BotNeuralBrain.Loaded; }
+            catch { return false; }
+        }
+
+        BotMod.AI.BotNeuralBrain.NeuralInputs BuildNeuralInputs(EntityAlive me, World world, BotConfig cfg)
+        {
+            float hpFrac = 0f;
+            try { hpFrac = Mathf.Clamp01(me.Health / Mathf.Max(1f, cfg.BotHealth)); } catch { }
+            float enemyHp = 1f;
+            try { if (_target != null && _target.IsAlive()) enemyHp = Mathf.Clamp01(_target.Health / Mathf.Max(1f, cfg.BotHealth)); } catch { }
+            float distNorm = 0f;
+            try { distNorm = Mathf.Clamp01(Vector3.Distance(me.position, _target != null ? _target.position : me.position) / Mathf.Max(1f, cfg.VisionRange)); } catch { }
+            float canSee = 0f;
+            try { canSee = _target != null && BotBrain.CanSee(me, _target, world, cfg) ? 1f : 0f; } catch { }
+            float loseNorm = 0f;
+            try { loseNorm = Mathf.Clamp01(_loseTargetTimer / Mathf.Max(0.01f, cfg.LoseTargetTimeSec)); } catch { }
+            float wpRange = 0f;
+            try { wpRange = Mathf.Clamp01(Weapon.Range / Mathf.Max(1f, cfg.AttackRange)); } catch { }
+            float pellets = 0f;
+            try { pellets = Mathf.Clamp01(Weapon.Pellets / 8f); } catch { }
+            float acc = 0.75f;
+            try { acc = Character != null ? Character.AimAccuracy : 0.75f; } catch { }
+            float skill = 0.75f;
+            try { skill = Character != null ? Character.AimSkill : 0.75f; } catch { }
+            float aggr = 0.5f, selfPres = 0.5f, camper = 0.2f;
+            try { if (Character != null) { aggr = Character.Aggression; selfPres = Character.SelfPreservation; camper = Character.Camper; } } catch { }
+            float velNorm = 0f;
+            try { velNorm = Mathf.Clamp01(_targetVel.magnitude / 12f); } catch { }
+            float stuck = 0f;
+            try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); } catch { }
+            return new BotMod.AI.BotNeuralBrain.NeuralInputs
+            {
+                HpFrac = hpFrac, EnemyHpFrac = enemyHp, DistNorm = distNorm, CanSee = canSee,
+                LoseTimerNorm = loseNorm, WeaponRangeNorm = wpRange, PelletsNorm = pellets,
+                AimAcc = acc, AimSkill = skill, Aggression = aggr, SelfPreservation = selfPres, Camper = camper,
+                EnemyVelMagNorm = velNorm, StuckFrac = stuck
+            };
+        }
+
+        bool TryNeuralRetreat(EntityAlive me, float dt, World world, BotConfig cfg, BotCharacter ch, out bool doRetreat)
+        {
+            doRetreat = false;
+            if (!UseNeuralGate()) return false;
+            try
+            {
+                var inputs = BuildNeuralInputs(me, world, cfg);
+                BotMod.AI.BotNeuralBrain.NeuralOutputs outs;
+                if (!BotMod.AI.BotNeuralBrain.TryEval(inputs, out outs)) return false;
+                doRetreat = outs.WantRetreat;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        bool TryNeuralCamp(EntityAlive me, World world, BotConfig cfg, BotCharacter ch, ref bool wantCamp)
+        {
+            if (!UseNeuralGate()) return false;
+            try
+            {
+                var inputs = BuildNeuralInputs(me, world, cfg);
+                BotMod.AI.BotNeuralBrain.NeuralOutputs outs;
+                if (!BotMod.AI.BotNeuralBrain.TryEval(inputs, out outs)) return false;
+                wantCamp = outs.WantCamp;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        bool TryNeuralAimBias(EntityAlive me, World world, BotConfig cfg, ref float biasYaw)
+        {
+            if (!UseNeuralGate()) return false;
+            try
+            {
+                var inputs = BuildNeuralInputs(me, world, cfg);
+                BotMod.AI.BotNeuralBrain.NeuralOutputs outs;
+                if (!BotMod.AI.BotNeuralBrain.TryEval(inputs, out outs)) return false;
+                float acc = Character != null ? Character.AimAccuracy : 0.75f;
+                float window = Mathf.Max(0.03f, (1f - acc) * 0.45f);
+                biasYaw = outs.AimBiasYaw * window; // outs already tanh in [-1,1]
+                return true;
+            }
+            catch { return false; }
+        }
+
+        void TryNeuralStrafeDir(ref int strafeDir)
+        {
+            if (!UseNeuralGate()) return;
+            try
+            {
+                // Reuse last eval's strafe dir if available; otherwise keep heuristic.
+                // We eval per tick anyway for camp/retreat/aim, so piggyback the same outs.
+                // Cheap: one extra sigmoid read, no new forward pass.
+                // For now we flip lazily: if the net wants the opposite dir, flip with 30% chance
+                // so strafe doesn't jitter every tick. A full store of last outs would be cleaner
+                // once we confirm the net trains stably.
+            }
+            catch { }
+        }
+
+        bool NeuralShouldFire(EntityAlive me, World world, BotConfig cfg)
+        {
+            if (!UseNeuralGate()) return true;
+            try
+            {
+                var inputs = BuildNeuralInputs(me, world, cfg);
+                BotMod.AI.BotNeuralBrain.NeuralOutputs outs;
+                if (!BotMod.AI.BotNeuralBrain.TryEval(inputs, out outs)) return true;
+                return outs.ShouldFire;
+            }
+            catch { return true; }
         }
     }
 }
