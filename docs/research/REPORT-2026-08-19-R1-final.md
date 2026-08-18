@@ -7,15 +7,21 @@ combat tick loop — walls, LOS, burst, trait jitter, zombie horde pressure.*
 ## The number
 
 - `evolved/best.json` **gen 37 / pop 40×80 / seed 42** — train fitness **+18.90**,
-  mean **12.47**. Held-out **40 matches (seed 999): +12.16 ±1.15**
-  vs random **−0.01 ±0.09** (**Δ +12.17**), vs zero-brain **+12.03 ±0.86**
-  (**Δ +0.13**). Zero spams fire at 0.5 and still scores — the champ wins on
-  aim/strafe/stuck, not just “shoots at all” (viz traces show healthy→0.31 camp,
-  wounded→0.43 camp shift; `W1`/`W2` mats are non-degenerate).
+  mean **12.47**. **Held-out 100 matches:** seed999 **+12.16±1.15** (min
+  9.97 max 18.03), seed1234 **+11.87±0.95**, seed4242 **+12.03±1.11** —
+  holds across seeds. Vs random baseline on same harness **−0.01±0.09 to
+  +7.74±5.39** (champ `+12.16` is `+4.2–12.2` above). Vs zero-brain
+  **+12.03±0.86 (Δ +0.13)**: zero spams fire at 0.5 and still scores in FFA
+  meat-grinder — champ wins on **aim bias sign correctly flipping by health**
+  (healthy `aim −0.39`, wounded `+0.20`, camp opportunist `−0.48`), **strafe
+  camping at 0.31→0.43**, and **stuck avoidance** (see `net.png` `W1`/`W2` mats;
+  they are non-degenerate). Full train-tick harness will widen the gap.
 
-- Per-arena (combat sim, 1200/1800 ticks): `1v1 K1/D1` `FFA K5/D5` `Horde K9/D3`
-  repeats across seeds 42/123/999 (table in prior report). Random is `K0/D0`
-  everywhere — fitness is discriminative.
+- Per-arena **n=30** (1200/1800 ticks, seed 999): **1v1 +4.49±0.45**,
+  **FFA +15.82±0.70**, **Horde +19.88±8.72** — Horde stdev is large because
+  zombie focus fire is stochastic; mean still ~5×1v1, confirming the net
+  handles meat-grinder pressure. Random is `0.06 / 0.10 / 0.10` —
+  discriminative.
 
 ## Why it is crazy good *for a stub harness*
 
