@@ -394,7 +394,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             # crazy good nets learn to keep |aim_raw| tiny under fire
             aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15)
             # sniper gets little penalty, shotgun more forgiving
-            hc2 = hc * (1.0 - aim_penalty * 0.18)
+            hc2 = hc * (1.0 - aim_penalty * 0.35)
             v, rng = _lcg01(rng)
             if v > hc2:
                 # miss — still burns burst
@@ -458,11 +458,11 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             dx = bx[best_b] - zx[zi]; dy = by[best_b] - zy[zi]
             d = math.sqrt(best_d2)
             if d > 0.01:
-                zx[zi] += dx / d * 0.35  # zombie speed 1.2-ish but tick is 0.05 → 0.06? keep 0.35 for pace
-                zy[zi] += dy / d * 0.35
+                zx[zi] += dx / d * 0.42  # zombie speed (buffed for PvE pressure) 1.2-ish but tick is 0.05 → 0.06? keep 0.35 for pace
+                zy[zi] += dy / d * 0.42
             if d < 2.0:
-                bhp[best_b] -= 8 * dt * 8  # melee pressure
-                damage_taken += 8 * dt * 8
+                bhp[best_b] -= 10 * dt * 8  # melee pressure (buffed)
+                damage_taken += 10 * dt * 8
                 if bhp[best_b] <= 0:
                     balive[best_b] = False
                     deaths += 1
@@ -488,5 +488,5 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
     fitness = 0.55 * elo + 0.25 * econ + 0.15 * survival - 0.05 * stuck_frac
     # small camp penalty if over-camps no kills
     if camp_ticks > total_ticks * n_bots * 0.6 and kills == 0:
-        fitness -= 0.8
+        fitness -= 1.6
     return fitness, kills, deaths, damage_dealt, damage_taken, shots, hits
