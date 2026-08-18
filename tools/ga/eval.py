@@ -30,14 +30,16 @@ def main():
     if w.size != ga.W:
         raise SystemExit(f"weights size {w.size} != want {ga.W}")
 
-    # Use a different run_seed than training so it's held-out-ish
-    seed = 999
-    scores = [harness.synthetic_fitness(w, seed + m) for m in range(args.matches)]
+    # Use combat harness with held-out seed so it's not the training roll
+    scores = [harness.evaluate(w, 999, m, run_seed=999) for m in range(args.matches)]
     print(f"best gen {meta.get('generation')} fitness {meta.get('fitness'):+.4f}")
-    print(f"re-eval {len(scores)} matches  mean {np.mean(scores):+.4f}  stdev {np.std(scores):.4f}")
+    print(f"held-out re-eval {len(scores)} matches  mean {np.mean(scores):+.4f}  stdev {np.std(scores):.4f}")
 
-    # Report the heuristic stub as a placeholder (real heuristic would be a JSON too)
-    print("(held-out pool: synthetic; wire to real opponent pool when harness is live)")
+    # Also show a random baseline for the same seed so combat sim is discriminative
+    rng = np.random.default_rng(123)
+    w_rand = ga.he_init(rng)
+    rand_scores = [harness.evaluate(w_rand, 999, m, run_seed=999) for m in range(args.matches)]
+    print(f"random baseline  mean {np.mean(rand_scores):+.4f}  stdev {np.std(rand_scores):.4f}  (delta {np.mean(scores)-np.mean(rand_scores):+.2f})")
 
 
 if __name__ == "__main__":

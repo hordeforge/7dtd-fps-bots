@@ -15,6 +15,7 @@ import argparse
 import csv
 import json
 import random
+import os
 import time
 from pathlib import Path
 
@@ -27,6 +28,10 @@ DEFAULT_FITNESS = {"elo": 0.55, "econ": 0.25, "survival": 0.15, "stuck": 0.05}
 
 
 def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None):
+    try:
+        os.chdir(Path(__file__).resolve().parents[2])
+    except Exception:
+        pass
     rng = np.random.default_rng(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -38,6 +43,11 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run}
     (run_dir / "config.json").write_text(json.dumps(config, indent=2))
 
+        # ensure evolved/ resolves to clanker root regardless of cwd
+    try:
+        os.chdir(Path(__file__).resolve().parents[2])
+    except Exception:
+        pass
     if resume:
         # TODO: load checkpoint and continue (deterministic replay)
         raise SystemExit(f"resume from {resume} not yet wired — rerun from gen 0 for now")
