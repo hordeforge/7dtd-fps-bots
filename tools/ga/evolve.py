@@ -147,7 +147,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                             child = ga.crossover(a, b, rng)
                         else:
                             child = ga.tournament(pop_w, ranked.tolist(), k=3).copy()
-                        child = ga.mutate(child, rng, sigma=0.05, rank_norm=0.5)
+                        child = ga.mutate(child, rng, sigma=0.05, rank_norm=0.5, generation=g, total_gens=gens)
                         children.append(child)
                     pop_w = elites + children
             best_path = Path("evolved/best.json")
@@ -226,10 +226,15 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 # rank-norm of the parent to scale sigma
                 # find its rank (approx: use the tournament winner's rank)
                 rn = 0.5  # default mid; refine when we track parent index
-                child = ga.mutate(child, rng, sigma=0.05, rank_norm=rn)
+                child = ga.mutate(child, rng, sigma=0.05, rank_norm=rn, generation=g, total_gens=gens)
                 children.append(child)
             pop_w = elites + children
-            hof = elites[:8]  # stub HOF
+            # HOF ring: keep top-8 elites history, re-inject one every 12 gens for diversity
+            hof = (hof + elites)[:8] if hof else elites[:]
+            hof = hof[:8]
+            if g % 12 == 11 and len(hof) >= 2:
+                import random as _rr
+                pop_w[_rr.randrange(len(pop_w))] = _rr.choice(hof).copy()
 
     # promote best
     if best_w is not None:

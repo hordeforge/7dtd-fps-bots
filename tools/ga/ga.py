@@ -90,9 +90,12 @@ def crossover(a: np.ndarray, b: np.ndarray, rng: np.random.Generator) -> np.ndar
     return np.where(mask, a, b).astype(np.float32)
 
 
-def mutate(w: np.ndarray, rng: np.random.Generator, sigma: float = 0.05, rank_norm: float = 0.5) -> np.ndarray:
-    """Gaussian + sparse-reset + swap per docs/research/03 §2.3. Larger rank drives more exploration."""
-    s = sigma * (0.6 + 0.9 * (1.0 - rank_norm))  # fitter→0.6*σ, weakest→1.5*σ
+def mutate(w: np.ndarray, rng: np.random.Generator, sigma: float = 0.05, rank_norm: float = 0.5, generation: int = 0, total_gens: int = 80) -> np.ndarray:
+    """Gaussian + sparse-reset + swap per docs/research/03 §2.3. Annealed sigma."""
+    # cosine anneal: strong early, surgical late (helps generalization)
+    t = float(min(1.0, generation / max(1, total_gens - 1)))
+    anneal = 0.45 + 0.55 * math.cos(t * math.pi * 0.5)  # 1.0 → 0.45
+    s = sigma * anneal * (0.6 + 0.9 * (1.0 - rank_norm))
     # Gaussian on all weights
     if rng.random() < 0.92:
         w = w + rng.normal(0, s, W).astype(np.float32)
