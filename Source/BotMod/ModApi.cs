@@ -44,6 +44,10 @@ namespace BotMod
                 try { ModEvents.WorldShuttingDown.RegisterHandler(OnWorldShuttingDown); }
                 catch (Exception ex) { Log("WorldShuttingDown register failed: " + ex.Message); }
 
+                // Ensure npcSurvivor* is available on dedi even though the vanilla XML has it
+                // inside an HTML comment. Without this the engine has no EntitySurvivor class
+                // and BotSpawner falls back to zombieSoldier every time.
+                try { BotSurvivorPatch.EnsureSurvivorClasses(); } catch (Exception ex) { Log("EnsureSurvivorClasses: " + ex.Message); }
                 Log("BotMod init OK. Commands: bot help");
             }
             catch (Exception ex)

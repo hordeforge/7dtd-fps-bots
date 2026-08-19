@@ -3,7 +3,7 @@
   "DedicatedOnly": true,
   "TargetBotCount": 6,
   "MaxBots": 16,
-  "BotEntityClass": "zombieSoldier",
+  "BotEntityClass": "mixed",
   "BotWeapon": "mixed",
   "BotAmmo": "ammo762mmBulletBall",
   "BotAmmoCount": 300,

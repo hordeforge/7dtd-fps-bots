@@ -260,20 +260,33 @@ namespace BotMod.Core
             return _dmSpawns;
         }
 
+        static readonly string[] _botClassPool = new[] { "npcSurvivorBot", "zombieSoldier", "zombieSoldierFeral", "zombieSoldierRadiated", "zombieArlene", "zombieArleneFeral", "zombieNurse", "zombieNurseFeral", "zombiePartyGirl", "zombieMarlene" };
+        public static string PickBotClass(BotConfig cfg)
+        {
+            // "zombieSoldier" means "any soldier" pool; otherwise literal; "mixed" means the full pool.
+            if (cfg.BotEntityClass == null) return "zombieSoldier";
+            if (cfg.BotEntityClass == "mixed") return _botClassPool[RngPick(_botClassPool.Length)];
+            if (cfg.BotEntityClass != null && cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
+            return cfg.BotEntityClass;
+        }
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)
         {
             try
             {
-                int classId = EntityClass.FromString(entityClassName);
+                string want = entityClassName ?? "zombieSoldier";
+                // BotEntityClass="mixed" → full pool; "zombieSoldier" stays soldier variants only.
+                if (want != null && want.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) want = _botClassPool[RngPick(_botClassPool.Length)];
+                else if (want == "zombieSoldier") want = _botClassPool[RngPick(3)]; // first 3 are soldier variants
+                int classId = EntityClass.FromString(want);
                 if (classId < 0)
                 {
-                    foreach (var alias in new[] { "zombieSoldier", "zombieSoldierFeral", "zombieArlene", "zombieNurse" })
+                    foreach (var alias in new[] { "npcSurvivorBot", "zombieSoldier", "zombieSoldierFeral", "zombieArlene", "zombieNurse" })
                     {
                         classId = EntityClass.FromString(alias);
-                        if (classId >= 0) { ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
+                        if (classId >= 0) { want = alias; ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
                     }
                 }
-                if (classId < 0) { ModApi.Log("Unknown entity class: " + entityClassName); return null; }
+                if (classId < 0) { if (want != "mixed" && !entityClassName.Contains("mixed")) ModApi.Log("Unknown entity class: " + entityClassName + " (resolved " + want + ")"); return null; }
                 Entity e = null;
                 try
                 {
@@ -310,7 +323,11 @@ namespace BotMod.Core
                             ItemValue iv = null;
                             try { iv = ItemClass.GetItem(wp.GunId, false); } catch { }
                             if (iv == null || iv.type == 0) { var ic = ItemClass.GetItemClass(wp.GunId, false); if (ic != null) iv = new ItemValue(ic.Id, false); }
-                            if (iv != null && iv.type != 0) { var stack = new ItemStack(iv, 1); try { alive.inventory.AddItem(stack); } catch { } }
+                            if (iv != null && iv.type != 0)
+                            {
+                                var stack = new ItemStack(iv, 1);
+                                try { alive.inventory.AddItem(stack); } catch { }
+                            }
                         }
                         catch (Exception ex) { ModApi.Log("Give weapon failed: " + ex.Message); }
                     }

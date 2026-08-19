@@ -179,13 +179,15 @@ namespace BotMod.Core
             }
 
             // Q3-style decision: retreat if low health + high SelfPreservation / low Aggression.
-            // Neural advisory (docs/research/05): when UseNeuralBrain is on and the net says
-            // "retreat", it overrides the heuristic (still clamped to a real cover pos).
+            // Neural advisory (docs/research/05): when the net says "retreat" it only
+            // overrides vs *player* — zombie pressure stays heuristic.
             var ch = Character ?? BotCharacterDB.ForName(Name);
             if (_target != null && _target.IsAlive())
             {
                 bool doRetreat;
-                bool neuralDecided = TryNeuralRetreat(me, dt, world, cfg, ch, out doRetreat);
+                bool neuralDecided = false;
+                if (_target is EntityPlayer) neuralDecided = TryNeuralRetreat(me, dt, world, cfg, ch, out doRetreat);
+                else doRetreat = false;
                 if (!neuralDecided)
                 {
                     float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
@@ -222,8 +224,9 @@ namespace BotMod.Core
                     Vector3 aim = BotBrain.LeadAimPoint(myPos, tPos, _targetVel, cfg, Weapon);
                     // Neural aimBias advisory (docs/research/05): if loaded, it replaces
                     // the per-engagement heuristic bias. Clamped to the same ±0.45*(1-acc) window.
+                    // This is only relevant against *you* (player) — bot-vs-bot uses classic aim.
                     float biasYaw = _aimBiasYaw;
-                    if (TryNeuralAimBias(me, world, cfg, ref biasYaw))
+                    if (_target is EntityPlayer && TryNeuralAimBias(me, world, cfg, ref biasYaw))
                     {
                         // neural bias already clamped; lock it so it doesn't jitter per tick
                         _aimBiasYaw = biasYaw;
@@ -235,7 +238,19 @@ namespace BotMod.Core
                         aim = myPos + dir;
                     }
                     BotBrain.FaceTowards(me, aim);
-                    TryShootBurst(me, _target, aim, world, cfg);
+                    // Neural fire gate: must be checked before every burst
+                    bool wantToFire = true;
+                    if (_target is EntityPlayer && UseNeuralGate())
+                    {
+                        try
+                        {
+                            var _nin = BuildNeuralInputs(me, world, cfg);
+                            BotMod.AI.BotNeuralBrain.NeuralOutputs _nout;
+                            if (BotMod.AI.BotNeuralBrain.TryEval(_nin, out _nout)) wantToFire = _nout.ShouldFire;
+                        }
+                        catch { wantToFire = true; }
+                    }
+                    TryShootBurst(me, _target, aim, world, cfg, wantToFire);
                     // Neural strafe advisory: net can flip _strafeDir when it wants to orbit
                     // the other way. Still gated by _strafeUntil / TryShootBurst so a broken
                     // net cannot spam moves.
@@ -273,12 +288,12 @@ namespace BotMod.Core
             }
             else
             {
-                // Q3 LTG decision: camp vs roam — neural advisory first, heuristic fallback.
+                // Q3 LTG decision: camp vs roam — heuristic (neural kept only for PvP chase).
+                // The GA's "camp" signal is intentionally not used here; zombies should
+                // always pull bots out of cover.
                 var campCh = Character ?? BotCharacterDB.ForName(Name);
                 bool wantCamp = ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01());
-                bool neuralCamp = TryNeuralCamp(me, world, cfg, campCh, ref wantCamp);
-                // When neuralDecides, it already factored DecideGoal; when not, check it.
-                BotBrain.GoalType maybeGoal = neuralCamp ? BotBrain.GoalType.Camp : BotBrain.DecideGoal(me, cfg, campCh);
+                BotBrain.GoalType maybeGoal = BotBrain.DecideGoal(me, cfg, campCh);
                 if (wantCamp && maybeGoal == BotBrain.GoalType.Camp)
                 {
                     _state = BotBrain.State.Wander;
@@ -316,13 +331,13 @@ namespace BotMod.Core
         }
         bool IsDeadTgt(EntityAlive e) => e == null || e.IsDead() || !e.IsAlive();
 
-        void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg)
+        void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire = true)
         {
             if (Time.time < _reactionUntil) return;
             if (Time.time < _burstPauseUntil) return;
             // Neural fire gate (docs/research/05): when loaded, the net can hold fire
             // even when the heuristic would shoot. Still ANDed with every hard gate.
-            if (UseNeuralGate() && !NeuralShouldFire(me, world, cfg)) return;
+            if (!wantToFire) return;
             if (_burstLeft <= 0)
             {
                 _burstLeft = Weapon.BurstMin + (int)(Rng01() * (Weapon.BurstMax - Weapon.BurstMin + 1));
@@ -368,6 +383,9 @@ namespace BotMod.Core
                     int dmg = pellets > 1 ? Mathf.Max(3, Weapon.Damage) : Weapon.Damage;
                     bool head = pellets == 1 && Rng01() < cfg.HeadshotChance;
                     if (head) dmg = Mathf.RoundToInt(dmg * cfg.HeadshotMultiplier);
+                    // Visible fire: zombieSoldier* avatars don't play the gun
+                    // holster anim, so we only guarantee that DamageEntity fires
+                    // and the log tick is reliable for scoring (see BotCombat).
                     int hpBefore = target.Health;
                     DamageSource ds;
                     try { ds = new DamageSourceEntity(EnumDamageSource.External, EnumDamageTypes.Piercing, me.entityId); }
