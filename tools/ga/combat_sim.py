@@ -366,9 +366,8 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
     if shots > 0: econ -= 0.05 * shots / (hits + 1)
     survival = float(total_ticks) / float(max_ticks)
     stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
-    fitness = 0.55 * elo + 0.25 * econ + 0.15 * survival - 0.05 * stuck_frac
-    if camp_ticks > total_ticks * n_bots * 0.6 and kills == 0: fitness -= 1.6
-    return fitness, kills, deaths, damage_dealt, damage_taken, shots, hits
+    camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
+    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits
 
 
 @numba.njit
@@ -698,22 +697,16 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             if zy[zi] < 2: zy[zi] = 2
             if zy[zi] > 78: zy[zi] = 78
 
-    # fitness components (scalarized)
-    # elo kills-deaths*1.0
+    # sim returns raw components — harness does scalarization (so weights can sweep)
     elo = float(kills) - float(deaths)
-    # damage economy
     econ = 0.0
     if damage_taken > 1e-6:
         econ = damage_dealt / damage_taken
     else:
         econ = damage_dealt / 10.0
-    # anti-spam
     if shots > 0:
         econ -= 0.05 * shots / (hits + 1)
-    survival = float(total_ticks) / float(max_ticks)  # ~1 if we lasted
+    survival = float(total_ticks) / float(max_ticks)
     stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
-    fitness = 0.55 * elo + 0.25 * econ + 0.15 * survival - 0.05 * stuck_frac
-    # small camp penalty if over-camps no kills
-    if camp_ticks > total_ticks * n_bots * 0.6 and kills == 0:
-        fitness -= 1.6
-    return fitness, kills, deaths, damage_dealt, damage_taken, shots, hits
+    camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
+    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits

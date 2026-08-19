@@ -22,6 +22,12 @@ _simulate_relu = _cs.simulate_match_relu
 ACTIVATION = 0
 # curriculum flag ("mixed" canonical; pvp_first/horde_first gate early gens via evolve.py)
 CURRICULUM = "mixed"
+# scalarization weights (tunable — fitness sweep + evolve.py --fit-* thread via these)
+FIT_ELO = 0.55
+FIT_ECON = 0.25
+FIT_SURV = 0.15
+FIT_STUCK = 0.05
+FIT_CAMP = 1.0  # multiplier on camp_pen (already 1.6/0; 0 disables)
 
 # weapon sampling pool (BotConfig.LoadoutPool indices into combat_sim WEAPON_*)
 # 0 pistol, 2 AK, 3 sniper, 5 SMG — keep it mixed per match
@@ -75,7 +81,8 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
             seed = _seed_for(generation, genome_idx, m, rs)
             weapon = _POOL[m % len(_POOL)]
             skill = _skill_for_match(m)
-            fitness, *_ = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)
+            elo, econ, surv, stuck, camp, *_ = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)
+            fitness = FIT_ELO * elo + FIT_ECON * econ + FIT_SURV * surv - FIT_STUCK * stuck - FIT_CAMP * camp
             total += fitness; n += 1
     return total / max(1, n)
 
