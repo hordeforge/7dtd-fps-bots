@@ -52,6 +52,10 @@ namespace BotMod.Core
         // acquiring them (vengeance memory that biases FindTarget scoring).
         int _grudgeId = -1;
         float _grudgeUntil;
+        // zdtd_bot ammo pacing, ported: rounds left in the magazine and the
+        // reload window (WeaponProfile.MagSize/ReloadSec).
+        int _ammo;
+        float _reloadUntil = -10f;
 
         public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
         {
@@ -61,6 +65,7 @@ namespace BotMod.Core
             _viewYaw = 0f; _viewPitch = 0f; _enemySightTime = -10f;
             _rngState = (uint)entityId * 2654435761u + 97u;
             _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
+            _ammo = weapon.MagSize; // zdtd_bot ammo pacing, ported
         }
 
         public void MarkDead() { _dead = true; }
@@ -335,6 +340,15 @@ namespace BotMod.Core
         {
             if (Time.time < _reactionUntil) return;
             if (Time.time < _burstPauseUntil) return;
+            // Ammo pacing (zdtd_bot parity): an empty magazine starts a reload
+            // during which the bot holds fire (movement continues in Tick).
+            if (Time.time < _reloadUntil) return;
+            if (_ammo <= 0)
+            {
+                _ammo = Weapon.MagSize;
+                _reloadUntil = Time.time + Weapon.ReloadSec;
+                return;
+            }
             // Neural fire gate (docs/research/05): when loaded, the net can hold fire
             // even when the heuristic would shoot. Still ANDed with every hard gate.
             if (!wantToFire) return;
@@ -400,6 +414,7 @@ namespace BotMod.Core
             }
             catch { }
             _burstLeft--;
+            _ammo--; // one round per trigger pull (zdtd_bot ammo pacing parity)
             _burstPauseUntil = Time.time + Weapon.FireRate * 0.95f;
             if (_burstLeft <= 0) _burstPauseUntil = Time.time + Weapon.BurstPause;
         }

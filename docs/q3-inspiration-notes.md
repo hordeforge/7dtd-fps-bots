@@ -58,6 +58,10 @@ per-bot LCG (`Bot.RngNext/Rng01/RngSym`, seeded from entity id).
   whoever shot it even after they leave LOS (zdtd's `GRUDGE_TICKS` +
   `GRUDGE_SCORE`). A heavy hit (>25 damage, ~2x the pistol floor) staggers the
   dodge longer (`OnDamaged(strength)`), so snipers genuinely daze bots.
+- **Ammo pacing (from zdtd_bot).** `WeaponProfile.MagSize`/`ReloadSec` per gun;
+  an empty magazine starts a reload (`TryShootBurst` holds fire, movement
+  continues) — every trigger pull consumes a round whether it hits or misses
+  (zdtd `weapon_mag`/`weapon_reload` parity).
 - **Already shared:** per-slot LCG + deterministic burst cadence (ported from
   zdtd_bot in `cross:` commits), headshot chance/multiplier, dodge-on-hit,
   player-preference targeting (0.82), backpedal, low-hp retreat, lead-fire,
