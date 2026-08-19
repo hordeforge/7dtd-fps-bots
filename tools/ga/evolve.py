@@ -48,7 +48,119 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
         os.chdir(Path(__file__).resolve().parents[2])
     except Exception:
         pass
-    if resume:
+    if resume and resume != "auto":
+        # Seeded continuation: load last checkpoint's top population from the resumed run and continue.
+        # Resume dir can be evolved/runs/<ts>_... or a path with gen_*.json inside.
+        try:
+            import re as _re
+            resume_path = Path(resume)
+            if resume_path.is_file():
+                ckpts = [resume_path]
+            else:
+                ckpts = sorted(resume_path.glob("gen_*.json"))
+            if ckpts:
+                last = ckpts[-1]
+                ckpt = json.loads(last.read_text())
+                # Reconstitute population from checkpoint's top3 + jitter for diversity
+                import pathlib as _pl
+                # Load config from resume dir if available
+                rconfig = {}
+                cfg_path = resume_path / "config.json" if resume_path.is_dir() else resume_path.parent / "config.json"
+                if cfg_path.exists():
+                    rconfig = json.loads(cfg_path.read_text())
+                saved_fitness = float(ckpt.get("best_fitness", float("-inf")))
+                # Recreate pop from top3 with jitter to fill P
+                top3_raw = ckpt.get("top3") or []
+                top3 = [__import__("numpy").array(w, dtype=float) for w in top3_raw]
+                if top3:
+                    pop_w = []
+                    rng2 = __import__("numpy").random.default_rng(seed ^ 0x9E3779B9)
+                    for i in range(pop):
+                        base = top3[i % len(top3)]
+                        if i < len(top3):
+                            pop_w.append(base.copy())
+                        else:
+                            pop_w.append(base + rng2.normal(0, 0.03, base.size).astype(float))
+                    best_w = top3[0].copy()
+                    best_f = saved_fitness
+                    print(f"resume: loaded {last} gen {ckpt.get('gen')} fit {saved_fitness:.3f}, seeded next gen")
+                    # Continue loop by re-entering main loop from next gen
+                    # We do this by prepending a synthetic gens offset: run the remaining gens
+                    # Instead of complicating, just continue the main loop below already primed — break out to it
+                    # by jumping to loop start (we store resume flag and handle inside loop)
+                    resume_ckpts = ckpts
+                else:
+                    print(f"resume: {last} has no top3, starting fresh")
+                    pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
+                    best_w = None; best_f = float("-inf"); resume_ckpts = []
+            else:
+                print(f"resume: no checkpoints in {resume}, starting fresh")
+                pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
+                best_w = None; best_f = float("-inf"); resume_ckpts = []
+        except Exception as ex:
+            print(f"resume failed ({ex}), starting fresh")
+            pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
+            best_w = None; best_f = float("-inf"); resume_ckpts = []
+    elif resume == "auto":
+        # Auto-resume is not requested
+        if False: pass
+    if resume and resume != "auto" and resume_ckpts is not None:
+        # We already primed pop_w/best_w — need to run the remaining gens explicitly.
+        # Replace the simple for-loop with an explicit continuation that appends generations.
+        start_gen = int(ckpt.get("gen", -1)) + 1
+        remaining = gens - start_gen
+        if remaining <= 0:
+            print(f"resume: already at gen {ckpt.get('gen')}, nothing to do")
+        else:
+            import numpy as _np
+            import csv as _csv
+            # Append to existing fitness.csv
+            csv_path2 = run_dir / "fitness.csv"
+            # Copy old fitness.csv header + rows if resuming across run dirs
+            # (we keep new run_dir's csv separate for now; don't merge)
+            csv_path = run_dir / "fitness.csv"
+            with open(csv_path, "w", newline="") as cf:
+                writer = _csv.writer(cf)
+                writer.writerow(["gen", "best", "mean", "median", "q25", "q75"])
+                for g in range(start_gen, start_gen + remaining):
+                    fitness = harness.evaluate_population(pop_w, g, seed)
+                    order = _np.argsort(fitness)
+                    ranked = _np.empty(len(fitness), dtype=float)
+                    ranked[order] = _np.arange(len(fitness)) / max(1, len(fitness) - 1)
+                    best_idx = int(_np.argmax(fitness))
+                    f = float(fitness[best_idx])
+                    if f > best_f:
+                        best_f = f; best_w = pop_w[best_idx].copy()
+                        top3 = [pop_w[int(i)] for i in order[-3:][::-1]]
+                        ckpt2 = {"gen": g, "best_fitness": f, "top3": [w.astype(float).tolist() for w in top3], "fitness": fitness}
+                        (run_dir / f"gen_{g:03d}.json").write_text(json.dumps(ckpt2, indent=2))
+                    arr = _np.array(fitness, dtype=float)
+                    writer.writerow([g, float(_np.max(arr)), float(_np.mean(arr)), float(_np.median(arr)), float(_np.percentile(arr, 25)), float(_np.percentile(arr, 75))])
+                    cf.flush()
+                    print(f"gen {g:03d}  best {f:+.4f}  mean {_np.mean(arr):+.4f}  median {_np.median(arr):+.4f}")
+                    if g == start_gen + remaining - 1: break
+                    elite_k = 2; elite_idx = order[-elite_k:][::-1]; elites = [pop_w[int(i)].copy() for i in elite_idx]
+                    children = []; pc = 0.6
+                    while len(children) < pop - elite_k:
+                        if rng.random() < pc and pop - elite_k >= 2:
+                            a = ga.tournament(pop_w, ranked.tolist(), k=3); b = ga.tournament(pop_w, ranked.tolist(), k=3)
+                            child = ga.crossover(a, b, rng)
+                        else:
+                            child = ga.tournament(pop_w, ranked.tolist(), k=3).copy()
+                        child = ga.mutate(child, rng, sigma=0.05, rank_norm=0.5)
+                        children.append(child)
+                    pop_w = elites + children
+            best_path = Path("evolved/best.json")
+            import ga as _ga
+            _ga.save_best(best_path, best_w, generation=start_gen + remaining - 1, fitness=best_f, config=config)
+            print(f"best -> {best_path}  gen {start_gen + remaining -1}  fitness {best_f:+.4f}")
+            print(f"run dir: {run_dir}")
+            (run_dir / "leaderboards.jsonl").write_text("")
+            return
+    if resume and resume != "auto": pass  # already handled
+    if False: pass
+    if resume == "auto":
+        raise SystemExit(f"resume from {resume} not yet wired — rerun from gen 0 for now")
         # TODO: load checkpoint and continue (deterministic replay)
         raise SystemExit(f"resume from {resume} not yet wired — rerun from gen 0 for now")
 

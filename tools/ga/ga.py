@@ -91,17 +91,30 @@ def crossover(a: np.ndarray, b: np.ndarray, rng: np.random.Generator) -> np.ndar
 
 
 def mutate(w: np.ndarray, rng: np.random.Generator, sigma: float = 0.05, rank_norm: float = 0.5) -> np.ndarray:
-    """Gaussian + sparse-reset + swap per docs/research/03 §2.3."""
-    s = sigma * (1.0 - 0.5 * rank_norm)
+    """Gaussian + sparse-reset + swap per docs/research/03 §2.3. Larger rank drives more exploration."""
+    s = sigma * (0.6 + 0.9 * (1.0 - rank_norm))  # fitter→0.6*σ, weakest→1.5*σ
     # Gaussian on all weights
-    if rng.random() < 0.85:
+    if rng.random() < 0.92:
         w = w + rng.normal(0, s, W).astype(np.float32)
-    # Sparse reset 1-3 weights
-    if rng.random() < 0.10:
+    # Sparse reset 1-3 weights (macro mutation)
+    if rng.random() < 0.14:
         n = rng.integers(1, 4)
         idxs = rng.choice(W, n, replace=False)
-        w[idxs] = rng.uniform(-0.5, 0.5, n).astype(np.float32)
-    # Swap two hidden-unit blocks (not implemented for fixed yet)
+        w[idxs] = rng.uniform(-0.7, 0.7, n).astype(np.float32)
+    # Block swap (hidden-unit permutation) — helps escape local optima when one unit is dead
+    if rng.random() < 0.06:
+        a, b = rng.choice(HIDDEN, 2, replace=False)
+        # Swap hidden unit a/b in W1+b1 and the corresponding W2 column
+        w1a = w[a * INPUTS:(a + 1) * INPUTS].copy()
+        w1b = w[b * INPUTS:(b + 1) * INPUTS].copy()
+        w[a * INPUTS:(a + 1) * INPUTS] = w1b
+        w[b * INPUTS:(b + 1) * INPUTS] = w1a
+        b1a = w[W1_LEN + a]; b1b = w[W1_LEN + b]
+        w[W1_LEN + a] = b1b; w[W1_LEN + b] = b1a
+        # W2 columns (outputs × hidden, row-major)
+        for o in range(OUTPUTS):
+            row = W1_LEN + B1_LEN + o * HIDDEN
+            w[row + a], w[row + b] = w[row + b], w[row + a]
     w = np.clip(w, -8.0, 8.0).astype(np.float32)
     return w
 
