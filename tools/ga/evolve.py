@@ -301,15 +301,23 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 # ring-migrate every 10 gens
                 if g % 10 == 9 and islands > 1:
                     ga.island_mix(island_pops, rng, migrants=2)
-            # HOF ring
-            # pick global elites for HOF
+            # HOF ring — freshness gated (don't re-inject a genome that's already in the live pop)
             global_elites = [all_pops_flat[int(i)].copy() for i in order[-2:][::-1]] if len(all_pops_flat) >= 2 else []
+            # filter HOF candidates that are too similar to current elites (elites are the freshest)
             hof = (hof + global_elites)[:8] if hof else global_elites[:]
             hof = hof[:8]
             if g % 12 == 11 and len(hof) >= 2:
                 import random as _rr
-                tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
-                tgt[_rr.randrange(len(tgt))] = _rr.choice(hof).copy()
+                # pick a HOF entry not equal to current best (open-addressed dedup via weight hash)
+                cand = _rr.choice(hof)
+                # quick Hamming guard: if candidate is ~identical to current best, skip
+                try:
+                    is_dup = best_w is not None and float(np.mean((cand - best_w) ** 2)) < 1e-8
+                except Exception:
+                    is_dup = False
+                if not is_dup:
+                    tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
+                    tgt[_rr.randrange(len(tgt))] = cand.copy()
 
     # promote best
     if best_w is not None:
