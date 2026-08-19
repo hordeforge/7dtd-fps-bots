@@ -14,8 +14,12 @@ from typing import List
 
 import numpy as np
 
-from combat_sim import simulate_match as _simulate
+import combat_sim as _cs
 import ga
+_simulate = _cs.simulate_match
+_simulate_relu = _cs.simulate_match_relu
+# harness activation flag (0 tanh, 1 relu) — set by sweep/evolve
+ACTIVATION = 0
 
 # weapon sampling pool (BotConfig.LoadoutPool indices into combat_sim WEAPON_*)
 # 0 pistol, 2 AK, 3 sniper, 5 SMG — keep it mixed per match
@@ -47,13 +51,14 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
         (4, 6, 1800),
     ]
     # dual-seed regularizer: training fitness = mean over two seed streams
+    fn = _simulate_relu if ACTIVATION == 1 else _simulate
     seeds = (run_seed, run_seed ^ 0x9E3779B9)
     for rs in seeds:
         for m, (n_bots, n_zombies, max_ticks) in enumerate(configs):
             seed = _seed_for(generation, genome_idx, m, rs)
             weapon = _POOL[m % len(_POOL)]
             skill = _skill_for_match(m)
-            fitness, *_ = _simulate(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)
+            fitness, *_ = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)
             total += fitness; n += 1
     return total / max(1, n)
 

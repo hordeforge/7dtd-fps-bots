@@ -27,7 +27,7 @@ import harness
 DEFAULT_FITNESS = {"elo": 0.55, "econ": 0.25, "survival": 0.15, "stuck": 0.05}
 
 
-def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None):
+def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh"):
     try:
         os.chdir(Path(__file__).resolve().parents[2])
     except Exception:
@@ -36,11 +36,16 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     random.seed(seed)
     np.random.seed(seed)
 
+    # activation wiring (combat_sim now has explicit tanh/relu dispatch via harness.ACTIVATION)
+    if activation not in ("tanh", "relu"):
+        raise SystemExit(f"activation must be tanh or relu, got {activation}")
+    harness.ACTIVATION = 1 if activation == "relu" else 0
+    tag = f"_{activation}" if activation != "tanh" else ""
     ts = time.strftime("%Y-%m-%d_%H%M%S")
-    run_dir = Path(f"evolved/runs/{ts}_pop{pop}_g{gens}_s{seed}")
+    run_dir = Path(f"evolved/runs/{ts}_pop{pop}_g{gens}_s{seed}{tag}")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run}
+    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation}
     (run_dir / "config.json").write_text(json.dumps(config, indent=2))
 
         # ensure evolved/ resolves to clanker root regardless of cwd
@@ -253,5 +258,6 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
     ap.add_argument("--resume", type=str, default=None)
+    ap.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"])
     args = ap.parse_args()
-    run(args.pop, args.gens, args.seed, args.dry_run, args.resume)
+    run(args.pop, args.gens, args.seed, args.dry_run, args.resume, activation=args.activation)

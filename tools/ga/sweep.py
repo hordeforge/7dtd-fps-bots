@@ -26,19 +26,25 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).parent))
 import ga
 import harness
+import combat_sim as _cs
 
 
 def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
-    """One evolution with `hidden` and `activation` ('tanh' or 'relu')."""
-    # Temporarily override ga constants for this run
-    orig_hidden, orig_W = ga.HIDDEN, ga.W
-    # recompute derived
-    ga.HIDDEN = hidden
-    ga.W1_LEN = hidden * ga.INPUTS
-    ga.B1_LEN = hidden
-    ga.W2_LEN = ga.OUTPUTS * hidden
-    ga.W = ga.W1_LEN + ga.B1_LEN + ga.W2_LEN + ga.B2_LEN
-    # patch forward to use chosen activation on hidden
+    """One evolution with `hidden` and `activation` ('tanh' or 'relu').
+
+    Note: combat_sim is the real fitness — ga.forward is NOT used by the
+    numba harness. We must flip combat_sim._ACTIVATION (and keep HIDDEN==16
+    for now — non-16 sweeps still require a recompile; we score them via
+    placeholder until that lands).
+    """
+    # Only H16 is real for now (numba HIDDEN is a literal). Larger sweeps
+    # are estimated via ga.forward path until combat_sim is templated.
+    if hidden != ga.HIDDEN:
+        # short-circuit: report that non-H16 is not yet wired (don't fake a run)
+        print(f"  note: H{hidden} sweep not yet wired (numba HIDDEN==16) — skipping, only H16-tanh/relu are real")
+        return []
+    orig_act = harness.ACTIVATION
+    harness.ACTIVATION = 1 if activation == "relu" else 0
     orig_forward = ga.forward
     def fwd(w, x):
         w1, b1, w2, b2 = ga.flat_to_layers(w)
@@ -80,11 +86,7 @@ def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
             pop_w = elites + children
         return curve
     finally:
-        ga.HIDDEN = orig_hidden
-        ga.W1_LEN = orig_hidden * ga.INPUTS
-        ga.B1_LEN = orig_hidden
-        ga.W2_LEN = ga.OUTPUTS * orig_hidden
-        ga.W = orig_W
+        harness.ACTIVATION = orig_act
         ga.forward = orig_forward
 
 
