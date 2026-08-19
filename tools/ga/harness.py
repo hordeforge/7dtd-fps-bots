@@ -20,6 +20,8 @@ _simulate = _cs.simulate_match
 _simulate_relu = _cs.simulate_match_relu
 # harness activation flag (0 tanh, 1 relu) — set by sweep/evolve
 ACTIVATION = 0
+# curriculum flag ("mixed" canonical; pvp_first/horde_first gate early gens via evolve.py)
+CURRICULUM = "mixed"
 
 # weapon sampling pool (BotConfig.LoadoutPool indices into combat_sim WEAPON_*)
 # 0 pistol, 2 AK, 3 sniper, 5 SMG — keep it mixed per match
@@ -42,14 +44,29 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
 
     R1: dual-seed averaging (run_seed and run_seed ^ GOLDEN) to punish
     single-seed overfit; mean over 18 sims but still cheap (numba).
+    Curriculum gates the mix: pvp_first emphasizes duels early, horde_first
+    emphasizes horde (set by evolve.py per gen, default mixed).
     """
     total = 0.0
     n = 0
-    configs = [
-        (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
-        (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
-        (4, 6, 1800),
-    ]
+    if CURRICULUM == "pvp_first":
+        configs = [
+            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
+            (2, 0, 1200), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
+            (4, 6, 1200),
+        ]
+    elif CURRICULUM == "horde_first":
+        configs = [
+            (2, 0, 1200), (2, 0, 1200), (6, 0, 1800), (6, 0, 1800),
+            (4, 6, 1800), (4, 6, 1800), (4, 6, 1800), (4, 6, 1800),
+            (6, 0, 1800),
+        ]
+    else:
+        configs = [
+            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
+            (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
+            (4, 6, 1800),
+        ]
     # dual-seed regularizer: training fitness = mean over two seed streams
     fn = _simulate_relu if ACTIVATION == 1 else _simulate
     seeds = (run_seed, run_seed ^ 0x9E3779B9)

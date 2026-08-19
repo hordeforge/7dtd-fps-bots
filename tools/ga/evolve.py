@@ -27,7 +27,7 @@ import harness
 DEFAULT_FITNESS = {"elo": 0.55, "econ": 0.25, "survival": 0.15, "stuck": 0.05}
 
 
-def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh"):
+def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed"):
     try:
         os.chdir(Path(__file__).resolve().parents[2])
     except Exception:
@@ -39,13 +39,19 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     # activation wiring (combat_sim now has explicit tanh/relu dispatch via harness.ACTIVATION)
     if activation not in ("tanh", "relu"):
         raise SystemExit(f"activation must be tanh or relu, got {activation}")
+    if curriculum not in ("mixed", "pvp_first", "horde_first"):
+        raise SystemExit(f"curriculum must be mixed/pvp_first/horde_first, got {curriculum}")
+    if islands < 1 or islands > 8:
+        raise SystemExit(f"islands must be 1..8, got {islands}")
     harness.ACTIVATION = 1 if activation == "relu" else 0
     tag = f"_{activation}" if activation != "tanh" else ""
+    if islands > 1: tag += f"_is{islands}"
+    if curriculum != "mixed": tag += f"_{curriculum}"
     ts = time.strftime("%Y-%m-%d_%H%M%S")
     run_dir = Path(f"evolved/runs/{ts}_pop{pop}_g{gens}_s{seed}{tag}")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation}
+    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": 999}
     (run_dir / "config.json").write_text(json.dumps(config, indent=2))
 
         # ensure evolved/ resolves to clanker root regardless of cwd
@@ -169,77 +175,141 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
         # TODO: load checkpoint and continue (deterministic replay)
         raise SystemExit(f"resume from {resume} not yet wired — rerun from gen 0 for now")
 
-    pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
+    # island split (ring migration)
+    if islands == 1:
+        pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
+        island_pops: list[list] = [pop_w]
+    else:
+        per = max(8, pop // islands)
+        island_pops = [ga.clone_heuristic(np.random.default_rng(seed ^ (i * 0x9E3779B9)), P=per, sigma=0.02) for i in range(islands)]
+        pop_w = island_pops[0]  # alias for resume path compatibility
     best_w = None
     best_f = float("-inf")
-    hof = []
+    hof: list = []
+    plateau = 0
 
     csv_path = run_dir / "fitness.csv"
     with open(csv_path, "w", newline="") as cf:
         writer = csv.writer(cf)
-        writer.writerow(["gen", "best", "mean", "median", "q25", "q75"])
+        writer.writerow(["gen", "best", "mean", "median", "q25", "q75", "held"])
 
         for g in range(gens):
-            # evaluate
-            fitness = harness.evaluate_population(pop_w, g, seed)
-            order = np.argsort(fitness)
-            ranked = np.empty(len(fitness), dtype=float)
-            ranked[order] = np.arange(len(fitness)) / max(1, len(fitness) - 1)
+            # curriculum phase (pvp_first/horde_first shift arena mix for early gens)
+            if curriculum != "mixed" and g < gens // 3:
+                harness.CURRICULUM = curriculum
+            else:
+                harness.CURRICULUM = "mixed"
+            # island eval: each island evaluates its subpop, global best is over all islands
+            if islands == 1:
+                fitness = harness.evaluate_population(island_pops[0], g, seed)
+                all_fitness = fitness
+                all_pops_flat = island_pops[0]
+            else:
+                island_fitness: list[list[float]] = []
+                for ii, ip in enumerate(island_pops):
+                    island_fitness.append(harness.evaluate_population(ip, g, seed ^ (ii * 7919)))
+                all_fitness = [v for lst in island_fitness for v in lst]
+                all_pops_flat = [w for lst in island_pops for w in lst]
+            order = np.argsort(all_fitness)
+            ranked = np.empty(len(all_fitness), dtype=float)
+            ranked[order] = np.arange(len(all_fitness)) / max(1, len(all_fitness) - 1)
 
-            best_idx = int(np.argmax(fitness))
-            f = float(fitness[best_idx])
-            if f > best_f:
+            best_idx = int(np.argmax(all_fitness))
+            f = float(all_fitness[best_idx])
+            improved = f > best_f + 1e-6
+            if improved:
                 best_f = f
-                best_w = pop_w[best_idx].copy()
-                # checkpoint top-3 of this gen
-                top3 = [pop_w[int(i)] for i in order[-3:][::-1]]
+                best_w = all_pops_flat[best_idx].copy()
+                plateau = 0
+                # checkpoint top-3 of this gen (global)
+                top3_idx = order[-3:][::-1]
+                top3 = [all_pops_flat[int(i)] for i in top3_idx]
                 ckpt = {
                     "gen": g,
                     "best_fitness": f,
                     "top3": [w.astype(float).tolist() for w in top3],
-                    "fitness": fitness,
+                    "fitness": all_fitness,
+                    "activation": activation,
+                    "curriculum": curriculum,
+                    "islands": islands,
                 }
                 (run_dir / f"gen_{g:03d}.json").write_text(json.dumps(ckpt, indent=2))
+            else:
+                plateau += 1
+            stagnant = plateau >= 8
+
+            # held probe (lightweight: 20 matches on held seed 999, same harness.ACTIVATION)
+            held_m = float("nan")
+            if g % 5 == 0 or g == gens - 1:
+                cand = best_w if best_w is not None else all_pops_flat[best_idx]
+                scores = [harness.evaluate(cand, 999, m, 999) for m in range(20)]
+                held_m = float(np.mean(scores))
 
             # log per-gen CSV
-            arr = np.array(fitness, dtype=float)
+            arr = np.array(all_fitness, dtype=float)
             writer.writerow([g, float(np.max(arr)), float(np.mean(arr)), float(np.median(arr)),
-                              float(np.percentile(arr, 25)), float(np.percentile(arr, 75))])
+                              float(np.percentile(arr, 25)), float(np.percentile(arr, 75)), held_m])
             cf.flush()
-            print(f"gen {g:03d}  best {f:+.4f}  mean {np.mean(arr):+.4f}  median {np.median(arr):+.4f}")
+            print(f"gen {g:03d}  best {f:+.4f}  mean {np.mean(arr):+.4f}  median {np.median(arr):+.4f}  held20 {held_m:+.4f}  stag {plateau}")
 
             if g == gens - 1:
                 break
 
-            # selection + reproduction (elitism 2)
-            elite_k = 2
-            elite_idx = order[-elite_k:][::-1]
-            elites = [pop_w[int(i)].copy() for i in elite_idx]
-            children = []
-            pc = 0.6
-            # tournament size 3 on ranked fitness
-            while len(children) < pop - elite_k:
-                # one or two parents
-                if rng.random() < pc and pop - elite_k >= 2:
-                    a = ga.tournament(pop_w, ranked.tolist(), k=3)
-                    b = ga.tournament(pop_w, ranked.tolist(), k=3)
-                    child = ga.crossover(a, b, rng)
-                else:
-                    # mutate a copy of a single parent
-                    p = ga.tournament(pop_w, ranked.tolist(), k=3)
-                    child = p.copy()
-                # rank-norm of the parent to scale sigma
-                # find its rank (approx: use the tournament winner's rank)
-                rn = 0.5  # default mid; refine when we track parent index
-                child = ga.mutate(child, rng, sigma=0.05, rank_norm=rn, generation=g, total_gens=gens)
-                children.append(child)
-            pop_w = elites + children
-            # HOF ring: keep top-8 elites history, re-inject one every 12 gens for diversity
-            hof = (hof + elites)[:8] if hof else elites[:]
+            # selection + reproduction per island (elitism 2 each)
+            if islands == 1:
+                elite_k = 2
+                elite_idx = order[-elite_k:][::-1]
+                elites = [all_pops_flat[int(i)].copy() for i in elite_idx]
+                children = []
+                pc = 0.6
+                while len(children) < len(all_pops_flat) - elite_k:
+                    if rng.random() < pc and len(all_pops_flat) - elite_k >= 2:
+                        a = ga.tournament(all_pops_flat, ranked.tolist(), k=3)
+                        b = ga.tournament(all_pops_flat, ranked.tolist(), k=3)
+                        child = ga.crossover(a, b, rng)
+                    else:
+                        p = ga.tournament(all_pops_flat, ranked.tolist(), k=3)
+                        child = p.copy()
+                    rn = 0.5
+                    child = ga.mutate(child, rng, sigma=0.05, rank_norm=rn, generation=g, total_gens=gens, stagnant=stagnant)
+                    children.append(child)
+                pop_w = elites + children
+                island_pops[0] = pop_w
+            else:
+                new_islands: list[list] = []
+                for ii, ip in enumerate(island_pops):
+                    fit = island_fitness[ii]
+                    ord2 = np.argsort(fit)
+                    rk2 = np.empty(len(fit), dtype=float)
+                    rk2[ord2] = np.arange(len(fit)) / max(1, len(fit) - 1)
+                    elite_k = 2
+                    elites = [ip[int(i)].copy() for i in ord2[-elite_k:][::-1]]
+                    children = []
+                    pc = 0.6
+                    while len(children) < len(ip) - elite_k:
+                        if rng.random() < pc and len(ip) - elite_k >= 2:
+                            a = ga.tournament(ip, rk2.tolist(), k=3)
+                            b = ga.tournament(ip, rk2.tolist(), k=3)
+                            child = ga.crossover(a, b, rng)
+                        else:
+                            p = ga.tournament(ip, rk2.tolist(), k=3)
+                            child = p.copy()
+                        child = ga.mutate(child, rng, sigma=0.05, rank_norm=0.5, generation=g, total_gens=gens, stagnant=stagnant)
+                        children.append(child)
+                    new_islands.append(elites + children)
+                island_pops = new_islands
+                # ring-migrate every 10 gens
+                if g % 10 == 9 and islands > 1:
+                    ga.island_mix(island_pops, rng, migrants=2)
+            # HOF ring
+            # pick global elites for HOF
+            global_elites = [all_pops_flat[int(i)].copy() for i in order[-2:][::-1]] if len(all_pops_flat) >= 2 else []
+            hof = (hof + global_elites)[:8] if hof else global_elites[:]
             hof = hof[:8]
             if g % 12 == 11 and len(hof) >= 2:
                 import random as _rr
-                pop_w[_rr.randrange(len(pop_w))] = _rr.choice(hof).copy()
+                tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
+                tgt[_rr.randrange(len(tgt))] = _rr.choice(hof).copy()
 
     # promote best
     if best_w is not None:
@@ -259,5 +329,7 @@ if __name__ == "__main__":
     ap.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
     ap.add_argument("--resume", type=str, default=None)
     ap.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"])
+    ap.add_argument("--islands", type=int, default=1, help="island count 1..8 (ring migrate every 10 gens)")
+    ap.add_argument("--curriculum", type=str, default="mixed", choices=["mixed", "pvp_first", "horde_first"])
     args = ap.parse_args()
-    run(args.pop, args.gens, args.seed, args.dry_run, args.resume, activation=args.activation)
+    run(args.pop, args.gens, args.seed, args.dry_run, args.resume, activation=args.activation, islands=args.islands, curriculum=args.curriculum)
