@@ -199,20 +199,38 @@ namespace BotMod.AI
                 try { me.MoveEntityHeaded(dir, false); } catch { }
                 try { me.SetLookPosition(pos + Vector3.up * 1f); } catch { }
                 if (dist > 6f) try { me.FindPath(pos, 1f, false, null); } catch { }
-                // Trader bodies (npcTraderJoel bots) ignore MoveEntityHeaded — the engine
-                // only moves them through their AI moveHelper, which we don't drive. Detect
-                // that (position didn't change) and step the position directly so player-model
-                // bots actually patrol/chase instead of freezing at spawn.
-                bool moved = Vector3.Distance(me.position, before) > 0.01f;
-                if (!moved)
-                {
-                    // nudge toward dest; keep y as-is (caller's FindGround anchors it)
-                    float stepSpeed = 1.6f;
-                    Vector3 step = dir * (stepSpeed * UnityEngine.Time.deltaTime);
-                    if (step.magnitude > dist) step = dir * dist;
-                    Vector3 np = me.position + step;
-                    try { me.position = np; } catch { }
-                }
+                // Trader bodies (npcTraderJoel bots) ignore MoveEntityHeaded — the engine only
+                // moves them through their AI moveHelper, which we don't drive. Detect that the
+                // position didn't change and step it directly so player-model bots patrol/chase.
+                if (Vector3.Distance(me.position, before) <= 0.01f)
+                    ManualStep(me, dir, dist);
+            }
+            catch { }
+        }
+        /// <summary>Direct position step used when the entity's motor ignores MoveEntityHeaded
+        /// (trader bodies). Steps me.position toward `dir` at a fixed speed; used by move/strafe.</summary>
+        static void ManualStep(EntityAlive me, Vector3 dir, float dist)
+        {
+            try
+            {
+                float stepSpeed = 1.6f;
+                Vector3 step = dir * (stepSpeed * UnityEngine.Time.deltaTime);
+                if (step.magnitude > dist) step = dir * dist;
+                Vector3 np = me.position + step;
+                try { me.position = np; } catch { }
+            }
+            catch { }
+        }
+        /// <summary>Try the motor, falling back to a manual position step for static bodies
+        /// (traders). Shared by Strafe/Backpedal so attacking player-model bots orbit.</summary>
+        static void MoveWithFallback(EntityAlive me, Vector3 dir, float dist)
+        {
+            try
+            {
+                Vector3 before = me.position;
+                try { me.MoveEntityHeaded(dir, false); } catch { }
+                if (Vector3.Distance(me.position, before) <= 0.01f)
+                    ManualStep(me, dir, dist);
             }
             catch { }
         }
@@ -237,7 +255,8 @@ namespace BotMod.AI
                 if (toTarget == Vector3.zero) return; toTarget.Normalize();
                 Vector3 strafe = Vector3.Cross(Vector3.up, toTarget) * dirSign;
                 Vector3 dir = (toTarget * 0.22f + strafe * 0.78f).normalized;
-                me.MoveEntityHeaded(dir, false);
+                float dist = Mathf.Max(0.3f, Vector3.Distance(me.position, target.position) * 0.2f);
+                MoveWithFallback(me, dir, dist);
             }
             catch { }
         }
@@ -249,7 +268,8 @@ namespace BotMod.AI
                 if (toTarget == Vector3.zero) return; toTarget.Normalize();
                 Vector3 strafe = Vector3.Cross(Vector3.up, toTarget) * dirSign;
                 Vector3 dir = (-toTarget * 0.55f + strafe * 0.45f).normalized;
-                me.MoveEntityHeaded(dir, false);
+                float dist = Mathf.Max(0.3f, Vector3.Distance(me.position, target.position) * 0.2f);
+                MoveWithFallback(me, dir, dist);
             }
             catch { }
         }
