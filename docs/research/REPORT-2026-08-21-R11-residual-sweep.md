@@ -20,13 +20,16 @@ Champion 1v1 vs the static no-brain, 24 seeds, canonical sim:
 
 Below the 70% threshold, so the arena mix stays unchanged (`verified`).
 
-Root cause, documented for future work: the sim applies **no accuracy penalty to
-moving targets**. Hit chance depends only on (skill, distance, aim bias, spread),
-so kiting or orbiting gives the shooter zero defensive benefit. The standing
-turret's constant fire out-DPSes the spread-gated pacer. Adding a target-movement
-accuracy penalty (real FPS behavior) would make duels discriminative and is the
-natural next sim change; it was not added here because it redefines the task
-again and the goal's contingency for <70% was to keep the arena as-is.
+Root cause, tested: the sim applies **no accuracy penalty to moving targets**.
+Hit chance depends only on (skill, distance, aim bias, spread), so kiting or
+orbiting gives the shooter zero defensive benefit. A target-movement accuracy
+penalty (MOVE_HIT_PENALTY 0.45 then 0.25) was implemented and measured in both
+njit variants: it makes open-env duels winnable for the kiter but does NOT move
+the overall duel win rate (12-17%: maze/cross env LOS windows stall fights into
+trades regardless of the accuracy model) and it regresses the aggregate by
+slowing bot-vs-bot combat inside horde/FFA (champion held 10.93 -> 9.57 at 0.45,
+10.48 at 0.25). The change was reverted; the env LOS structure, not the accuracy
+model, is the binding constraint on duel discrimination.
 
 ## 3. Champion push (F=36, two fresh runs)
 
@@ -57,5 +60,6 @@ not available in this session. The code path itself runs without exceptions.
 - Committed at `b5b1da1`; working tree clean.
 - Duel discrimination: 17% (below threshold, arena unchanged, root cause noted).
 - Live kite pattern: unverified headlessly, residual documented.
-- Next steps: target-movement accuracy penalty for discriminative duels; the
-  playtest client suite for live kite verification.
+- Next steps: duel discrimination requires a change to the duel ENV structure
+  (open-field duels with fixed loadouts), not an accuracy model; the playtest
+  client suite for live kite verification.
