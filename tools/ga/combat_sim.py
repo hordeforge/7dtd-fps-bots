@@ -150,7 +150,17 @@ WALLS_CORRIDOR = np.array([
     [0.0, 40.0, 30.0, 40.0],
     [50.0, 40.0, 80.0, 40.0],
 ], dtype=np.float32)
-_WALL_TABLE = [WALLS, WALLS_CROSS, WALLS_OPEN, WALLS_CORRIDOR]
+# Dense choke maze — 5 shorter walls split the field into corridors so bots must
+# turn to keep LOS / not stand in an open field. Hardest layout (env index 4).
+WALLS_MAZE = np.array([
+    [30.0, 20.0, 50.0, 20.0],
+    [50.0, 20.0, 50.0, 45.0],
+    [30.0, 55.0, 55.0, 55.0],
+    [20.0, 35.0, 20.0, 60.0],
+    [60.0, 35.0, 60.0, 65.0],
+    [45.0, 60.0, 68.0, 60.0],
+], dtype=np.float32)
+_WALL_TABLE = [WALLS, WALLS_CROSS, WALLS_OPEN, WALLS_CORRIDOR, WALLS_MAZE]
 
 
 @numba.njit
@@ -241,7 +251,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
         last_x[i] = bx[i]; last_y[i] = by[i]
     stuck = np.zeros(16, dtype=numba.int64)
     dt = 0.05
-    env = seed & 3
+    env = seed % 5
     y_raw = np.empty(5, dtype=numba.float32); x_obs = np.empty(INPUTS, dtype=numba.float32)
     for tick in range(max_ticks):
         alive_bots = 0
@@ -275,7 +285,8 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             if env == 0: can_see = los_clear(bx0, by0, tx, ty, WALLS, 3)
             elif env == 1: can_see = los_clear(bx0, by0, tx, ty, WALLS_CROSS, 4)
             elif env == 2: can_see = True
-            else: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
+            elif env == 3: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
+            else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
             x_obs[0] = bhp[bi] / 100.0; x_obs[1] = thp / 100.0; x_obs[2] = min(1.0, dist / 70.0); x_obs[3] = 1.0 if can_see else 0.0; x_obs[4] = 0.0; x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0; x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0; x_obs[7] = 0.55 + bskill[bi] * 0.10; x_obs[8] = 0.55 + bskill[bi] * 0.10; x_obs[9] = 0.6; x_obs[10] = 0.5; x_obs[11] = 0.2; x_obs[12] = 0.0; x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
             forward_numba_relu(w, x_obs, y_raw)
             camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4]); sdir = 1 if strafe_sig > 0.5 else -1
@@ -449,7 +460,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
     stuck = np.zeros(16, dtype=numba.int64)
 
     dt = 0.05
-    env = seed & 3
+    env = seed % 5
     y_raw = np.empty(5, dtype=numba.float32)
     x_obs = np.empty(INPUTS, dtype=numba.float32)
 
@@ -505,7 +516,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             if env == 0: can_see = los_clear(bx0, by0, tx, ty, WALLS, 3)
             elif env == 1: can_see = los_clear(bx0, by0, tx, ty, WALLS_CROSS, 4)
             elif env == 2: can_see = True
-            else: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
+            elif env == 3: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
+            else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
             # build obs (14) — normalized
             # mirrors docs/research/01 §2: keep order frozen
             # 0 hpFrac
