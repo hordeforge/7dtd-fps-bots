@@ -5,11 +5,14 @@ Server-side mod that spawns real FPS bots. Names are prefixed `[Bot] Grunt_42` s
 ## What it does
 
 - Keeps `TargetBotCount` bots alive (auto-respawns one per second).
-- Each bot is a vanilla `zombieSoldier` driven by our FPS loop (dedi-safe `Standard` mesh; no `NpcUMA` XML needed). Weapons come from `BotWeapon=mixed` → random from `LoadoutPool` (pistol/shotgun/AK/sniper/auto-shotgun/SMG) with per-weapon `WeaponProfile` (fire rate, burst 2-9 shots, spread, damage, effective range, pellets).
-- Loop: scan in wide `VisionAngle` cone → `Physics.Raycast` + voxel fallback LOS → leading aim (`LeadAimPoint` = velocity prediction scaled by difficulty/weapon) → burst fire with `ReactionTimeSec` delay and `BurstMin/Max` + `BurstPauseSec` gaps; pellets/headshots via `DamageSourceEntity` → `DamageEntity(EnumDamageTypes.Piercing)`.
-- Movement: `MoveEntityHeaded` + periodic `FindPath` to A* queue; continuous `Strafe`/`Backpedal` circling in `Attack`, dodge on being hit (`DodgeOnHitChance`), `Jump` unstuck.
+- Each bot bodies up as a **human player model** (`npcTraderJoel` → vanilla `EntityTrader`; the dedi rejects custom SDCS/Npc/Bandit appends with a negative EntityClass id, so we reuse the working vanilla human trader that renders a `player_maleRagdoll` body). Bots hold and fire real ranged weapons.
+- Weapons from `BotWeapon=mixed` → random from `LoadoutPool` (pistol/shotgun/AK/sniper/auto-shotgun/SMG) with per-weapon `WeaponProfile` (fire rate, burst 2-9, spread, damage, effective range, pellets).
+- FPS combat loop (docs/research/00..06): wide `VisionAngle` cone → `Physics.Raycast` + voxel LOS → leading aim (velocity prediction) → burst fire with reaction delay; pellets/headshots via `DamageSourceEntity`.
+- **FPS tactics**: active combat-seeking when idle (hunt nearest enemy), weapon-range standoff (snipers hold ~73m, shotguns close), squad flanking (split around shared target), cover-advance (peek from cover while chasing), instant target re-acquisition after a kill, finish-the-kill (commit when the enemy is critically wounded), wounded-target priority.
+- **Neural controller** (optional `UseNeuralBrain`): a GA-evolved `14→16→5` net drives aim-bias/fire/strafe/retreat in every engagement when `evolved/best.json` is loaded (see `tools/ga/`). Heuristic is the fallback.
+- Movement: `MoveEntityHeaded` with a manual-position fallback for trader bodies (trader motors ignore the call), continuous `Strafe`/`Backpedal` circling in `Attack`, dodge on hit, unstuck jump.
 - DM spawns: reads `Data/Worlds/<World>/spawnpoints.xml` (far-from-players farthest spawn, bot/bot avoidance), falls back to radius jitter near spawn point.
-- Per-bot difficulty preset (`Difficulty 0-4`) scales aim jitter, reaction, vision, headshot rate like Q3 bot `skill`.
+- Per-bot difficulty preset (`Difficulty 0-4`) scales aim jitter, reaction, vision, headshot like Q3 bot `skill`.
 
 ## Install
 
@@ -35,13 +38,14 @@ bot weapon <gunId|mixed>      # default for next spawns
 bot skill <0-4>               # 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare
 bot count <n>                 # keep n alive
 bot remove all | bot remove <id>
+bot neural <on|off|reload|status>  # toggle/reload the GA-evolved neural controller
 bot reload | bot enable | bot disable
 ```
 
 ## Tuning (`config/botmod.json`)
 
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
-- `BotEntityClass` (default `zombieSoldier`), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth=100` armor-like.
+- `BotEntityClass` (default `npcTraderJoel`, a human player-model body), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
 - `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
 - `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `RespawnDelaySec=3/SpawnProtectionSec`.
 - `TargetBotCount=6 MaxBots=16`.
