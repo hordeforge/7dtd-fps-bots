@@ -44,6 +44,7 @@ namespace BotMod.Core
         // the target so pursuit continues toward it around a corner, not its live position.
         Vector3 _lastKnownTargetPos = Vector3.zero;
         bool _hasLastKnownTarget;
+        float _nextCoverRoute;
         float _nextTaunt;
         // zdtd_bot per-engagement aim bias, ported: fixed skill-scaled yaw error
         // held for the current target engagement (rolled on acquisition).
@@ -295,7 +296,22 @@ namespace BotMod.Core
                     if (Time.time >= _nextPathRecalc)
                     {
                         _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
-                        BotBrain.MoveTo(me, chaseDest);
+                        // FPS cover advance: when healthy and the target is out of sight, route
+                        // through a nearby cover point between us and the target (peek from cover)
+                        // rather than walking straight into the open. Gated by a cooldown so it
+                        // doesn't jitter.
+                        bool routeCover = !canSee && me.Health > cfg.BotHealth * 0.55f && Time.time >= _nextCoverRoute;
+                        if (routeCover)
+                        {
+                            Vector3 cover = BotBrain.FindCover(me, _target, world);
+                            if (cover != Vector3.zero && Vector3.Distance(cover, chaseDest) > Vector3.Distance(me.position, chaseDest) * 0.72f)
+                            {
+                                BotBrain.MoveTo(me, cover);
+                                _nextCoverRoute = Time.time + 3f + Rng01() * 3f;
+                            }
+                            else BotBrain.MoveTo(me, chaseDest);
+                        }
+                        else BotBrain.MoveTo(me, chaseDest);
                     }
                     float moved = Vector3.Distance(myPos, _lastPos);
                     if (moved < 0.18f)
