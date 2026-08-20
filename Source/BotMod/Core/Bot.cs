@@ -184,14 +184,15 @@ namespace BotMod.Core
             }
 
             // Q3-style decision: retreat if low health + high SelfPreservation / low Aggression.
-            // Neural advisory (docs/research/05): when the net says "retreat" it only
-            // overrides vs *player* — zombie pressure stays heuristic.
+            // Neural advisory (docs/research/05): when a net is loaded it drives retreat for
+            // every engagement (bots, zombies, players); heuristic is the fallback.
             var ch = Character ?? BotCharacterDB.ForName(Name);
             if (_target != null && _target.IsAlive())
             {
                 bool doRetreat;
                 bool neuralDecided = false;
-                if (_target is EntityPlayer) neuralDecided = TryNeuralRetreat(me, dt, world, cfg, ch, out doRetreat);
+                // Neural retreat drives every engagement (heuristic is fallback when no net).
+                if (UseNeuralGate()) neuralDecided = TryNeuralRetreat(me, dt, world, cfg, ch, out doRetreat);
                 else doRetreat = false;
                 if (!neuralDecided)
                 {
@@ -227,13 +228,11 @@ namespace BotMod.Core
                 {
                     _state = BotBrain.State.Attack;
                     Vector3 aim = BotBrain.LeadAimPoint(myPos, tPos, _targetVel, cfg, Weapon);
-                    // Neural aimBias advisory (docs/research/05): if loaded, it replaces
-                    // the per-engagement heuristic bias. Clamped to the same ±0.45*(1-acc) window.
-                    // This is only relevant against *you* (player) — bot-vs-bot uses classic aim.
+                    // Neural aimBias advisory drives every engagement (bot-vs-bot, bot-vs-zombie,
+                    // bot-vs-player) so the evolved brain is exercised live. Classic is fallback.
                     float biasYaw = _aimBiasYaw;
-                    if (_target is EntityPlayer && TryNeuralAimBias(me, world, cfg, ref biasYaw))
+                    if (UseNeuralGate() && TryNeuralAimBias(me, world, cfg, ref biasYaw))
                     {
-                        // neural bias already clamped; lock it so it doesn't jitter per tick
                         _aimBiasYaw = biasYaw;
                     }
                     if (biasYaw != 0f)
@@ -243,9 +242,10 @@ namespace BotMod.Core
                         aim = myPos + dir;
                     }
                     BotBrain.FaceTowards(me, aim);
-                    // Neural fire gate: must be checked before every burst
+                    // Neural fire gate: drives every engagement, not just vs players, so the
+                    // evolved brain's fire decision actually matters against bots and zombies.
                     bool wantToFire = true;
-                    if (_target is EntityPlayer && UseNeuralGate())
+                    if (UseNeuralGate())
                     {
                         try
                         {
