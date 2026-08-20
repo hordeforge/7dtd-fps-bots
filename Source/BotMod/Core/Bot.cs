@@ -260,6 +260,10 @@ namespace BotMod.Core
                     // the other way. Still gated by _strafeUntil / TryShootBurst so a broken
                     // net cannot spam moves.
                     TryNeuralStrafeDir(ref _strafeDir);
+                    // Squad flanking: if another bot is strafing the same target in the same
+                    // direction, flip mine so the team splits around the target (FPS handshake)
+                    // instead of clumping on one side.
+                    if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
                     // Continuous FPS strafe when in attack range.
                     // Weapon-aware standoff: if we're inside ~35% of effective weapon range
                     // (too close for a ranged weapon), backpedal + circle to keep distance,
@@ -400,6 +404,36 @@ namespace BotMod.Core
                 return best;
             }
             catch { return Vector3.zero; }
+        }
+
+        /// <summary>True if another bot is engaging the same target from the same strafe side
+        /// (cross-product sign), so this bot flips to split around the enemy — light squad
+        /// flanking via position only (no shared state).</summary>
+        bool FlankAway(EntityAlive me, World world, EntityAlive target, int myStrafeDir)
+        {
+            try
+            {
+                if (me == null || target == null || world == null) return false;
+                var toT = target.position - me.position; toT.y = 0;
+                if (toT.sqrMagnitude < 0.01f) return false;
+                var cross = Vector3.Cross(Vector3.up, toT.normalized);
+                int mySide = (int)Mathf.Sign(Vector3.Dot(cross, Vector3.right) * myStrafeDir);
+                foreach (var b in BotManager.Instance.Bots)
+                {
+                    if (b == null || b.EntityId == EntityId) continue;
+                    var e2 = world.GetEntity(b.EntityId) as EntityAlive;
+                    if (e2 == null || e2.IsDead() || !e2.IsAlive()) continue;
+                    // is this bot lining up on the same target?
+                    if (Vector3.Distance(e2.position, target.position) > 3f) continue;
+                    var bToT = target.position - e2.position; bToT.y = 0;
+                    if (bToT.sqrMagnitude < 0.01f) continue;
+                    var bCross = Vector3.Cross(Vector3.up, bToT.normalized);
+                    int bSide = (int)Mathf.Sign(Vector3.Dot(bCross, Vector3.right) * 1f);
+                    if (bSide == mySide) return true; // same side - flank away
+                }
+                return false;
+            }
+            catch { return false; }
         }
 
         void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire = true)
