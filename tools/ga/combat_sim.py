@@ -25,6 +25,13 @@ WEAPON_BURST_MAX = np.array([3, 1, 6, 1, 1, 9], dtype=np.int32)
 WEAPON_MAG = np.array([12, 6, 30, 5, 6, 32], dtype=np.int32)
 WEAPON_RELOAD = np.array([1.2, 2.6, 2.0, 2.5, 2.6, 1.8], dtype=np.float32)
 
+# Fire-cost tuning (task shape: finite ammo + sustained-fire spread so a
+# no-brain that always fires burns rounds and bleeds accuracy; pacing wins).
+AMMO_RESERVE_MULT = 1                # spare-round pool = mag x this; reload consumes one mag from it
+SPREAD_ADD_PER_SHOT = 0.25           # spread added per shot fired
+SPREAD_DECAY_PER_SEC = 1.0           # spread recovered per second of pause
+SPREAD_HIT_PENALTY = 0.75            # hit-chance loss at full spread (1.0)
+
 # Flat params — HIDDEN is the canonical clanker size (16). For sweeps we keep
 # these as *runtime* values via _HIDDEN/_W1_LEN etc, but the default layout
 # that ships in BotNeuralBrain.cs is still 14->16->5 (W=325).
@@ -242,10 +249,12 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
     kills = 0; deaths = 0; damage_dealt = 0.0; damage_taken = 0.0; shots = 0; hits = 0; stuck_ticks = 0; camp_ticks = 0; total_ticks = 0
     burst_left = np.empty(16, dtype=numba.int64); burst_cd = np.empty(16, dtype=numba.float32); reaction_cd = np.empty(16, dtype=numba.float32); strafe_dir = np.empty(16, dtype=numba.int64)
     ammo = np.empty(16, dtype=numba.int64); reload_cd = np.empty(16, dtype=numba.float32)
+    reserve = np.empty(16, dtype=numba.int64)  # finite per-match rounds; reload drains it (spams run dry)
+    spread = np.empty(16, dtype=numba.float32)
     for i in range(n_bots):
         burst_left[i] = WEAPON_BURST_MIN[bweapon[i]]; burst_cd[i] = 0.0; reaction_cd[i] = 0.0
         v, rng = _lcg01(rng); strafe_dir[i] = 1 if v > 0.5 else -1
-        ammo[i] = WEAPON_MAG[bweapon[i]]; reload_cd[i] = 0.0
+        ammo[i] = WEAPON_MAG[bweapon[i]]; reserve[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT; spread[i] = 0.0; reload_cd[i] = 0.0
     last_x = np.empty(16, dtype=numba.float32); last_y = np.empty(16, dtype=numba.float32)
     for i in range(n_bots):
         last_x[i] = bx[i]; last_y[i] = by[i]
@@ -287,7 +296,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             elif env == 2: can_see = True
             elif env == 3: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
             else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
-            x_obs[0] = bhp[bi] / 100.0; x_obs[1] = thp / 100.0; x_obs[2] = min(1.0, dist / 70.0); x_obs[3] = 1.0 if can_see else 0.0; x_obs[4] = 0.0; x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0; x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0; x_obs[7] = 0.55 + bskill[bi] * 0.10; x_obs[8] = 0.55 + bskill[bi] * 0.10; x_obs[9] = 0.6; x_obs[10] = 0.5; x_obs[11] = 0.2; x_obs[12] = 0.0; x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
+            x_obs[0] = bhp[bi] / 100.0; x_obs[1] = thp / 100.0; x_obs[2] = min(1.0, dist / 70.0); x_obs[3] = 1.0 if can_see else 0.0; x_obs[4] = spread[bi]; x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0; x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0; x_obs[7] = 0.55 + bskill[bi] * 0.10; x_obs[8] = 0.55 + bskill[bi] * 0.10; x_obs[9] = 0.6; x_obs[10] = 0.5; x_obs[11] = 0.2; x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT))); x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
             forward_numba_relu(w, x_obs, y_raw)
             camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4]); sdir = 1 if strafe_sig > 0.5 else -1
             is_retreating = (retreat > 0.5 and bhp[bi] < 42.0) or (bhp[bi] < 20.0)
@@ -315,18 +324,22 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
                 stuck[bi] += 1
                 if stuck[bi] > 0: stuck_ticks += 1
             else: stuck[bi] = 0; last_x[bi] = bx[bi]; last_y[bi] = by[bi]
+            if spread[bi] > 0.0: spread[bi] = max(0.0, spread[bi] - SPREAD_DECAY_PER_SEC * dt)
             if reaction_cd[bi] > 0: reaction_cd[bi] -= dt
             if burst_cd[bi] > 0: burst_cd[bi] -= dt
             if reload_cd[bi] > 0: reload_cd[bi] -= dt
             if reload_cd[bi] > 0: continue
             if ammo[bi] <= 0:
-                ammo[bi] = WEAPON_MAG[bweapon[bi]]; reload_cd[bi] = WEAPON_RELOAD[bweapon[bi]]; continue
+                if reserve[bi] > 0:
+                    reserve[bi] -= WEAPON_MAG[bweapon[bi]]
+                    ammo[bi] = WEAPON_MAG[bweapon[bi]]; reload_cd[bi] = WEAPON_RELOAD[bweapon[bi]]
+                continue  # reserve dry: out of rounds for the rest of the match
             if not can_see: continue
             if dist > WEAPON_RANGE[bweapon[bi]] + 2.0: continue
             if is_retreating: continue
             if fire_gate < 0.5: continue
             if reaction_cd[bi] > 0 or burst_cd[bi] > 0: continue
-            shots += 1; ammo[bi] -= 1; tj = trait_jitter(1000 + bi); hc = skill_hit_chance(bskill[bi], dist, tj); aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15); hc2 = hc * (1.0 - aim_penalty * 0.35)
+            shots += 1; ammo[bi] -= 1; spread[bi] = min(1.0, spread[bi] + SPREAD_ADD_PER_SHOT); tj = trait_jitter(1000 + bi); hc = skill_hit_chance(bskill[bi], dist, tj); aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15); hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
             v, rng = _lcg01(rng)
             if v > hc2:
                 if burst_left[bi] > 0:
@@ -444,6 +457,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
     strafe_dir = np.empty(16, dtype=numba.int64)
     ammo2 = np.empty(16, dtype=numba.int64)
     reload_cd2 = np.empty(16, dtype=numba.float32)
+    reserve2 = np.empty(16, dtype=numba.int64)
+    spread2 = np.empty(16, dtype=numba.float32)
     for i in range(n_bots):
         burst_left[i] = WEAPON_BURST_MIN[bweapon[i]]
         burst_cd[i] = 0.0
@@ -451,6 +466,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
         v, rng = _lcg01(rng)
         strafe_dir[i] = 1 if v > 0.5 else -1
         ammo2[i] = WEAPON_MAG[bweapon[i]]
+        reserve2[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT
+        spread2[i] = 0.0
         reload_cd2[i] = 0.0
     last_x = np.empty(16, dtype=numba.float32)
     last_y = np.empty(16, dtype=numba.float32)
@@ -525,7 +542,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             x_obs[1] = thp / 100.0
             x_obs[2] = min(1.0, dist / 70.0)
             x_obs[3] = 1.0 if can_see else 0.0
-            x_obs[4] = 0.0  # loseTimer placeholder (not tracked in this stub)
+            x_obs[4] = spread2[bi]  # fire spread 0..1 (was loseTimer placeholder)
             x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0
             x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0
             # aim acc/skill derived from weapon + skill
@@ -534,7 +551,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             x_obs[9] = 0.6   # aggr
             x_obs[10] = 0.5  # selfPres
             x_obs[11] = 0.2  # camper
-            x_obs[12] = 0.0  # vel placeholder
+            x_obs[12] = min(1.0, (ammo2[bi] + reserve2[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (was vel placeholder)
             x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
 
             # forward
@@ -599,6 +616,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
                 last_x[bi] = bx[bi]; last_y[bi] = by[bi]
 
             # shooting
+            if spread2[bi] > 0.0:
+                spread2[bi] = max(0.0, spread2[bi] - SPREAD_DECAY_PER_SEC * dt)
             if reaction_cd[bi] > 0:
                 reaction_cd[bi] -= dt
             if burst_cd[bi] > 0:
@@ -608,9 +627,11 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             if reload_cd2[bi] > 0:
                 continue
             if ammo2[bi] <= 0:
-                ammo2[bi] = WEAPON_MAG[bweapon[bi]]
-                reload_cd2[bi] = WEAPON_RELOAD[bweapon[bi]]
-                continue
+                if reserve2[bi] > 0:
+                    reserve2[bi] -= WEAPON_MAG[bweapon[bi]]
+                    ammo2[bi] = WEAPON_MAG[bweapon[bi]]
+                    reload_cd2[bi] = WEAPON_RELOAD[bweapon[bi]]
+                continue  # reserve dry: out of rounds for the rest of the match
             if not can_see:
                 continue
             if dist > WEAPON_RANGE[bweapon[bi]] + 2.0:
@@ -624,6 +645,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             # fire!
             shots += 1
             ammo2[bi] -= 1
+            spread2[bi] = min(1.0, spread2[bi] + SPREAD_ADD_PER_SHOT)
             # aim bias: small skill-scaled miss rotates hit chance
             # trait jitter per bot id
             tj = trait_jitter(1000 + bi)
@@ -632,7 +654,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             # crazy good nets learn to keep |aim_raw| tiny under fire
             aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15)
             # sniper gets little penalty, shotgun more forgiving
-            hc2 = hc * (1.0 - aim_penalty * 0.35)
+            hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread2[bi] * SPREAD_HIT_PENALTY)
             v, rng = _lcg01(rng)
             if v > hc2:
                 # miss — still burns burst
