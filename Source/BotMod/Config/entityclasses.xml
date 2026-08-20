@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configs>
+  <append xpath="/entity_classes">
+    <!-- Survivor bot: extends zombieSoldier (guaranteed alive on dedi) with
+         pistol HandItem so inventory gun has a matching model entry. Human
+         bandit mesh requires Bandit Prefab not present on dedi; zombie
+         soldier reliably holds item in hand via inventory holding slot. -->
+    <entity_class name="npcSurvivorBot" extends="zombieSoldier">
+      <property name="HandItem" value="gunHandgunT1Pistol"/>
+      <property name="MaxHealth" value="100"/>
+      <property name="TimeStayAfterDeath" value="30"/>
+      <property name="IsEnemyEntity" value="true"/>
+    </entity_class>
+  </append>
+</configs>

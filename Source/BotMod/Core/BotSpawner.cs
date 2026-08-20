@@ -211,7 +211,16 @@ namespace BotMod.Core
             try
             {
                 int x = Mathf.FloorToInt(pos.x), z = Mathf.FloorToInt(pos.z);
-                for (int y = 250; y >= 0; y--)
+                // Probe from a little above expected surface, not from y=250 straight down through void.
+                // If the column is empty (over water/void), return zero so caller retries.
+                int top = Mathf.Clamp(Mathf.FloorToInt(pos.y) + 30, 0, 250);
+                for (int y = top; y >= 0; y--)
+                {
+                    var bv = world.GetBlock(new Vector3i(x, y, z));
+                    if (bv.type != 0) return new Vector3(pos.x, y + 2f, pos.z);
+                }
+                // Fallback: full column scan up to 250 if top-down probe missed
+                for (int y = top + 1; y <= 250; y++)
                 {
                     var bv = world.GetBlock(new Vector3i(x, y, z));
                     if (bv.type != 0) return new Vector3(pos.x, y + 2f, pos.z);
@@ -260,11 +269,11 @@ namespace BotMod.Core
             return _dmSpawns;
         }
 
-        static readonly string[] _botClassPool = new[] { "npcSurvivorBot", "zombieSoldier", "zombieSoldierFeral", "zombieSoldierRadiated", "zombieArlene", "zombieArleneFeral", "zombieNurse", "zombieNurseFeral", "zombiePartyGirl", "zombieMarlene" };
+        // Prefer the player-mesh bot so rifles actually show in the hand. The zombie pool is fallback.
+        static readonly string[] _botClassPool = new[] { "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "zombieSoldier", "zombieNurse" };
         public static string PickBotClass(BotConfig cfg)
         {
-            // "zombieSoldier" means "any soldier" pool; otherwise literal; "mixed" means the full pool.
-            if (cfg.BotEntityClass == null) return "zombieSoldier";
+            if (cfg.BotEntityClass == null) return "npcSurvivorBot";
             if (cfg.BotEntityClass == "mixed") return _botClassPool[RngPick(_botClassPool.Length)];
             if (cfg.BotEntityClass != null && cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
             return cfg.BotEntityClass;
@@ -316,6 +325,9 @@ namespace BotMod.Core
                 if (e is EntityAlive alive)
                 {
                     try { alive.Health = Mathf.RoundToInt(cfg.BotHealth); } catch { }
+                    // Give the gun and actually equip it so the Avatar renders it. Without the holding-item write
+                    // the inventory has the gun but the model walks empty-handed.
+                    ItemValue held = null;
                     if (!string.IsNullOrEmpty(wp.GunId))
                     {
                         try
@@ -327,6 +339,11 @@ namespace BotMod.Core
                             {
                                 var stack = new ItemStack(iv, 1);
                                 try { alive.inventory.AddItem(stack); } catch { }
+                                // Equip in hand so AvatarSDCS/UMA actually draws the rifle (rifle can't be seen if only in bag)
+                                try { alive.inventory.SetHoldingItemIdx(0); } catch { }
+                                try { alive.inventory.updateHoldingItem(); } catch { }
+                                try { alive.inventory.ForceHoldingItemUpdate(); } catch { }
+                                held = iv;
                             }
                         }
                         catch (Exception ex) { ModApi.Log("Give weapon failed: " + ex.Message); }
