@@ -215,7 +215,7 @@ def trait_jitter(net_id):
 
 
 @numba.njit
-def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon):
+def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1):
     # relu variant of the full tick loop (9792 bytes duplicated to keep njit simple)
     bx = np.empty(16, dtype=numba.float32)
     by = np.empty(16, dtype=numba.float32)
@@ -262,6 +262,10 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
     dt = 0.05
     env = seed % 5
     y_raw = np.empty(5, dtype=numba.float32); x_obs = np.empty(INPUTS, dtype=numba.float32)
+    use_opp = w_opp is not None
+    if use_opp and n_evolved < 0:
+        n_evolved = n_bots
+    kills_ev = 0; deaths_ev = 0; damage_dealt_ev = 0.0; damage_taken_ev = 0.0; shots_ev = 0; hits_ev = 0
     for tick in range(max_ticks):
         alive_bots = 0
         for i in range(n_bots):
@@ -297,7 +301,11 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             elif env == 3: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
             else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
             x_obs[0] = bhp[bi] / 100.0; x_obs[1] = thp / 100.0; x_obs[2] = min(1.0, dist / 70.0); x_obs[3] = 1.0 if can_see else 0.0; x_obs[4] = spread[bi]; x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0; x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0; x_obs[7] = 0.55 + bskill[bi] * 0.10; x_obs[8] = 0.55 + bskill[bi] * 0.10; x_obs[9] = 0.6; x_obs[10] = 0.5; x_obs[11] = 0.2; x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT))); x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
-            forward_numba_relu(w, x_obs, y_raw)
+            # forward
+            if use_opp and bi >= n_evolved:
+                forward_numba_relu(w_opp, x_obs, y_raw)
+            else:
+                forward_numba_relu(w, x_obs, y_raw)
             camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4]); sdir = 1 if strafe_sig > 0.5 else -1
             is_retreating = (retreat > 0.5 and bhp[bi] < 42.0) or (bhp[bi] < 20.0)
             if camp > 0.5 and bhp[bi] > 55 and dist > 18:
@@ -339,7 +347,9 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             if is_retreating: continue
             if fire_gate < 0.5: continue
             if reaction_cd[bi] > 0 or burst_cd[bi] > 0: continue
-            shots += 1; ammo[bi] -= 1; spread[bi] = min(1.0, spread[bi] + SPREAD_ADD_PER_SHOT); tj = trait_jitter(1000 + bi); hc = skill_hit_chance(bskill[bi], dist, tj); aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15); hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
+            shots += 1
+            if not use_opp or bi < n_evolved: shots_ev += 1
+            ammo[bi] -= 1; spread[bi] = min(1.0, spread[bi] + SPREAD_ADD_PER_SHOT); tj = trait_jitter(1000 + bi); hc = skill_hit_chance(bskill[bi], dist, tj); aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15); hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
             v, rng = _lcg01(rng)
             if v > hc2:
                 if burst_left[bi] > 0:
@@ -347,19 +357,33 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
                     if burst_left[bi] <= 0: burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
                 else: reaction_cd[bi] = 0.28
                 continue
-            hits += 1; is_head = False
+            hits += 1
+            if not use_opp or bi < n_evolved: hits_ev += 1
+            is_head = False
             if WEAPON_PELLETS[bweapon[bi]] == 1:
                 v2, rng = _lcg01(rng)
                 if v2 < (0.04 + bskill[bi] * 0.02): is_head = True
             dmg = WEAPON_DAMAGE[bweapon[bi]]
             if is_head: dmg = dmg * 2.0
             damage_dealt += dmg
+            if not use_opp or bi < n_evolved:
+                damage_dealt_ev += dmg
             if best_kind == 0:
                 bhp[best] -= dmg
-                if bhp[best] <= 0: balive[best] = False; deaths += 1; kills += 1
+                if not use_opp or best < n_evolved:
+                    damage_taken_ev += dmg
+                if bhp[best] <= 0:
+                    balive[best] = False; deaths += 1; kills += 1
+                    if not use_opp or bi < n_evolved:
+                        kills_ev += 1
+                    if not use_opp or best < n_evolved:
+                        deaths_ev += 1
             else:
                 zhp[best] -= dmg
-                if zhp[best] <= 0: zalive[best] = False; kills += 1
+                if zhp[best] <= 0:
+                    zalive[best] = False; kills += 1
+                    if not use_opp or bi < n_evolved:
+                        kills_ev += 1
             if burst_left[bi] > 0:
                 burst_left[bi] -= 1
                 if burst_left[bi] <= 0: burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
@@ -374,9 +398,14 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             if best_b < 0: continue
             dx = bx[best_b] - zx[zi]; dy = by[best_b] - zy[zi]; d = math.sqrt(best_d2)
             if d > 0.01: zx[zi] += dx / d * 0.42; zy[zi] += dy / d * 0.42
-            if d < 2.0: bhp[best_b] -= 10 * dt * 8; damage_taken += 10 * dt * 8; 
-                # fixup: deaths
-            if bhp[best_b] <= 0 and d < 2.0: pass
+            if d < 2.0:
+                bhp[best_b] -= 10 * dt * 8; damage_taken += 10 * dt * 8
+                if not use_opp or best_b < n_evolved:
+                    damage_taken_ev += 10 * dt * 8
+                if bhp[best_b] <= 0:
+                    balive[best_b] = False; deaths += 1
+                    if not use_opp or best_b < n_evolved:
+                        deaths_ev += 1
             if zx[zi] < 2: zx[zi] = 2
             if zx[zi] > 78: zx[zi] = 78
             if zy[zi] < 2: zy[zi] = 2
@@ -391,11 +420,11 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
     survival = float(total_ticks) / float(max_ticks)
     stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
     camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
-    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits
+    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits, kills_ev, deaths_ev, damage_dealt_ev, damage_taken_ev, shots_ev, hits_ev
 
 
 @numba.njit
-def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon):
+def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1):
     """One headless match. Returns a struct of stats for fitness.
     w is flat. We simulate n_bots evolved bots vs each other + zombies.
     For PvP zombie tests the harness calls this with different (n_bots, n_zombies)
@@ -481,6 +510,11 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
     y_raw = np.empty(5, dtype=numba.float32)
     x_obs = np.empty(INPUTS, dtype=numba.float32)
 
+    use_opp = w_opp is not None
+    if use_opp and n_evolved < 0:
+        n_evolved = n_bots
+    kills_ev = 0; deaths_ev = 0; damage_dealt_ev = 0.0; damage_taken_ev = 0.0; shots_ev = 0; hits_ev = 0
+
     for tick in range(max_ticks):
         # check early termination: one side wiped
         alive_bots = 0
@@ -555,7 +589,10 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
 
             # forward
-            forward_numba(w, x_obs, y_raw)
+            if use_opp and bi >= n_evolved:
+                forward_numba(w_opp, x_obs, y_raw)
+            else:
+                forward_numba(w, x_obs, y_raw)
             camp = sigmoid(y_raw[0])
             retreat = sigmoid(y_raw[1])
             aim_raw = math.tanh(y_raw[2])
@@ -644,6 +681,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
                 continue
             # fire!
             shots += 1
+            if not use_opp or bi < n_evolved:
+                shots_ev += 1
             ammo2[bi] -= 1
             spread2[bi] = min(1.0, spread2[bi] + SPREAD_ADD_PER_SHOT)
             # aim bias: small skill-scaled miss rotates hit chance
@@ -668,6 +707,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
                 continue
             # hit!
             hits += 1
+            if not use_opp or bi < n_evolved:
+                hits_ev += 1
             # headshot roll (pellets==1 only)
             is_head = False
             if WEAPON_PELLETS[bweapon[bi]] == 1:
@@ -678,13 +719,21 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             if is_head:
                 dmg = dmg * 2.0
             damage_dealt += dmg
+            if not use_opp or bi < n_evolved:
+                damage_dealt_ev += dmg
             # apply
             if best_kind == 0:
                 bhp[best] -= dmg
+                if not use_opp or best < n_evolved:
+                    damage_taken_ev += dmg
                 if bhp[best] <= 0:
                     balive[best] = False
                     deaths += 1
                     kills += 1
+                    if not use_opp or bi < n_evolved:
+                        kills_ev += 1
+                    if not use_opp or best < n_evolved:
+                        deaths_ev += 1
                     # respawn zombie-ish: keep FFA populated by reviving victim as fresh zombie for horde pressure?
                     # no — leave dead for K/D accounting
             else:
@@ -692,6 +741,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
                 if zhp[best] <= 0:
                     zalive[best] = False
                     kills += 1
+                    if not use_opp or bi < n_evolved:
+                        kills_ev += 1
             # burst accounting
             if burst_left[bi] > 0:
                 burst_left[bi] -= 1
@@ -723,9 +774,13 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
             if d < 2.0:
                 bhp[best_b] -= 10 * dt * 8  # melee pressure (buffed)
                 damage_taken += 10 * dt * 8
+                if not use_opp or best_b < n_evolved:
+                    damage_taken_ev += 10 * dt * 8
                 if bhp[best_b] <= 0:
                     balive[best_b] = False
                     deaths += 1
+                    if not use_opp or best_b < n_evolved:
+                        deaths_ev += 1
             if zx[zi] < 2: zx[zi] = 2
             if zx[zi] > 78: zx[zi] = 78
             if zy[zi] < 2: zy[zi] = 2
@@ -743,4 +798,4 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
     survival = float(total_ticks) / float(max_ticks)
     stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
     camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
-    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits
+    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits, kills_ev, deaths_ev, damage_dealt_ev, damage_taken_ev, shots_ev, hits_ev

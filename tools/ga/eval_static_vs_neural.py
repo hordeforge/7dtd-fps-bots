@@ -39,6 +39,7 @@ def held(w: np.ndarray, seed: int, matches: int) -> tuple[float, float]:
     harness.FIT_STUCK = 0.05
     harness.ACTIVATION = 0
     harness.CURRICULUM = "mixed"
+    harness.DRAWS_PER_CONFIG = 1  # pin the measuring stick to the canonical F=18 sample
     sc = [harness.evaluate(w, 999, m, seed) for m in range(matches)]
     return float(np.mean(sc)), float(np.std(sc))
 
