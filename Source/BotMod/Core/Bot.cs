@@ -335,7 +335,11 @@ namespace BotMod.Core
                     if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
                     {
                         _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
-                        _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius, Rng01(), Rng01());
+                        // Active hunt: prefer the nearest other bot/player so bots converge and
+                        // fight; fall back to random wander when none is close (FPS combat seeking).
+                        Vector3 seek = SeekNearestEnemy(me, world, cfg, cfg.VisionRange * 3f);
+                        if (seek != Vector3.zero) _wanderTarget = seek;
+                        else _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius, Rng01(), Rng01());
                         BotBrain.MoveTo(me, _wanderTarget);
                     }
                 }
@@ -356,6 +360,47 @@ namespace BotMod.Core
             return e.IsAlive();
         }
         bool IsDeadTgt(EntityAlive e) => e == null || e.IsDead() || !e.IsAlive();
+
+        /// <summary>When idle (no target), seek the nearest other bot or real player within a
+        /// bounding radius so bots converge and fight across the map instead of passively
+        /// random-wandering at spread spawn points. Returns the target position, or
+        /// Vector3.zero if none is near.</summary>
+        Vector3 SeekNearestEnemy(EntityAlive me, World world, BotConfig cfg, float maxDist)
+        {
+            try
+            {
+                Vector3 best = Vector3.zero; float bestD = maxDist;
+                var mePos = me.position;
+                // nearest other live bot
+                try
+                {
+                    foreach (var b in BotManager.Instance.Bots)
+                    {
+                        if (b == null || b.EntityId == EntityId) continue;
+                        var e2 = world.GetEntity(b.EntityId) as EntityAlive;
+                        if (e2 == null || e2.IsDead() || !e2.IsAlive()) continue;
+                        if (!cfg.BotVsBot) continue;
+                        float d = Vector3.Distance(mePos, e2.position);
+                        if (d < bestD) { bestD = d; best = e2.position; }
+                    }
+                }
+                catch { }
+                // nearest real player
+                try
+                {
+                    if (world.Players != null && world.Players.list != null && cfg.BotVsPlayer)
+                        foreach (var p in world.Players.list)
+                        {
+                            if (p == null || p.IsDead()) continue;
+                            float d = Vector3.Distance(mePos, p.position);
+                            if (d < bestD) { bestD = d; best = p.position; }
+                        }
+                }
+                catch { }
+                return best;
+            }
+            catch { return Vector3.zero; }
+        }
 
         void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire = true)
         {
