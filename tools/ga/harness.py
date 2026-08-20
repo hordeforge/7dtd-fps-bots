@@ -57,23 +57,27 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
     n = 0
     if CURRICULUM == "pvp_first":
         configs = [
-            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
-            (2, 0, 1200), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
-            (4, 6, 1200),
+            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
+            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
+            (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (4, 6, 1200), (4, 6, 1200), (4, 6, 1200),
         ]
     elif CURRICULUM == "horde_first":
         configs = [
-            (2, 0, 1200), (2, 0, 1200), (6, 0, 1800), (6, 0, 1800),
-            (4, 6, 1800), (4, 6, 1800), (4, 6, 1800), (4, 6, 1800),
-            (6, 0, 1800),
+            (2, 0, 1200), (2, 0, 1200), (6, 0, 1800), (6, 0, 1800), (4, 6, 1800), (4, 6, 1800),
+            (4, 6, 1800), (4, 6, 1800), (4, 6, 1800), (4, 6, 1800), (4, 6, 1800), (4, 6, 1800),
+            (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
         ]
     else:
         configs = [
-            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
-            (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
-            (4, 6, 1800),
+            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
+            (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200), (2, 0, 1200),
+            (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800), (6, 0, 1800),
         ]
-    # dual-seed regularizer: training fitness = mean over two seed streams
+    # dual-seed regularizer: training fitness = mean over two seed streams.
+    # F is now 18 configs x 2 seeds = 36 sims per genome (was 18) so a genome can't
+    # memorize one seed/arena draw. With 18 distinct match seeds clamping to 5 env
+    # layouts, each genome sees every wall layout -> directly fights the 1.2-2.0x
+    # train-vs-held overfit gap measured across all prior runs.
     fn = _simulate_relu if ACTIVATION == 1 else _simulate
     seeds = (run_seed, run_seed ^ 0x9E3779B9)
     for rs in seeds:
