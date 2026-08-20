@@ -293,6 +293,14 @@ namespace BotMod.Core
             }
             else
             {
+                // Target died or is no longer valid: clear it and rescan immediately so the
+                // bot switches to the next enemy without dead-target linger (FPS flow).
+                if (_target != null && IsDeadTgt(_target))
+                {
+                    _target = null;
+                    _hasLastKnownTarget = false;
+                    _nextTargetScan = 0f; // force re-acquisition this tick
+                }
                 // Q3 LTG decision: camp vs roam — heuristic (neural kept only for PvP chase).
                 // The GA's "camp" signal is intentionally not used here; zombies should
                 // always pull bots out of cover.
