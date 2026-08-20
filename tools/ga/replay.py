@@ -186,7 +186,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                 v, rng = _lcg01(rng); ang = v * 6.283185307179586
                 bx[bi] += math.cos(ang) * 0.4; by[bi] += math.sin(ang) * 0.4
                 if tick % RECORD_STRIDE == 0:
-                    frame["bots"].append({"id": bi, "x": bx0, "y": by0, "hp": bhp[bi], "alive": True, "tx": 0, "ty": 0, "strafe": 0, "fire": False})
+                    frame["bots"].append({"id": bi, "x": bx0, "y": by0, "hp": bhp[bi], "alive": True, "tx": 0, "ty": 0, "strafe": 0, "fire": False, "w": bweapon[bi]})
                 continue
             if best_kind == 0:
                 tx = bx[best]; ty = by[best]; thp = bhp[best]
@@ -299,7 +299,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
             if tick % RECORD_STRIDE == 0:
                 frame["bots"].append({
                     "id": bi, "x": bx[bi], "y": by[bi], "hp": bhp[bi], "alive": balive[bi],
-                    "tx": tx, "ty": ty, "strafe": sdir, "fire": fired,
+                    "tx": tx, "ty": ty, "strafe": sdir, "fire": fired, "w": bweapon[bi],
                 })
             if fired and (hit_tgt is not None or killed_tgt is not None):
                 kind = "zombie" if best_kind == 1 else "bot"
@@ -374,9 +374,10 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
  <div>Ticks <b>@TICKS@</b></div>
 </div>
 <div class="legend">
- <span><span class="dot" style="background:#f87171"></span>Bots</span>
+ <span><span class="dot" style="background:#f87171"></span>Bots (tag=weapon)</span>
  <span><span class="dot" style="background:#34d399"></span>Zombies</span>
  <span><span class="dot" style="background:#fde047"></span>Shots</span>
+ <span style="color:#94a3b8">Weapon tags: Pistol P · Shotgun S · AK AK · Sniper Sn · AutoShotgun Au · SMG SM</span>
  <span style="color:#94a3b8">Walls block LOS (aim around them)</span>
 </div>
 <div class="ctl">
@@ -408,12 +409,18 @@ function draw(fr){
     ctx.moveTo(w[0]*S,(80-w[1])*S); ctx.lineTo(w[2]*S,(80-w[3])*S);
     ctx.stroke();
   }
+  const WCOL=['#f87171','#c084fc','#fb923c','#38bdf8','#f472b6','#a3e635']; // pistol,shotgun,ak,sniper,auto,smg
+  const WTAG=['P','S','AK','Sn','Au','SM'];
   for(const b of fr.bots){
     if(!b.alive){ continue; }
     if(b.fire){ ctx.strokeStyle='rgba(253,224,71,0.85)'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(b.x*S,(80-b.y)*S); ctx.lineTo(b.tx*S,(80-b.ty)*S); ctx.stroke(); }
     else if(b.tx||b.ty){ ctx.strokeStyle='rgba(56,189,248,0.22)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(b.x*S,(80-b.y)*S); ctx.lineTo(b.tx*S,(80-b.ty)*S); ctx.stroke(); }
-    ctx.fillStyle='#f87171'; ctx.beginPath(); ctx.arc(b.x*S,(80-b.y)*S,8,0,7); ctx.fill();
-    ctx.strokeStyle='#7f1d1d'; ctx.stroke();
+    // weapon ring: unique color per loadout, tag letter inside
+    const wc=WCOL[(b.w||0)%6];
+    ctx.fillStyle=wc; ctx.beginPath(); ctx.arc(b.x*S,(80-b.y)*S,8,0,7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#0f172a'; ctx.font='9px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(WTAG[(b.w||0)%6], b.x*S, (80-b.y)*S);
     ctx.fillStyle='rgba(15,23,42,0.85)'; ctx.fillRect(b.x*S-11,(80-b.y)*S-18,22,5);
     ctx.fillStyle= b.hp>50?'#22c55e': (b.hp>25?'#eab308':'#ef4444');
     ctx.fillRect(b.x*S-11,(80-b.y)*S-18,22*Math.max(0,b.hp/100),5);
