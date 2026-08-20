@@ -42,7 +42,10 @@ namespace BotMod.AI
                         float score = dist;
                         if (alive is EntityPlayer) score *= 0.82f;
                         if (BotManager.Instance.IsBotEntity(alive.entityId)) score *= 0.9f;
-                        score -= (alive.Health / 100f) * -2f; // prefer wounded slightly
+                        // FPS priority: strongly prefer finishing wounded targets (low HP -> low
+                        // score -> chosen). A ~10% HP foe beats a full-HP one by ~5.4 on the
+                        // distance scale, matching finish-the-kill.
+                        score += (alive.Health / 100f) * 6f;
                         // Retaliation bias (zdtd_bot grudge parity): the bot keeps
                         // re-acquiring whoever shot it while the grudge is fresh,
                         // instead of forgetting the instant they leave LOS.
@@ -80,6 +83,7 @@ namespace BotMod.AI
                             if (dist > cfg.VisionRange) continue;
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, a.position + Vector3.up * 1.05f, world)) continue;
                             float score = dist;
+                            score += (a.Health / 100f) * 6f; // finish wounded targets
                             if (preferredId >= 0 && a.entityId == preferredId) score *= preferredScale;
                             if (score < bestScore) { bestScore = score; best = a; }
                         }
