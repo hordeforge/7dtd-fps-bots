@@ -210,6 +210,18 @@ namespace BotMod.Core
                     float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
                     doRetreat = hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f;
                 }
+                // FPS finish-the-kill: if the enemy is also critically wounded, commit instead of
+                // retreating. Prevents a mutual-retreat stalemate where two low-HP bots both back
+                // off forever and never finish the fight.
+                if (doRetreat)
+                {
+                    try
+                    {
+                        float enemyFrac = _target.Health / System.Math.Max(1f, cfg.BotHealth);
+                        if (enemyFrac <= 0.4f) doRetreat = false;
+                    }
+                    catch { }
+                }
                 if (doRetreat)
                 {
                     Vector3 cover = BotBrain.FindCover(me, _target, world);
