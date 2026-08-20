@@ -307,23 +307,21 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             else:
                 forward_numba_relu(w, x_obs, y_raw)
             camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4]); sdir = 1 if strafe_sig > 0.5 else -1
-            is_retreating = (retreat > 0.5 and bhp[bi] < 42.0) or (bhp[bi] < 20.0)
+            # movement — policy-driven (deeper sim rework): net controls a 2D
+            # velocity via retreat (forward), strafe_sig (lateral), camp (hold)
+            fwd = 1.2 * (1.0 - 2.0 * retreat)
+            lat = (strafe_sig - 0.5) * 2.4
             if camp > 0.5 and bhp[bi] > 55 and dist > 18:
-                camp_ticks += 1; bx[bi] += (1 if strafe_dir[bi] > 0 else -1) * 0.15; bvelx[bi] = 0.0; bvely[bi] = 0.0
-            elif is_retreating:
-                dx = bx0 - tx; dy = by0 - ty; d = max(0.001, math.sqrt(dx*dx + dy*dy))
-                bx[bi] += (dx / d) * 1.1 + (-dy / d) * sdir * 0.6; by[bi] += (dy / d) * 1.1 + (dx / d) * sdir * 0.6; strafe_dir[bi] = sdir
-            else:
-                if dist < 6.0:
-                    dx = tx - bx0; dy = ty - by0; d = max(0.001, math.sqrt(dx*dx + dy*dy)); px = -dy / d; py = dx / d
-                    bx[bi] += (-dx / d) * 0.45 + px * sdir * 0.55; by[bi] += (-dy / d) * 0.45 + py * sdir * 0.55
-                elif dist < WEAPON_RANGE[bweapon[bi]] and can_see:
-                    dx = tx - bx0; dy = ty - by0; d = max(0.001, math.sqrt(dx*dx + dy*dy)); px = -dy / d; py = dx / d
-                    bx[bi] += dx / d * 0.22 + px * sdir * 0.78; by[bi] += dy / d * 0.22 + py * sdir * 0.78
-                else:
-                    dx = tx - bx0; dy = ty - by0; d = max(0.001, math.sqrt(dx*dx + dy*dy))
-                    bx[bi] += dx / d * 1.2; by[bi] += dy / d * 1.2
-                strafe_dir[bi] = sdir
+                camp_ticks += 1
+                fwd *= 0.15
+            dx = tx - bx0; dy = ty - by0; d = max(0.001, math.sqrt(dx*dx + dy*dy)); px = -dy / d; py = dx / d
+            vx = fwd * (dx / d) + lat * px; vy = fwd * (dy / d) + lat * py
+            vmag = math.sqrt(vx*vx + vy*vy)
+            if vmag > 1.3:
+                vx *= 1.3 / vmag; vy *= 1.3 / vmag
+            bx[bi] += vx; by[bi] += vy
+            strafe_dir[bi] = 1 if strafe_sig > 0.5 else -1
+            is_retreating = retreat > 0.5 and bhp[bi] < 42.0
             if bx[bi] < 2: bx[bi] = 2
             if bx[bi] > 78: bx[bi] = 78
             if by[bi] < 2: by[bi] = 2
@@ -600,44 +598,26 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             strafe_sig = sigmoid(y_raw[4])
             sdir = 1 if strafe_sig > 0.5 else -1
 
-            # movement
-            # retreat: backpedal from target if hp low and retreat high
-            is_retreating = (retreat > 0.5 and bhp[bi] < 42.0) or (bhp[bi] < 20.0)
+            # movement — policy-driven (deeper sim rework): the net controls a
+            # 2D velocity. retreat 0 -> full approach, 1 -> full backpedal;
+            # strafe_sig -> lateral; camp -> hold position (guardrail keeps the
+            # anti-camp penalty bookkeeping).
+            fwd = 1.2 * (1.0 - 2.0 * retreat)
+            lat = (strafe_sig - 0.5) * 2.4
             if camp > 0.5 and bhp[bi] > 55 and dist > 18:
                 camp_ticks += 1
-                # stay: small jitter
-                bx[bi] += (1 if strafe_dir[bi] > 0 else -1) * 0.15
-                bvelx[bi] = 0.0; bvely[bi] = 0.0
-            elif is_retreating:
-                dx = bx0 - tx; dy = by0 - ty
-                d = max(0.001, math.sqrt(dx*dx + dy*dy))
-                bx[bi] += (dx / d) * 1.1 + (-dy / d) * sdir * 0.6
-                by[bi] += (dy / d) * 1.1 + (dx / d) * sdir * 0.6
-                strafe_dir[bi] = sdir
-            else:
-                if dist < 6.0:
-                    # backpedal + circle
-                    dx = tx - bx0; dy = ty - by0
-                    d = max(0.001, math.sqrt(dx*dx + dy*dy))
-                    # perpendicular
-                    px = -dy / d; py = dx / d
-                    # mix away + strafe
-                    bx[bi] += (-dx / d) * 0.45 + px * sdir * 0.55
-                    by[bi] += (-dy / d) * 0.45 + py * sdir * 0.55
-                elif dist < WEAPON_RANGE[bweapon[bi]] and can_see:
-                    # strafe orbit
-                    dx = tx - bx0; dy = ty - by0
-                    d = max(0.001, math.sqrt(dx*dx + dy*dy))
-                    px = -dy / d; py = dx / d
-                    bx[bi] += dx / d * 0.22 + px * sdir * 0.78
-                    by[bi] += dy / d * 0.22 + py * sdir * 0.78
-                else:
-                    # chase
-                    dx = tx - bx0; dy = ty - by0
-                    d = max(0.001, math.sqrt(dx*dx + dy*dy))
-                    bx[bi] += dx / d * 1.2
-                    by[bi] += dy / d * 1.2
-                strafe_dir[bi] = sdir
+                fwd *= 0.15
+            dx = tx - bx0; dy = ty - by0
+            d = max(0.001, math.sqrt(dx*dx + dy*dy))
+            px = -dy / d; py = dx / d
+            vx = fwd * (dx / d) + lat * px
+            vy = fwd * (dy / d) + lat * py
+            vmag = math.sqrt(vx*vx + vy*vy)
+            if vmag > 1.3:
+                vx *= 1.3 / vmag; vy *= 1.3 / vmag
+            bx[bi] += vx; by[bi] += vy
+            strafe_dir[bi] = 1 if strafe_sig > 0.5 else -1
+            is_retreating = retreat > 0.5 and bhp[bi] < 42.0
             # clamp to arena 0..80
             if bx[bi] < 2: bx[bi] = 2
             if bx[bi] > 78: bx[bi] = 78

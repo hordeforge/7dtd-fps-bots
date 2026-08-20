@@ -251,6 +251,20 @@ namespace BotMod.AI
             }
             catch { }
         }
+        /// <summary>Move in an arbitrary direction (R10 neural movement): the net
+        /// composes forward/lateral from (retreat, strafe) and this applies it.</summary>
+        public static void MoveDir(EntityAlive me, Vector3 dir)
+        {
+            try
+            {
+                dir.y = 0;
+                if (dir.sqrMagnitude < 0.0001f) return;
+                dir.Normalize();
+                float dist = 0.8f;
+                MoveWithFallback(me, dir, dist);
+            }
+            catch { }
+        }
         public static void Strafe(EntityAlive me, EntityAlive target, int dirSign)
         {
             try

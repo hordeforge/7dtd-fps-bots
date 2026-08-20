@@ -298,47 +298,85 @@ namespace BotMod.Core
                         catch { wantToFire = true; }
                     }
                     TryShootBurst(me, _target, aim, world, cfg, wantToFire);
-                    // Neural strafe advisory: net can flip _strafeDir when it wants to orbit
-                    // the other way. Still gated by _strafeUntil / TryShootBurst so a broken
-                    // net cannot spam moves.
-                    TryNeuralStrafeDir(ref _strafeDir);
-                    // Squad flanking: if another bot is strafing the same target in the same
-                    // direction, flip mine so the team splits around the target (FPS handshake)
-                    // instead of clumping on one side.
-                    if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
-                    // Continuous FPS strafe when in attack range.
-                    // Weapon-aware standoff: if we're inside ~35% of effective weapon range
-                    // (too close for a ranged weapon), backpedal + circle to keep distance,
-                    // instead of standing in melee range. Shotguns close in, snipers keep range.
-                    float tooClose = Mathf.Max(6f, effRange * 0.35f);
-                    // Phased dodge (zdtd_bot dodge, ported back): while dodging, first
-                    // backpedal away, then flip to a hard strafe on the randomized dir.
-                    if (_dodgeTicks > 0)
+                    // R10 neural movement: when the evolved brain is loaded it drives the
+                    // 2D velocity directly (retreat -> forward, strafe -> lateral, camp ->
+                    // hold), matching combat_sim. The hardcoded Q3 strafe/dodge logic below
+                    // is the fallback when the brain is off or broken.
+                    bool neuralMoved = false;
+                    if (UseNeuralGate())
                     {
-                        _dodgeTicks--;
-                        if (Time.time >= _nextPathRecalc)
+                        try
                         {
-                            if (_dodgeBackRemain > 0) { _dodgeBackRemain--; BotBrain.Backpedal(me, _target, _strafeDir); }
-                            else { _strafeDir = -_strafeDir; BotBrain.Strafe(me, _target, _strafeDir); }
-                            _nextPathRecalc = Time.time + 0.12f;
+                            var _nin = BuildNeuralInputs(me, world, cfg);
+                            BotMod.AI.BotNeuralBrain.NeuralOutputs _nout;
+                            if (BotMod.AI.BotNeuralBrain.TryEval(_nin, out _nout))
+                            {
+                                float retreat = _nout.RetreatLogit;
+                                float strafe = _nout.StrafeLogit;
+                                float fwd = 1.2f * (1f - 2f * retreat);
+                                float lat = (strafe - 0.5f) * 2.4f;
+                                if (_nout.WantCamp && me.Health > 55f && dist > 18f) fwd *= 0.15f;
+                                Vector3 toT = tPos - me.position; toT.y = 0;
+                                if (toT.sqrMagnitude > 0.001f)
+                                {
+                                    toT.Normalize();
+                                    Vector3 perp = Vector3.Cross(Vector3.up, toT);
+                                    Vector3 dir = toT * fwd + perp * lat;
+                                    if (dir.sqrMagnitude > 0.001f)
+                                    {
+                                        BotBrain.MoveDir(me, dir);
+                                        _strafeDir = _nout.StrafeDir;
+                                        neuralMoved = true;
+                                    }
+                                }
+                            }
                         }
+                        catch { }
                     }
-                    else if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
+                    if (!neuralMoved)
                     {
-                        if (dist > tooClose)
+                        // Neural strafe advisory: net can flip _strafeDir when it wants to orbit
+                        // the other way. Still gated by _strafeUntil / TryShootBurst so a broken
+                        // net cannot spam moves.
+                        TryNeuralStrafeDir(ref _strafeDir);
+                        // Squad flanking: if another bot is strafing the same target in the same
+                        // direction, flip mine so the team splits around the target (FPS handshake)
+                        // instead of clumping on one side.
+                        if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
+                        // Continuous FPS strafe when in attack range.
+                        // Weapon-aware standoff: if we're inside ~35% of effective weapon range
+                        // (too close for a ranged weapon), backpedal + circle to keep distance,
+                        // instead of standing in melee range. Shotguns close in, snipers keep range.
+                        float tooClose = Mathf.Max(6f, effRange * 0.35f);
+                        // Phased dodge (zdtd_bot dodge, ported back): while dodging, first
+                        // backpedal away, then flip to a hard strafe on the randomized dir.
+                        if (_dodgeTicks > 0)
                         {
-                            if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
+                            _dodgeTicks--;
+                            if (Time.time >= _nextPathRecalc)
+                            {
+                                if (_dodgeBackRemain > 0) { _dodgeBackRemain--; BotBrain.Backpedal(me, _target, _strafeDir); }
+                                else { _strafeDir = -_strafeDir; BotBrain.Strafe(me, _target, _strafeDir); }
+                                _nextPathRecalc = Time.time + 0.12f;
+                            }
                         }
-                        else // inside standoff - backpedal to reopen range
+                        else if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
+                        {
+                            if (dist > tooClose)
+                            {
+                                if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
+                            }
+                            else // inside standoff - backpedal to reopen range
+                            {
+                                if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
+                            }
+                        }
+                        else if (dist < tooClose)
                         {
                             if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
                         }
+                        else if (Rng01() < 0.12f) _strafeDir = -_strafeDir;
                     }
-                    else if (dist < tooClose)
-                    {
-                        if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
-                    }
-                    else if (Rng01() < 0.12f) _strafeDir = -_strafeDir;
                 }
                 else
                 {

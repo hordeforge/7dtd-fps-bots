@@ -51,6 +51,7 @@ namespace BotMod.AI
             public int StrafeDir;    // -1 or 1
             public float CampLogit;
             public float RetreatLogit;
+            public float StrafeLogit; // continuous strafe sigmoid (R10 movement)
             public float FireGate;
         }
 
@@ -135,6 +136,7 @@ namespace BotMod.AI
                 outs.FireGate = fire;
                 outs.ShouldFire = fire > 0.5f;
                 outs.StrafeDir = strafe > 0.5f ? 1 : -1;
+                outs.StrafeLogit = strafe;
                 return true;
             }
             catch { return false; }
