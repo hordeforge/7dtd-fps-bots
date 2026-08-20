@@ -319,11 +319,41 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
                     tgt[_rr.randrange(len(tgt))] = cand.copy()
 
-    # promote best
+    # promote best — held-gated so a weaker run never clobbers the shipped champion
     if best_w is not None:
         best_path = Path("evolved/best.json")
-        ga.save_best(best_path, best_w, generation=gens - 1, fitness=best_f, config=config)
-        print(f"best -> {best_path}  gen {gens-1}  fitness {best_f:+.4f}")
+        candidate = best_w
+        candidate_held, current_held = float("-inf"), float("-inf")
+        # Validate candidate on held seed (light, 40 matches) — canonical weights.
+        try:
+            _saved_act = harness.ACTIVATION
+            harness.ACTIVATION = 0
+            _saved_elo, _saved_econ, _saved_surv, _saved_stuck = harness.FIT_ELO, harness.FIT_ECON, harness.FIT_SURV, harness.FIT_STUCK
+            harness.FIT_ELO, harness.FIT_ECON, harness.FIT_SURV, harness.FIT_STUCK = 0.55, 0.25, 0.15, 0.05
+            candidate_held = float(np.mean([harness.evaluate(candidate, 999, m2, 999) for m2 in range(40)]))
+            harness.ACTIVATION = _saved_act
+            harness.FIT_ELO, harness.FIT_ECON, harness.FIT_SURV, harness.FIT_STUCK = _saved_elo, _saved_econ, _saved_surv, _saved_stuck
+        except Exception:
+            candidate_held = float("-inf")
+        # Measure the existing champion's held (if any) with the same held probe.
+        if best_path.exists():
+            try:
+                _cur = json.loads(best_path.read_text())
+                _curw = np.array(_cur["weights"], dtype=float)
+                _saved_act = harness.ACTIVATION
+                harness.ACTIVATION = 0
+                _saved_elo, _saved_econ, _saved_surv, _saved_stuck = harness.FIT_ELO, harness.FIT_ECON, harness.FIT_SURV, harness.FIT_STUCK
+                harness.FIT_ELO, harness.FIT_ECON, harness.FIT_SURV, harness.FIT_STUCK = 0.55, 0.25, 0.15, 0.05
+                current_held = float(np.mean([harness.evaluate(_curw, 999, m3, 999) for m3 in range(40)]))
+                harness.ACTIVATION = _saved_act
+                harness.FIT_ELO, harness.FIT_ECON, harness.FIT_SURV, harness.FIT_STUCK = _saved_elo, _saved_econ, _saved_surv, _saved_stuck
+            except Exception:
+                current_held = float("-inf")
+        if candidate_held >= current_held or current_held == float("-inf"):
+            ga.save_best(best_path, candidate, generation=gens - 1, fitness=best_f, config=config)
+            print(f"best -> {best_path}  gen {gens-1}  train {best_f:+.4f}  held40 {candidate_held:+.4f} (promoted, beats {current_held:+.4f})")
+        else:
+            print(f"skipped best.json: candidate held40 {candidate_held:+.4f} < existing {current_held:+.4f} (keep current champion)")
 
     print(f"run dir: {run_dir}")
     (run_dir / "leaderboards.jsonl").write_text("")  # placeholder
