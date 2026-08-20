@@ -260,12 +260,23 @@ namespace BotMod.Core
                     // the other way. Still gated by _strafeUntil / TryShootBurst so a broken
                     // net cannot spam moves.
                     TryNeuralStrafeDir(ref _strafeDir);
-                    // Continuous FPS strafe when in attack range
+                    // Continuous FPS strafe when in attack range.
+                    // Weapon-aware standoff: if we're inside ~35% of effective weapon range
+                    // (too close for a ranged weapon), backpedal + circle to keep distance,
+                    // instead of standing in melee range. Shotguns close in, snipers keep range.
+                    float tooClose = Mathf.Max(6f, Weapon.Range * 0.35f);
                     if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
                     {
-                        if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
+                        if (dist > tooClose)
+                        {
+                            if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
+                        }
+                        else // inside standoff - backpedal to reopen range
+                        {
+                            if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
+                        }
                     }
-                    else if (dist < 7f) // too close - backpedal + circle
+                    else if (dist < tooClose)
                     {
                         if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
                     }
