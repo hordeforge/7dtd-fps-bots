@@ -211,15 +211,32 @@ namespace BotMod.Core
             try
             {
                 int x = Mathf.FloorToInt(pos.x), z = Mathf.FloorToInt(pos.z);
-                // Probe from a little above expected surface, not from y=250 straight down through void.
-                // If the column is empty (over water/void), return zero so caller retries.
+                // Prefer a physics raycast down — finds terrain collider even when
+                // voxels are air above a cave (which voxel scan would anchor to cave floor y≈5).
+                try
+                {
+                    Vector3 probe = new Vector3(pos.x, Mathf.Clamp(pos.y + 25f, 60f, 120f), pos.z);
+                    Ray ray = new Ray(probe, Vector3.down);
+                    if (Physics.Raycast(ray, out RaycastHit hit, 130f, -1))
+                    {
+                        // hit on terrain/mesh — anchor just above impact
+                        if (hit.point.y > 10f) return new Vector3(pos.x, hit.point.y + 1f, pos.z);
+                    }
+                } catch { }
+                // Voxel scan fallback: prefer highest walkable surface, not cave floor.
                 int top = Mathf.Clamp(Mathf.FloorToInt(pos.y) + 30, 0, 250);
                 for (int y = top; y >= 0; y--)
                 {
                     var bv = world.GetBlock(new Vector3i(x, y, z));
-                    if (bv.type != 0) return new Vector3(pos.x, y + 2f, pos.z);
+                    if (bv.type != 0 && Block.list[bv.type] != null && Block.list[bv.type].IsCollideMovement)
+                    {
+                        // skip if there's ceiling directly above (inside cave)
+                        bool caved = false;
+                        try { for (int yy = y + 3; yy <= y + 12 && yy <= 250; yy++) { var b2 = world.GetBlock(new Vector3i(x, yy, z)); if (b2.type != 0 && Block.list[b2.type] != null && Block.list[b2.type].IsCollideMovement) { caved = true; break; } } } catch { }
+                        if (caved && y < 20) continue; // cave floor, keep scanning up
+                        return new Vector3(pos.x, y + 2f, pos.z);
+                    }
                 }
-                // Fallback: full column scan up to 250 if top-down probe missed
                 for (int y = top + 1; y <= 250; y++)
                 {
                     var bv = world.GetBlock(new Vector3i(x, y, z));

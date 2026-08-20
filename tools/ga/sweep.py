@@ -115,20 +115,23 @@ def main():
         print(f"  running {key} ...", flush=True)
         curves[key] = run_one(hidden, act, args.pop, args.gens, args.seed)
 
+    # keep only successful curves for table/ranking/plots (non-H16 are skipped until numba templates)
+    ok = {k: v for k, v in curves.items() if v}
+    if not ok:
+        print("no successful curves (all skipped) — nothing to rank/plot"); return
     # summary table
     print("\n layout        best   mean@last   Δ best-mean   FLOPs/bot   W")
     print(" ────────────────────────────────────────────────────────────")
-    for key in sorted(curves):
+    for key in sorted(ok):
         hidden = int(key.split("-")[0][1:])
-        act = key.split("-")[1]
-        _, best, mean = zip(*curves[key])
+        _, best, mean = zip(*ok[key])
         b = best[-1]; m = mean[-1]
         flops = 2 * 14 * hidden + 2 * hidden * 5
         W = hidden * 14 + hidden + 5 * hidden + 5
         print(f" {key:13s} {b:+.3f}  {m:+.3f}       {b-m:+.3f}       {flops:4d}      {W:3d}")
 
     # rank by final best
-    ranked = sorted(curves.items(), key=lambda kv: kv[1][-1][1], reverse=True)
+    ranked = sorted(ok.items(), key=lambda kv: kv[1][-1][1], reverse=True)
     print(f"\n winner: {ranked[0][0]}  (best {ranked[0][1][-1][1]:+.3f})")
 
     # plot all curves on one chart
@@ -137,13 +140,13 @@ def main():
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(8.5, 3.8))
-        for key in sorted(curves):
-            xs, bs, ms = zip(*curves[key])
+        for key in sorted(ok):
+            xs, bs, ms = zip(*ok[key])
             ax.plot(xs, bs, lw=1.5, label=f"{key} best")
             ax.plot(xs, ms, lw=1.0, ls="--", alpha=0.85, label=f"{key} mean")
         ax.set_xlabel("generation"); ax.set_ylabel("fitness (synthetic)")
         ax.set_title("Layout sweep — fitness over generations (pop "
-                     f"{args.pop} gens {args.gens} seed {args.seed}, synthetic stub)")
+                     f"{args.pop} gens {args.gens} seed {args.seed}, combat)")
         ax.legend(frameon=False, fontsize=7, ncols=3)
         ax.grid(True, alpha=0.18)
         fig.tight_layout()
@@ -155,7 +158,7 @@ def main():
     except ImportError:
         print("(matplotlib not installed — table only)")
     # also dump JSON for CI diffing
-    dump = {k: [{"gen": g, "best": b, "mean": m} for (g, b, m) in v] for k, v in curves.items()}
+    dump = {k: [{"gen": g, "best": b, "mean": m} for (g, b, m) in v] for k, v in ok.items()}
     jpath = Path(f"evolved/runs/sweep_{args.seed}.json") if args.out is None else Path(args.out).with_suffix(".json")
     jpath.parent.mkdir(parents=True, exist_ok=True)
     jpath.write_text(json.dumps(dump, indent=2))
