@@ -73,12 +73,22 @@ namespace BotMod.Core
         uint RngNext() { _rngState = _rngState * 1103515245u + 12345u; return _rngState; }
         float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
         float RngSym() { return 2f * Rng01() - 1f; }
+        float _missingSince = 0f; // when GetEntity last returned null (grace for trader lookup hiccups)
         public bool IsDeadOrUnloaded(World world)
         {
             if (_dead) return true;
             if (world == null) return false;
+            // Trust a cached alive entity even if a fresh lookup glitches (trader bodies can
+            // occasionally miss the world entity dict). Prevents bots being dropped mid-fight.
+            if (_cachedEntity != null && _cachedEntity.entityId == EntityId && _cachedEntity.IsAlive() && !_cachedEntity.IsDead()) return false;
             var e = world.GetEntity(EntityId) as EntityAlive;
-            if (e == null) return true;
+            if (e == null)
+            {
+                if (_missingSince == 0f) _missingSince = Time.time;
+                if (Time.time - _missingSince < 6f) return false;
+                return true;
+            }
+            _missingSince = 0f;
             if (e.IsDead() || !e.IsAlive()) return true;
             return false;
         }
@@ -223,7 +233,10 @@ namespace BotMod.Core
                     _lastKnownTargetPos = tPos;
                     _hasLastKnownTarget = true;
                 }
-                bool inRange = dist <= Weapon.Range && dist <= cfg.AttackRange;
+                // Weapon-aware effective attack range: short/close guns stay at AttackRange,
+                // long guns (sniper/AK) get to use more of their real range advantage.
+                float effRange = Mathf.Min(Weapon.Range, cfg.AttackRange + Mathf.Max(0f, Weapon.Range - 55f) * 0.7f);
+                bool inRange = dist <= effRange;
 
                 if (inRange && canSee)
                 {
@@ -269,7 +282,7 @@ namespace BotMod.Core
                     // Weapon-aware standoff: if we're inside ~35% of effective weapon range
                     // (too close for a ranged weapon), backpedal + circle to keep distance,
                     // instead of standing in melee range. Shotguns close in, snipers keep range.
-                    float tooClose = Mathf.Max(6f, Weapon.Range * 0.35f);
+                    float tooClose = Mathf.Max(6f, effRange * 0.35f);
                     if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
                     {
                         if (dist > tooClose)
