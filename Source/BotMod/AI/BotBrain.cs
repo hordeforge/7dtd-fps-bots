@@ -195,9 +195,24 @@ namespace BotMod.AI
                 float dist = dir.magnitude;
                 if (dist < 0.2f) return;
                 dir.Normalize();
+                Vector3 before = me.position;
                 try { me.MoveEntityHeaded(dir, false); } catch { }
                 try { me.SetLookPosition(pos + Vector3.up * 1f); } catch { }
                 if (dist > 6f) try { me.FindPath(pos, 1f, false, null); } catch { }
+                // Trader bodies (npcTraderJoel bots) ignore MoveEntityHeaded — the engine
+                // only moves them through their AI moveHelper, which we don't drive. Detect
+                // that (position didn't change) and step the position directly so player-model
+                // bots actually patrol/chase instead of freezing at spawn.
+                bool moved = Vector3.Distance(me.position, before) > 0.01f;
+                if (!moved)
+                {
+                    // nudge toward dest; keep y as-is (caller's FindGround anchors it)
+                    float stepSpeed = 1.6f;
+                    Vector3 step = dir * (stepSpeed * UnityEngine.Time.deltaTime);
+                    if (step.magnitude > dist) step = dir * dist;
+                    Vector3 np = me.position + step;
+                    try { me.position = np; } catch { }
+                }
             }
             catch { }
         }
