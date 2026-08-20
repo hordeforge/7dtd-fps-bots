@@ -57,6 +57,17 @@ namespace BotMod.Core
         // reload window (WeaponProfile.MagSize/ReloadSec).
         int _ammo;
         float _reloadUntil = -10f;
+        // zdtd_bot camp hold, ported back: when a camper decides to camp, hold
+        // position for a few seconds and slowly sweep the facing (Q3/Doom3 LTG)
+        // instead of just standing still or drifting. `_campHoldUntil` is when the
+        // hold ends; the sweep advances _campYaw each tick.
+        float _campHoldUntil;
+        float _campYaw;
+        // zdtd_bot dodge phase, ported back: on-hit dodge first backpedals for a
+        // few ticks then flips to a hard strafe on the randomized direction (Q3
+        // evasive dodge), rather than a flat strafe-only window.
+        int _dodgeTicks;      // ticks left in the dodge
+        int _dodgeBackRemain; // ticks of backpedal still left (then flip strafe)
 
         public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
         {
@@ -122,11 +133,16 @@ namespace BotMod.Core
                     _nextTargetScan = Time.time + 0.35f;
                 }
             }
-            // Strafe-dodge
+            // Strafe-dodge (zdtd_bot phased dodge, ported back): a dodge first
+            // backpedals for a few ticks (evade the incoming shot direction), then
+            // flips to a hard strafe on a randomized direction. Richer than a flat
+            // strafe-only window and reads as a real FPS hop.
             if (Rng01() < cfg.DodgeOnHitChance)
             {
-                _strafeUntil = Time.time + 0.7f + Rng01() * 0.6f;
+                _dodgeTicks = 12;          // ~0.6 s dodge
+                _dodgeBackRemain = 4;      // first ~0.2 s is a backpedal
                 _strafeDir = Rng01() < 0.5f ? -1 : 1;
+                _strafeUntil = Time.time + 0.7f + Rng01() * 0.6f;
                 _nextPathRecalc = Time.time; // force move tick
             }
             // Heavy-hit stagger (zdtd_bot parity): a hit above ~2x the pistol
@@ -295,7 +311,19 @@ namespace BotMod.Core
                     // (too close for a ranged weapon), backpedal + circle to keep distance,
                     // instead of standing in melee range. Shotguns close in, snipers keep range.
                     float tooClose = Mathf.Max(6f, effRange * 0.35f);
-                    if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
+                    // Phased dodge (zdtd_bot dodge, ported back): while dodging, first
+                    // backpedal away, then flip to a hard strafe on the randomized dir.
+                    if (_dodgeTicks > 0)
+                    {
+                        _dodgeTicks--;
+                        if (Time.time >= _nextPathRecalc)
+                        {
+                            if (_dodgeBackRemain > 0) { _dodgeBackRemain--; BotBrain.Backpedal(me, _target, _strafeDir); }
+                            else { _strafeDir = -_strafeDir; BotBrain.Strafe(me, _target, _strafeDir); }
+                            _nextPathRecalc = Time.time + 0.12f;
+                        }
+                    }
+                    else if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
                     {
                         if (dist > tooClose)
                         {
@@ -342,7 +370,25 @@ namespace BotMod.Core
                     if (moved < 0.18f)
                     {
                         if (_stuckSince == 0f) _stuckSince = Time.time;
-                        else if (Time.time - _stuckSince > cfg.StuckTimeoutSec) { BotBrain.JumpOrStrafe(me); _stuckSince = 0f; _nextPathRecalc = Time.time + 0.2f; }
+                        else if (Time.time - _stuckSince > cfg.StuckTimeoutSec)
+                        {
+                            // Stuck perpendicular-juke (zdtd_bot memory-juke, ported back):
+                            // offset perpendicular to the obstacle so the bot goes AROUND its
+                            // chase target instead of jumping/strafing randomly. When no target
+                            // or the offset is tiny, fall back to the old JumpOrStrafe nudge.
+                            Vector3 from = myPos;
+                            Vector3 toward = chaseDest - from; toward.y = 0;
+                            bool juked = false;
+                            if (toward.sqrMagnitude > 0.04f)
+                            {
+                                toward.Normalize();
+                                Vector3 perp = Vector3.Cross(Vector3.up, toward) * ((EntityId & 1) == 0 ? 3f : -3f);
+                                Vector3 jukePos = from + perp;
+                                try { BotBrain.MoveTo(me, jukePos); juked = true; } catch { }
+                            }
+                            if (!juked) { try { BotBrain.JumpOrStrafe(me); } catch { } }
+                            _stuckSince = 0f; _nextPathRecalc = Time.time + 0.2f;
+                        }
                     }
                     else { _stuckSince = 0f; _lastPos = myPos; }
                 }
@@ -366,12 +412,27 @@ namespace BotMod.Core
                 if (wantCamp && maybeGoal == BotBrain.GoalType.Camp)
                 {
                     _state = BotBrain.State.Wander;
-                    if (_wanderTarget == UnityEngine.Vector3.zero || Time.time >= _nextWander)
+                    // Camp hold + facing sweep (zdtd_bot camp, ported back): instead of
+                    // drifting to a wander point, pick a spot once, hold there for a few
+                    // seconds and slowly sweep the facing (Q3/Doom3 LTG camper).
+                    if (_campHoldUntil < Time.time && Time.time >= _nextWander)
                     {
+                        _nextWander = Time.time + 9f + Rng01() * 5f;
+                        _campHoldUntil = Time.time + 4f + Rng01() * 3f; // hold ~4-7 s
+                        _campYaw = 0f;
                         _wanderTarget = BotBrain.FindCover(me, me, world);
                         if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
-                        _nextWander = Time.time + 9f + Rng01() * 5f;
                         BotBrain.MoveTo(me, _wanderTarget);
+                    }
+                    else if (Vector3.Distance(me.position, _wanderTarget) < 3f || _campHoldUntil > Time.time)
+                    {
+                        // Holding: sweep the facing slowly instead of standing static.
+                        if (Time.time >= _nextPathRecalc)
+                        {
+                            _nextPathRecalc = Time.time + 0.2f;
+                            _campYaw += 0.05f;
+                            try { me.SetLookPosition(me.position + Quaternion.Euler(0, _campYaw * Mathf.Rad2Deg, 0) * Vector3.forward); } catch { }
+                        }
                     }
                 }
                 else
