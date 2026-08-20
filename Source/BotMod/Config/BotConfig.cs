@@ -11,8 +11,9 @@ namespace BotMod.Config
         public bool DedicatedOnly { get; set; } = true;
         public int TargetBotCount { get; set; } = 6;
         public int MaxBots { get; set; } = 16;
-        // Vanilla dedi - use zombieSoldier skeleton with our FPS loop. No UMA XML needed.
-        public string BotEntityClass { get; set; } = "zombieSoldier";
+        // Bot body. Use the vanilla npcTraderJoel human (renders a player model and
+        // proves a positive EntityClass id on dedi); our FPS loop drives its combat.
+        public string BotEntityClass { get; set; } = "npcTraderJoel";
         public string BotWeapon { get; set; } = "mixed"; // mixed=random per bot from LoadoutPool, or a single gun id
         public string BotAmmo { get; set; } = "ammo762mmBulletBall";
         public int BotAmmoCount { get; set; } = 300;

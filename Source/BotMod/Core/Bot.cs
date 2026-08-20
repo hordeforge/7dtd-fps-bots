@@ -327,10 +327,12 @@ namespace BotMod.Core
         {
             if (e == null || e.IsDead()) return false;
             if (e.entityId == EntityId) return false;
-            if (BotManager.Instance.IsBotEntity(e.entityId) && !cfg.BotVsBot) return false;
+            bool eIsBot = BotManager.Instance.IsBotEntity(e.entityId);
+            if (eIsBot && !cfg.BotVsBot) return false;
+            // A mod bot uses a trader body, so don't auto-reject EntityTrader for bots.
+            if (!eIsBot && e is EntityTrader) return false;
             if (e is EntityPlayer && !cfg.BotVsPlayer) return false;
             if (e is EntityZombie && !cfg.BotVsZombie) return false;
-            if (e is EntityTrader) return false;
             if (e is EntitySupplyCrate) return false;
             return e.IsAlive();
         }
@@ -404,7 +406,23 @@ namespace BotMod.Core
                     DamageSource ds;
                     try { ds = new DamageSourceEntity(EnumDamageSource.External, EnumDamageTypes.Piercing, me.entityId); }
                     catch { ds = new DamageSource(EnumDamageSource.External, EnumDamageTypes.Piercing); }
-                    int dmgResult = target.DamageEntity(ds, dmg, head, 1f);
+                    int dmgResult = 0;
+                    // Trader bodies (npcTraderJoel bots) are damage-immune in the engine: the
+                    // vanilla DamageEntity call returns 0 and leaves HP unchanged. For a
+                    // bot-on-bot hit we bypass by applying raw health damage directly so
+                    // player-model bots can actually be killed (FPS scoring intact).
+                    bool targetIsBot = BotManager.Instance.IsBotEntity(target.entityId);
+                    if (target is EntityTrader && targetIsBot)
+                    {
+                        target.Health = Mathf.Max(0, target.Health - dmg);
+                        try { target.Stats?.Health?.SetChangedFlag(target.Health, target.Health + dmg); } catch { }
+                        dmgResult = dmg;
+                        if (target.Health <= 0) { try { target.SetDead(); } catch { } }
+                    }
+                    else
+                    {
+                        dmgResult = target.DamageEntity(ds, dmg, head, 1f);
+                    }
                     int hpAfter = target.Health;
                     if (hpBefore != hpAfter && Rng01() < 0.04f) ModApi.Log($"{Name} -> {target.entityId} dmg={dmg} res={dmgResult} hp {hpBefore}->{hpAfter} weap={Weapon.GunId}");
                     if (hpBefore == hpAfter && dmgResult == 0 && Rng01() < 0.02f) ModApi.Log($"{Name} shot {target.entityId} blocked dmg={dmg} res=0 weap={Weapon.GunId} burst={_burstLeft}");

@@ -73,7 +73,8 @@ namespace BotMod.AI
                     if (alives != null)
                         foreach (var a in alives)
                         {
-                            if (a == null || a == me || a.IsDead() || !(a is EntityZombie)) continue;
+                            if (a == null || a == me || a.IsDead() || !a.IsAlive()) continue;
+                            // Bot bodies are EntityTrader here, so do NOT restrict to zombies.
                             if (IsFriendly(me, a, cfg)) continue;
                             float dist = Vector3.Distance(myPos, a.position);
                             if (dist > cfg.VisionRange) continue;
@@ -111,6 +112,10 @@ namespace BotMod.AI
         {
             bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
             if (otherIsBot && !cfg.BotVsBot) return true;
+            // A mod-managed bot uses a trader body (npcTraderJoel) for the player model.
+            // It is a combat bot, NOT a friendly NPC trader — so don't apply the
+            // EntityTrader-friendly exemption to it.
+            if (otherIsBot) return false;
             if (other is EntityPlayer && !cfg.BotVsPlayer) return true;
             if (other is EntityZombie && !cfg.BotVsZombie) return true;
             if (other is EntityTrader) return true;

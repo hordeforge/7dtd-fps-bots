@@ -289,8 +289,9 @@ namespace BotMod.Core
         // Prefer the human trader model (provably binds positive on dedi) so bots render
         // as player bodies. Custom Appender human classes (SDCS/Npc/Bandit) are rejected by
         // this dedi build (they get a negative EntityClass id), so we reuse the vanilla
-        // npcTraderJoel human. Zombie soldiers remain the fallback for the 20% mix.
-        static readonly string[] _botClassPool = new[] { "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "zombieSoldier", "zombieNurse" };
+        // All-human bot bodies: npcTraderJoel (positive id, renders as a player body).
+        // Zombie soldiers are no longer in the default pool — player models only.
+        static readonly string[] _botClassPool = new[] { "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel" };
         public static string PickBotClass(BotConfig cfg)
         {
             if (cfg.BotEntityClass == null) return "npcTraderJoel";
@@ -309,7 +310,7 @@ namespace BotMod.Core
                 int classId = EntityClass.FromString(want);
                 if (classId < 0)
                 {
-                    foreach (var alias in new[] { "npcTraderJoel", "npcTraderRekt", "npcTraderBob", "zombieSoldier", "zombieNurse" })
+                    foreach (var alias in new[] { "npcTraderJoel", "npcTraderRekt", "npcTraderBob", "npcTraderHugh", "npcTraderJen" })
                     {
                         classId = EntityClass.FromString(alias);
                         if (classId >= 0) { want = alias; ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
