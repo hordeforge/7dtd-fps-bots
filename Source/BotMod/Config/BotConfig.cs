@@ -51,6 +51,7 @@ namespace BotMod.Config
         public float RespawnDelaySec { get; set; } = 3f; // Q3-like 3s
         public float SpawnProtectionSec { get; set; } = 1.2f;
         public bool AnnounceSpawns { get; set; } = true;
+        public bool BotAnnounceKillsInChat { get; set; } = true; // broadcast bot frags to player chat
         public bool DropLootOnDeath { get; set; } = false;
         // Strafe / dodge
         public float StrafeChance { get; set; } = 0.9f;

@@ -52,9 +52,12 @@ namespace BotMod.AI
                         try
                         {
                             string msg = $"[Bot] {k} fragged {v}";
-                            // Dedicated servers use GameManager.GameMessage(SGameEntityKilledData) under the hood;
-                            // we don't call a player-only GameMessage overload directly.
                             global::Log.Out($"[BotMod] {msg} (K:{killer.KilledPlayers} Z:{killer.KilledZombies} D:{killer.Died} S:{killer.Score})");
+                            // Best-effort chat broadcast to connected players (reflection-based so the
+                            // exact GameMessageServer signature never breaks the build; no-op if the
+                            // API differs or no players are connected).
+                            if (ModApi.Config.BotAnnounceKillsInChat)
+                                try { ChatMessageServer(msg); } catch { }
                         }
                         catch { }
                     }
@@ -67,6 +70,68 @@ namespace BotMod.AI
                 {
                     try { global::Log.Out($"[BotMod] victim [Bot] {v} died (D:{victim.Died} S:{victim.Score})"); } catch { }
                 }
+            }
+            catch { }
+        }
+
+        /// <summary>Best-effort server->client chat broadcast (dedicated-safe). Uses reflection
+        /// against GameManager/ChatMessageServer so the exact API signature never breaks the
+        /// build; no-op when the API differs or no players are connected.</summary>
+        static void ChatMessageServer(string msg)
+        {
+            try
+            {
+                var gm = GameManager.Instance;
+                if (gm == null) return;
+                // Recipients = connected players (empty collection => broadcast).
+                System.Collections.Generic.List<ClientInfo> cts = new System.Collections.Generic.List<ClientInfo>();
+                try { if (ConnectionManager.Instance?.Clients?.List != null) cts = new System.Collections.Generic.List<ClientInfo>(ConnectionManager.Instance.Clients.List); } catch { }
+                // Prefer ChatMessageServer(int?) constructor chain; wrap as few assumptions as possible.
+                try
+                {
+                    var t = typeof(GameManager);
+                    // Try GameManager.GameMessage(EnumGameMessages, string, string, float, string[]) or similar.
+                    var m = t.GetMethod("GameMessage", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+                    if (m != null)
+                    {
+                        // Best-effort: find an overload accepting (EnumGameMessages, string message).
+                        foreach (var ov in t.GetMethods())
+                        {
+                            if (ov.Name != "GameMessage") continue;
+                            var ps = ov.GetParameters();
+                            try
+                            {
+                                if (ps.Length >= 2 && ps[0].ParameterType.Name == "EnumGameMessages" && ps[1].ParameterType == typeof(string))
+                                    { ov.Invoke(gm, new object[] { (int)0, msg }); return; }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+                // Fallback: direct ChatMessageServer packet if reachable via NetPackage reflection.
+                try
+                {
+                    var cmT = System.Type.GetType("ChatMessageServer, Assembly-CSharp");
+                    if (cmT != null)
+                    {
+                        var inst = System.Activator.CreateInstance(cmT);
+                        var sp = cmT.GetMethod("SendPackage", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        if (sp != null)
+                        {
+                            var p = sp.GetParameters();
+                            try
+                            {
+                                if (p.Length >= 1 && p[0].ParameterType == typeof(byte))
+                                    { sp.Invoke(inst, new object[] { (byte)0 }); return; }
+                                if (p.Length >= 2)
+                                    { sp.Invoke(inst, new object[] { cts, msg, false }); return; }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
             }
             catch { }
         }
