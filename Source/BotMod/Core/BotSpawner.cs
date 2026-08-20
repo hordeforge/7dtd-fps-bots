@@ -286,11 +286,14 @@ namespace BotMod.Core
             return _dmSpawns;
         }
 
-        // Prefer the player-mesh bot so rifles actually show in the hand. The zombie pool is fallback.
-        static readonly string[] _botClassPool = new[] { "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "npcSurvivorBot", "zombieSoldier", "zombieNurse" };
+        // Prefer the human trader model (provably binds positive on dedi) so bots render
+        // as player bodies. Custom Appender human classes (SDCS/Npc/Bandit) are rejected by
+        // this dedi build (they get a negative EntityClass id), so we reuse the vanilla
+        // npcTraderJoel human. Zombie soldiers remain the fallback for the 20% mix.
+        static readonly string[] _botClassPool = new[] { "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "npcTraderJoel", "zombieSoldier", "zombieNurse" };
         public static string PickBotClass(BotConfig cfg)
         {
-            if (cfg.BotEntityClass == null) return "npcSurvivorBot";
+            if (cfg.BotEntityClass == null) return "npcTraderJoel";
             if (cfg.BotEntityClass == "mixed") return _botClassPool[RngPick(_botClassPool.Length)];
             if (cfg.BotEntityClass != null && cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
             return cfg.BotEntityClass;
@@ -306,7 +309,7 @@ namespace BotMod.Core
                 int classId = EntityClass.FromString(want);
                 if (classId < 0)
                 {
-                    foreach (var alias in new[] { "npcSurvivorBot", "zombieSoldier", "zombieSoldierFeral", "zombieArlene", "zombieNurse" })
+                    foreach (var alias in new[] { "npcTraderJoel", "npcTraderRekt", "npcTraderBob", "zombieSoldier", "zombieNurse" })
                     {
                         classId = EntityClass.FromString(alias);
                         if (classId >= 0) { want = alias; ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
