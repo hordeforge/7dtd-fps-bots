@@ -230,7 +230,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
         rad = 8.0 + v2 * 18.0
         bx[i] = 40.0 + math.cos(ang) * rad
         by[i] = 40.0 + math.sin(ang) * rad
-        bhp[i] = 100.0; bweapon[i] = bot_weapon; bskill[i] = float(bot_skill); balive[i] = True; bvelx[i] = 0.0; bvely[i] = 0.0
+        bhp[i] = 100.0; bweapon[i] = (rng >> 8) % 6; bskill[i] = float(bot_skill); balive[i] = True; bvelx[i] = 0.0; bvely[i] = 0.0
     for i in range(n_zombies):
         v, rng = _lcg01(rng)
         ang = v * 6.283185307179586
@@ -413,7 +413,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon)
         bx[i] = 40.0 + math.cos(ang) * rad
         by[i] = 40.0 + math.sin(ang) * rad
         bhp[i] = 100.0
-        bweapon[i] = bot_weapon  # fixed per match sample; harness varies across matches
+        bweapon[i] = (rng >> 8) % 6  # per-bot mixed weapon (matches live random loadout)
         bskill[i] = float(bot_skill)
         balive[i] = True
         bvelx[i] = 0.0

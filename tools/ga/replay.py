@@ -138,7 +138,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
         v2, rng = _lcg01(rng); rad = 8.0 + v2 * 18.0
         bx.append(40.0 + math.cos(ang) * rad); by.append(40.0 + math.sin(ang) * rad)
-        bhp.append(100.0); bweapon.append(bot_weapon); bskill.append(float(bot_skill)); balive.append(True)
+        bhp.append(100.0); bweapon.append((rng >> 8) % 6); bskill.append(float(bot_skill)); balive.append(True)
     zx = []; zy = []; zhp = []; zalive = []
     for i in range(n_zombies):
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
