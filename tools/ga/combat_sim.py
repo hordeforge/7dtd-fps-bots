@@ -342,7 +342,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
                 continue  # reserve dry: out of rounds for the rest of the match
             if not can_see: continue
             if dist > WEAPON_RANGE[bweapon[bi]] + 2.0: continue
-            if is_retreating: continue
+            # R11: no fire suppression while retreating (policy kites and shoots)
             if fire_gate < 0.5: continue
             if reaction_cd[bi] > 0 or burst_cd[bi] > 0: continue
             shots += 1
@@ -653,8 +653,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
                 continue
             if dist > WEAPON_RANGE[bweapon[bi]] + 2.0:
                 continue
-            if is_retreating:
-                continue
+            # R11: no fire suppression while retreating — retreat is now policy-
+            # driven (the net kites and should be able to shoot while backpedaling)
             if fire_gate < 0.5:
                 continue
             if reaction_cd[bi] > 0 or burst_cd[bi] > 0:
