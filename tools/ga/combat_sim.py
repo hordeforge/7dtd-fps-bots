@@ -215,7 +215,7 @@ def trait_jitter(net_id):
 
 
 @numba.njit
-def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1):
+def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
     # relu variant of the full tick loop (9792 bytes duplicated to keep njit simple)
     bx = np.empty(16, dtype=numba.float32)
     by = np.empty(16, dtype=numba.float32)
@@ -231,13 +231,18 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
     zalive = np.empty(16, dtype=numba.boolean)
     rng = seed & 0xFFFFFFFF
     for i in range(n_bots):
-        v, rng = _lcg01(rng)
-        ang = v * 6.283185307179586
-        v2, rng = _lcg01(rng)
-        rad = 8.0 + v2 * 18.0
-        bx[i] = 40.0 + math.cos(ang) * rad
-        by[i] = 40.0 + math.sin(ang) * rad
-        bhp[i] = 100.0; bweapon[i] = (rng >> 8) % 6; bskill[i] = float(bot_skill); balive[i] = True; bvelx[i] = 0.0; bvely[i] = 0.0
+        if spawn_gap > 0.0:
+            # duel arena: fixed separation on a line through the center (deterministic)
+            bx[i] = 40.0 + (spawn_gap * 0.5) * (1.0 if i % 2 == 0 else -1.0)
+            by[i] = 40.0
+        else:
+            v, rng = _lcg01(rng)
+            ang = v * 6.283185307179586
+            v2, rng = _lcg01(rng)
+            rad = 8.0 + v2 * 18.0
+            bx[i] = 40.0 + math.cos(ang) * rad
+            by[i] = 40.0 + math.sin(ang) * rad
+        bhp[i] = 100.0; bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6); bskill[i] = float(bot_skill); balive[i] = True; bvelx[i] = 0.0; bvely[i] = 0.0
     for i in range(n_zombies):
         v, rng = _lcg01(rng)
         ang = v * 6.283185307179586
@@ -260,7 +265,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
         last_x[i] = bx[i]; last_y[i] = by[i]
     stuck = np.zeros(16, dtype=numba.int64)
     dt = 0.05
-    env = seed % 5
+    env = env_pin if env_pin >= 0 else (seed % 5)
     y_raw = np.empty(5, dtype=numba.float32); x_obs = np.empty(INPUTS, dtype=numba.float32)
     use_opp = w_opp is not None
     if use_opp and n_evolved < 0:
@@ -422,7 +427,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
 
 
 @numba.njit
-def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1):
+def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
     """One headless match. Returns a struct of stats for fitness.
     w is flat. We simulate n_bots evolved bots vs each other + zombies.
     For PvP zombie tests the harness calls this with different (n_bots, n_zombies)
@@ -444,16 +449,20 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
     zalive = np.empty(16, dtype=numba.boolean)
 
     rng = seed & 0xFFFFFFFF
-    # init bots at random ring positions around 40,40
+    # init bots at random ring positions around 40,40 (or fixed separation for duels)
     for i in range(n_bots):
-        v, rng = _lcg01(rng)
-        ang = v * 6.283185307179586
-        v2, rng = _lcg01(rng)
-        rad = 8.0 + v2 * 18.0
-        bx[i] = 40.0 + math.cos(ang) * rad
-        by[i] = 40.0 + math.sin(ang) * rad
+        if spawn_gap > 0.0:
+            bx[i] = 40.0 + (spawn_gap * 0.5) * (1.0 if i % 2 == 0 else -1.0)
+            by[i] = 40.0
+        else:
+            v, rng = _lcg01(rng)
+            ang = v * 6.283185307179586
+            v2, rng = _lcg01(rng)
+            rad = 8.0 + v2 * 18.0
+            bx[i] = 40.0 + math.cos(ang) * rad
+            by[i] = 40.0 + math.sin(ang) * rad
         bhp[i] = 100.0
-        bweapon[i] = (rng >> 8) % 6  # per-bot mixed weapon (matches live random loadout)
+        bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6)  # pinned loadout or random
         bskill[i] = float(bot_skill)
         balive[i] = True
         bvelx[i] = 0.0
@@ -504,7 +513,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
     stuck = np.zeros(16, dtype=numba.int64)
 
     dt = 0.05
-    env = seed % 5
+    env = env_pin if env_pin >= 0 else (seed % 5)
     y_raw = np.empty(5, dtype=numba.float32)
     x_obs = np.empty(INPUTS, dtype=numba.float32)
 

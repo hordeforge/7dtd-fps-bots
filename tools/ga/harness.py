@@ -39,6 +39,11 @@ DRAWS_PER_CONFIG = 2
 _POOL = [0, 2, 3, 5, 0, 2]
 # fixed opponent policy for mixed arenas: all-zero weights = always-firing no-brain
 _OPP_STATIC = np.zeros(325, dtype=np.float32)
+# duel arena pins (R11 rework): 50-unit spawn gap, open env, equal AKs so the
+# fight develops and the elo term rewards winning duels
+DUEL_SPAWN_GAP = 50.0
+DUEL_ENV = 2
+DUEL_WEAPON = 2
 
 
 def _seed_for(generation: int, genome_idx: int, match_idx: int, run_seed: int = 42) -> int:
@@ -68,21 +73,21 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
     # instead of pitting the policy against itself (kills == deaths, elo pinned).
     if CURRICULUM == "pvp_first":
         configs = [
-            (2, 2, 0, 1200), (2, 2, 0, 1200), (2, 2, 0, 1200), (2, 2, 0, 1200),
-            (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800), (6, 6, 0, 1800),
+            (2, 1, 0, 1200), (2, 1, 0, 1200), (2, 1, 0, 1200), (2, 1, 0, 1200),
+            (2, 1, 0, 1200), (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800),
             (4, 4, 6, 1200),
         ]
     elif CURRICULUM == "horde_first":
         configs = [
-            (2, 2, 0, 1200), (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800),
+            (2, 1, 0, 1200), (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800),
             (4, 4, 6, 1800), (4, 4, 6, 1800), (4, 4, 6, 1800), (4, 4, 6, 1800),
             (6, 6, 0, 1800),
         ]
     else:
         configs = [
-            (2, 2, 0, 1200), (2, 2, 0, 1200), (2, 2, 0, 1200), (2, 2, 0, 1200),
-            (6, 6, 0, 1800), (6, 6, 0, 1800), (6, 6, 0, 1800), (6, 6, 0, 1800),
-            (4, 4, 6, 1800),
+            (2, 1, 0, 1200), (2, 1, 0, 1200), (2, 1, 0, 1200),
+            (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800), (6, 6, 0, 1800),
+            (4, 4, 6, 1800), (4, 4, 6, 1800),
         ]
     # dual-seed regularizer: training fitness = mean over two seed streams
     fn = _simulate_relu if ACTIVATION == 1 else _simulate
@@ -94,7 +99,9 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
                 weapon = _POOL[m % len(_POOL)]
                 skill = _skill_for_match(m)
                 if n_evolved < n_bots:
-                    r = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon, _OPP_STATIC, n_evolved)
+                    # fixed-opponent duel arena (R11 rework): spawn gap + open env + equal AKs
+                    r = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon,
+                           _OPP_STATIC, n_evolved, DUEL_SPAWN_GAP, DUEL_ENV, DUEL_WEAPON)
                 else:
                     r = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)
                 fitness = FIT_ELO * r[0] + FIT_ECON * r[1] + FIT_SURV * r[2] - FIT_STUCK * r[3] - FIT_CAMP * r[4]
