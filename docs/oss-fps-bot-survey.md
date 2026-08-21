@@ -31,6 +31,15 @@ open. Implemented in the clanker heuristic bot (`Bot.cs`, gated by the
 path-recalc cadence, reusing `FindCover`) and mirrored in the zdtd guest
 (`bot_reload_ticks > 0` joins the cover-seeking branch); both rebuilt.
 
+**Executed borrow (2026-08-21):** the real-map navigation recommendation landed
+in zdtd as a host-side nav layer (`src/world/nav.zig`, Recast/Detour-inspired
+but lightweight): a 4-block walkability grid over loaded chunks via
+`Chunk.standableY`, alloc-free BFS pathfinding (64x64 region cap, 32-waypoint
+cap), exposed to the bot guest as a `zdtd.query "path"` response the chase
+follows, with direct-steer fallback. Tests green (`zig build test`). The full
+Recast/Detour tile mesh remains a future option if the coarse grid proves too
+coarse for dense POIs.
+
 ## Landscape
 
 | Project | License | Engine lineage | Bot highlight |
