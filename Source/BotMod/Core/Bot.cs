@@ -343,6 +343,22 @@ namespace BotMod.Core
                         // direction, flip mine so the team splits around the target (FPS handshake)
                         // instead of clumping on one side.
                         if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
+                        // Cover-while-reloading (CS-bot lineage, docs/oss-fps-bot-survey.md):
+                        // an empty mag with a live visible target seeks cover instead of
+                        // standing in the open. Gated by the path-recalc cadence.
+                        if (Time.time < _reloadUntil && canSee && Time.time >= _nextPathRecalc)
+                        {
+                            Vector3 cover = BotBrain.FindCover(me, _target, world);
+                            if (cover != Vector3.zero)
+                            {
+                                _nextPathRecalc = Time.time + 0.6f;
+                                BotBrain.MoveTo(me, cover);
+                            }
+                            else
+                            {
+                                BotBrain.Strafe(me, _target, _strafeDir);
+                            }
+                        }
                         // Continuous FPS strafe when in attack range.
                         // Weapon-aware standoff: if we're inside ~35% of effective weapon range
                         // (too close for a ranged weapon), backpedal + circle to keep distance,

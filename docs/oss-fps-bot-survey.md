@@ -10,6 +10,27 @@ projects. The network was unavailable at survey time, so nothing was re-cloned
 or diffed; treat feature claims as directional until a repo is pulled and the
 specific file is inspected (the pattern used for `/tmp/ioq3` and `/tmp/d3`).
 
+**Verification pass (2026-08-21, network restored):** Podbot mm was cloned
+(`APGRoboCop/podbot_mm`) and Unvanquished's bot source fetched. Corrections and
+confirmations:
+
+- Podbot's "camping" is CS-specific bomb/objective defense (`TASK_CAMP` with
+  camp vectors and timers), not a generic anti-camping detector. Our bots
+  already have an equivalent camp-hold; nothing new to port there.
+- Q3 has no reload (infinite ammo), so "cover while reloading" is NOT a Q3
+  behavior; it comes from the CS-bot lineage (Podbot's task stack covers
+  reload + reposition). It is still a genuine gap in our bots, which reload
+  standing in the open.
+- Unvanquished confirmed: `src/shared/navgen/navgen.h` includes `Recast.h`,
+  `DetourNavMesh.h`, `DetourTileCache.h` — the industry-standard OSS navmesh
+  is the real-map navigation model to follow.
+
+**Executed port (2026-08-21):** cover-while-reloading, from the CS-bot lineage:
+an empty magazine with a live visible target seeks cover instead of standing
+open. Implemented in the clanker heuristic bot (`Bot.cs`, gated by the
+path-recalc cadence, reusing `FindCover`) and mirrored in the zdtd guest
+(`bot_reload_ticks > 0` joins the cover-seeking branch); both rebuilt.
+
 ## Landscape
 
 | Project | License | Engine lineage | Bot highlight |
