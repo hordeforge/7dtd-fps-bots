@@ -51,3 +51,12 @@ fix, 10.93 at R10): +0.80.
   margins grew faster than the champion's absolute score.
 - The C# live port from R10 is unaffected (sim-only changes; the live brain
   still uses the R10 movement semantics).
+
+## 5. Follow-up: 400-gen attempt overfit (not promoted)
+
+Resuming the duel-arena run for 200 more generations (run
+`2026-08-21_110740_pop64_g400_s42`, train peaked +18.20) produced a champion
+that holds **11.04 avg, below the 200-gen champion's 11.91** — the extra
+training overfit the seed-42 draw chain (train/held gap widened). Per the
+held-gated promotion rule it was NOT promoted; the 200-gen champion
+(11.91, margins +7.18/+7.75/+7.22) remains the shipped genome.
