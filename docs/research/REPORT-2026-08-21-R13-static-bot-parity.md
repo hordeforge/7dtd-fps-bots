@@ -94,4 +94,29 @@ binary state here; the following need a decision:
 5. Any zdtd-side change goes through zdtd's own process (provenance rows,
    `make check` green, Wasm rebuild).
 
-No changes were made this pass; this report is the verification deliverable.
+## 6. Executed alignment (mags, 2026-08-21)
+
+Decision item 4 executed deliberately: magazine sizes aligned to the game's
+`items.xml` MagazineSize base_set on all three sides, with re-eval:
+
+| Gun | game | old (clanker/zdtd) | new |
+|---|---|---|---|
+| pistol | 15 | 12 / 12 | 15 |
+| double-barrel | 2 | 6 / 6 | 2 |
+| AK47 | 30 | 30 / 30 | 30 |
+| sniper | 12 | 5 / 5 | 12 |
+| auto-shotgun | 16 | 6 / 40 | 16 |
+| SMG5 | 30 | 32 / 32 | 30 |
+
+- `tools/ga/combat_sim.py` WEAPON_MAG, `Source/BotMod/Config/BotConfig.cs`
+  WeaponProfile MagSize (auto vs double-barrel split 16/2), and the zdtd guest
+  `weapon_mag` (wasm rebuilt) updated.
+- Re-eval on the canonical gate with the new mags: **champion held 13.04 avg**
+  (12.696/13.612/12.815), margins +8.044/+8.862/+8.223, GOAL MET. The champion
+  IMPROVED (11.91 -> 13.04): larger mags mean less reload downtime for the
+  kiter. No re-evolution needed.
+- BotMod.dll rebuilt and installed (live bots get the game-accurate mags on the
+  next server restart).
+
+Still open (needs direction): decision items 1, 2, 3 — retreat-firing behavior,
+the skill-table curves, and the hit-model curve alignment.

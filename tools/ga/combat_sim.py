@@ -22,7 +22,11 @@ WEAPON_PELLETS = np.array([1, 8, 1, 1, 6, 1], dtype=np.int32)
 WEAPON_FIRE_RATE = np.array([0.28, 0.55, 0.11, 0.90, 0.22, 0.09], dtype=np.float32)
 WEAPON_BURST_MIN = np.array([1, 1, 3, 1, 1, 5], dtype=np.int32)
 WEAPON_BURST_MAX = np.array([3, 1, 6, 1, 1, 9], dtype=np.int32)
-WEAPON_MAG = np.array([12, 6, 30, 5, 6, 32], dtype=np.int32)
+# magazine sizes aligned to game Data/Config/items.xml MagazineSize base_set
+# (pistol 15, double-barrel 2, AK 30, sniper 12, auto-shotgun 16, SMG 30);
+# R13 parity audit found the old table (12/6/30/5/6/32) matched neither the game
+# nor the zdtd guest (auto 40)
+WEAPON_MAG = np.array([15, 2, 30, 12, 16, 30], dtype=np.int32)
 WEAPON_RELOAD = np.array([1.2, 2.6, 2.0, 2.5, 2.6, 1.8], dtype=np.float32)
 
 # Fire-cost tuning (task shape: finite ammo + sustained-fire spread so a
