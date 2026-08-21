@@ -3,7 +3,10 @@
 *The clanker static/heuristic bot AI (`BotBrain.cs`, `Bot.cs` non-neural paths,
 `BotConfig.cs`) is cross-pollinated with zdtd's bot brain guest
 (`zdtd/mods/zdtd_bot/zdtd_bot.c`, a Wasm plugin per zdtd ADR 0026; the host
-`bot.zig` is a servant). This audit compares the two side by side, with the game's
+`bot.zig` is a servant). zdtd's `docs/BOTS_SPEC.md` and `docs/BOTS_PRD.md` cite
+clanker (and `docs/q3-inspiration-notes.md`) as the Q3/Doom 3 behavioral
+reference; this report is the parity ledger for that relationship. This audit
+compares the two side by side, with the game's
 `items.xml` as ground truth for weapon data. Status: `verified` (static reading +
 game data); the alignment itself needs direction (see section 5).*
 
