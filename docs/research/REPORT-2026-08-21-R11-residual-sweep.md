@@ -63,3 +63,20 @@ not available in this session. The code path itself runs without exceptions.
 - Next steps: duel discrimination requires a change to the duel ENV structure
   (open-field duels with fixed loadouts), not an accuracy model; the playtest
   client suite for live kite verification.
+
+## 6. Post-sweep fixes (committed `f529d92`)
+
+The retreat fire-suppression guardrail (`is_retreating` blocked firing at low hp)
+predates policy-driven movement and was removed from both sim variants. With
+retreat now a policy output, the guardrail made a damaged kiter backpedal without
+firing (death spiral). After removal: champion held 10.93 -> **11.11 avg**
+(11.186/11.133/10.998), margins +6.23/+6.15/+6.06, GOAL MET; horde stays clean
+(seed-999 elo 5, 1 death). This change is sim-only; the C# fire gating in
+`TryShootBurst` is unaffected.
+
+Duel diagnosis (why duels still lose, instrumented): duels are decided in ~3
+seconds — bots spawn 8-26 units apart, the champion often draws a weak random
+weapon (e.g. pistol, 12 mag), and the turret's close-range constant fire shreds
+it (hp 100 -> 20 in 2.5 s) before any kiting develops. Discriminative duels need
+larger spawn separation + fixed equal loadouts; that arena rework is the next
+step, not an accuracy-model change.
