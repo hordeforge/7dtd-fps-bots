@@ -48,6 +48,7 @@
   "BotVsBot": true,
   "BotVsZombie": true,
   "BotVsPlayer": true,
+  "BotTeam": false,
   "PathRecalcIntervalSec": 0.45,
   "StuckTimeoutSec": 2.0,
   "RandomWanderRadius": 60,

@@ -11,9 +11,11 @@ namespace BotMod.Config
         public bool DedicatedOnly { get; set; } = true;
         public int TargetBotCount { get; set; } = 6;
         public int MaxBots { get; set; } = 16;
-        // Bot body. Use the vanilla npcTraderJoel human (renders a player model and
-        // proves a positive EntityClass id on dedi); our FPS loop drives its combat.
-        public string BotEntityClass { get; set; } = "npcTraderJoel";
+        // Bot body. "mixed" picks zombieSoldier variants: mod-spawned trader bodies
+        // (npcTraderJoel) render nothing on this dedi and survivor classes come back
+        // negative, so soldiers are the working visible FPS bodies (our loop drives
+        // their combat, not the zombie AI).
+        public string BotEntityClass { get; set; } = "mixed";
         public string BotWeapon { get; set; } = "mixed"; // mixed=random per bot from LoadoutPool, or a single gun id
         public string BotAmmo { get; set; } = "ammo762mmBulletBall";
         public int BotAmmoCount { get; set; } = 300;
@@ -41,6 +43,9 @@ namespace BotMod.Config
         public bool BotVsBot { get; set; } = true;
         public bool BotVsZombie { get; set; } = true;
         public bool BotVsPlayer { get; set; } = true;
+        // Squad mode: all bots are one team and never target or damage each other,
+        // regardless of BotVsBot. Players and zombies are still fair game.
+        public bool BotTeam { get; set; } = false;
         public float PathRecalcIntervalSec { get; set; } = 0.45f;
         public float StuckTimeoutSec { get; set; } = 2.0f;
         public float RandomWanderRadius { get; set; } = 60f;

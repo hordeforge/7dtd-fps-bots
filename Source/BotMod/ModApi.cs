@@ -4,6 +4,7 @@ using System.Reflection;
 using BotMod.Config;
 using BotMod.Core;
 using HarmonyLib;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace BotMod
@@ -24,7 +25,7 @@ namespace BotMod
                 Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
                 Config.Normalize();
                 try { BotCharacterDB.Load(Config); } catch {}
-                Log($"BotMod v0.2.0 loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
+                Log($"BotMod v0.3.0 loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
 
                 if (!Config.Enabled)
                     Log("Disabled by config (enabled=false). Use 'bot enable' or edit Config/botmod.json then 'bot reload'.");
@@ -114,6 +115,25 @@ namespace BotMod
         {
             try { global::Log.Out("[BotMod] " + msg); }
             catch { Console.WriteLine("[BotMod] " + msg); }
+        }
+
+        // Persist one config field to the host-mounted canonical copy
+        // (/mods/BotMod/Config/botmod.json) and the copy the running game reads,
+        // so a toggle survives container restarts. The key is the JSON property
+        // name in BotConfig (e.g. "BotTeam", "BotVsBot", "Enabled").
+        public static void PersistConfigField(string key, object value)
+        {
+            foreach (string path in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
+            {
+                try
+                {
+                    if (!File.Exists(path)) continue;
+                    var root = JObject.Parse(File.ReadAllText(path));
+                    root[key] = JToken.FromObject(value);
+                    File.WriteAllText(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                }
+                catch (Exception ex) { Log("bot config persist failed (" + path + "): " + ex.Message); }
+            }
         }
     }
 }

@@ -115,11 +115,10 @@ namespace BotMod.AI
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {
             bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
-            if (otherIsBot && !cfg.BotVsBot) return true;
-            // A mod-managed bot uses a trader body (npcTraderJoel) for the player model.
-            // It is a combat bot, NOT a friendly NPC trader — so don't apply the
-            // EntityTrader-friendly exemption to it.
-            if (otherIsBot) return false;
+            // Squad mode allies every bot with every bot; otherwise respect vsBot.
+            // Bot bodies are zombieSoldier (EntityZombie) - the friendly checks
+            // below must not exempt them from the vsBot gate.
+            if (otherIsBot) return cfg.BotTeam || !cfg.BotVsBot;
             if (other is EntityPlayer && !cfg.BotVsPlayer) return true;
             if (other is EntityZombie && !cfg.BotVsZombie) return true;
             if (other is EntityTrader) return true;

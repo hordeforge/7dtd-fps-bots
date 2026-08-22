@@ -20,7 +20,9 @@ namespace BotMod.Commands
             "  bot neural reload            - re-read evolved/best.json (or BotNeuralWeightPath)\n" +
             "  bot list                     - alive bots (weapon/state/target)\n" +
             "  bot count 8                  - keep 8 alive\n" +
-            "  bot reload                   - reload Config/botmod.json";
+            "  bot reload                   - reload Config/botmod.json\n" +
+            "  bot vs bot|zombie|player <on|off> - bots shoot that target class\n" +
+            "  bot team <on|off>            - squad mode: all bots one team, never fight each other";
 
         public override void Execute(List<string> _params, CommandSenderInfo _senderInfo)
         {
@@ -42,6 +44,8 @@ namespace BotMod.Commands
                     case "enable": ModApi.Config.Enabled = true; SdtdConsole.Instance.Output("BotMod enabled."); break;
                     case "disable": ModApi.Config.Enabled = false; SdtdConsole.Instance.Output("BotMod disabled. Existing bots remain until removed."); break;
                     case "neural": DoNeural(_params); break;
+                    case "vs": case "shoot": DoVs(_params); break;
+                    case "team": case "squad": DoTeam(_params); break;
                     default: SdtdConsole.Instance.Output("Unknown bot subcommand: " + sub + ". Try: bot help"); break;
                 }
             }
@@ -50,7 +54,8 @@ namespace BotMod.Commands
         void DoStatus()
         {
             var cfg = ModApi.Config; var mgr = BotManager.Instance;
-            SdtdConsole.Instance.Output($"BotMod: enabled={cfg.Enabled} target={cfg.TargetBotCount} max={cfg.MaxBots} alive={mgr.BotCount} class={cfg.BotEntityClass} weapon={cfg.BotWeapon} diff={cfg.Difficulty} vision={cfg.VisionRange} attack={cfg.AttackRange} vsBot={cfg.BotVsBot}");
+            SdtdConsole.Instance.Output($"BotMod: enabled={cfg.Enabled} target={cfg.TargetBotCount} max={cfg.MaxBots} alive={mgr.BotCount} class={cfg.BotEntityClass} weapon={cfg.BotWeapon} diff={cfg.Difficulty} vision={cfg.VisionRange} attack={cfg.AttackRange}");
+            SdtdConsole.Instance.Output($"  team={cfg.BotTeam} vsBot={cfg.BotVsBot} vsZombie={cfg.BotVsZombie} vsPlayer={cfg.BotVsPlayer} (bot team on|off / bot vs <target> on|off)");
             SdtdConsole.Instance.Output($"  spawn: radius={cfg.SpawnRadius} nearPlayer={cfg.SpawnNearPlayerChance} spawnpoints={cfg.UseSpawnpoints} strafe={cfg.StrafeChance} dodge={cfg.DodgeOnHitChance}");
         }
         void DoList()
@@ -166,6 +171,45 @@ namespace BotMod.Commands
         {
             if (p.Count < 2 || !int.TryParse(p[1], out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
             d = Math.Max(0, Math.Min(4, d)); ModApi.Config.Difficulty = d; ModApi.Config.Normalize(); SdtdConsole.Instance.Output($"Skill set to {d}. Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
+        }
+        void DoVs(List<string> p)
+        {
+            if (p.Count < 3 || !ParseOnOff(p[2], out bool on))
+            {
+                SdtdConsole.Instance.Output("Usage: bot vs <bot|zombie|player> <on|off>  e.g. bot vs bot off  (all three on = free-for-all)");
+                return;
+            }
+            string target = p[1].ToLowerInvariant();
+            string field = null;
+            switch (target)
+            {
+                case "bot": case "bots": ModApi.Config.BotVsBot = on; field = "BotVsBot"; break;
+                case "zombie": case "zombies": ModApi.Config.BotVsZombie = on; field = "BotVsZombie"; break;
+                case "player": case "players": case "human": ModApi.Config.BotVsPlayer = on; field = "BotVsPlayer"; break;
+                default:
+                    SdtdConsole.Instance.Output("Unknown target: " + target + ". Use bot|zombie|player.");
+                    return;
+            }
+            ModApi.PersistConfigField(field, on);
+            SdtdConsole.Instance.Output("Bots will now shoot " + target + ": " + (on ? "ON" : "OFF") + (ModApi.Config.BotTeam && target.StartsWith("bot", StringComparison.OrdinalIgnoreCase) ? " (note: squad mode overrides vs bot)" : "") + ".");
+        }
+        void DoTeam(List<string> p)
+        {
+            if (p.Count < 2 || !ParseOnOff(p[1], out bool on))
+            {
+                SdtdConsole.Instance.Output("Usage: bot team <on|off>  (on = all bots are one squad and never fight each other)");
+                return;
+            }
+            ModApi.Config.BotTeam = on;
+            ModApi.PersistConfigField("BotTeam", on);
+            SdtdConsole.Instance.Output(on ? "Squad mode ON: all bots are allies. (players/zombies still fair game)" : "Squad mode OFF: bots revert to vs-bot setting.");
+        }
+        static bool ParseOnOff(string v, out bool on)
+        {
+            string t = v.ToLowerInvariant();
+            if (t == "on" || t == "true" || t == "1" || t == "yes") { on = true; return true; }
+            if (t == "off" || t == "false" || t == "0" || t == "no") { on = false; return true; }
+            on = false; return false;
         }
         void DoNeural(List<string> p)
         {

@@ -76,6 +76,9 @@ type BotStatus = {
   strafeChance?: number;
   dodgeOnHitChance?: number;
   botVsBot?: boolean;
+  botVsZombie?: boolean;
+  botVsPlayer?: boolean;
+  botTeam?: boolean;
   botHealth?: number;
   useSpawnpoints?: boolean;
   players?: Array<BotPlayer>;
@@ -88,6 +91,7 @@ type BotAction = {
   level?: number;
   player?: string;
   weapon?: string;
+  target?: string;
   on?: boolean;
 };
 type SortState = { key: string; dir: number };
@@ -313,6 +317,30 @@ function renderBrainRow(h: CreateElement, s: BotStatus, busy: string, btn: (labe
     s.neuralPath !== undefined && s.neuralPath !== "" ? h("span", { className: "botmod-window" }, `weights: ${s.neuralPath}`) : null);
 }
 
+function renderTeamRow(h: CreateElement, s: BotStatus, busy: string, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
+  const team = s.botTeam === true;
+  return h("div", { className: "botmod-row botmod-brain" },
+    h("span", { className: "botmod-label" }, "Squad:"),
+    btn(team ? "Free-for-all" : "Squad mode", { action: "team", on: !team }, team ? "botmod-primary" : ""),
+    h("span", { className: "botmod-window" }, team ? "all bots are allies" : "bots fight each other"));
+}
+
+function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: BotAction) => void): unknown {
+  const toggles: Array<{ label: string; target: string; on: boolean }> = [
+    { label: "Bots", target: "bot", on: s.botVsBot === true },
+    { label: "Zombies", target: "zombie", on: s.botVsZombie === true },
+    { label: "Players", target: "player", on: s.botVsPlayer === true }
+  ];
+  return h("div", { className: "botmod-row botmod-brain" },
+    h("span", { className: "botmod-label" }, "Shoot at:"),
+    toggles.map((t): unknown =>
+      h("button", {
+        key: t.target, className: `botmod-btn${t.on ? " botmod-primary" : ""}`, disabled: busy !== "",
+        onClick: (): void => post({ action: "vs", target: t.target, on: !t.on })
+      }, `${t.label}${t.on ? "" : " OFF"}`)),
+    h("span", { className: "botmod-window" }, "squad mode overrides vs Bots"));
+}
+
 function renderConfigRow(h: CreateElement, s: BotStatus): unknown {
   return h("div", { className: "botmod-row botmod-cfg" },
     h("span", { className: "botmod-window" },
@@ -419,6 +447,8 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
     renderSkillRow(h, s, busy, post),
     renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn),
     renderBrainRow(h, s, busy, btn),
+    renderTeamRow(h, s, busy, btn),
+    renderVsRow(h, s, busy, post),
     renderConfigRow(h, s),
     renderScoreboard(h, bots, busy, post, sort, setSort));
 }

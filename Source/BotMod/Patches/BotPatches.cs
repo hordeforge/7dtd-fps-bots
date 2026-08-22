@@ -168,7 +168,7 @@ namespace BotMod.Patches
                         var cfg = ModApi.Config;
                         if (__instance is EntityPlayer && !cfg.BotVsPlayer) return false;
                         if (__instance is EntityZombie && !cfg.BotVsZombie) return false;
-                        if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && !cfg.BotVsBot) return false;
+                        if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && (cfg.BotTeam || !cfg.BotVsBot)) return false;
                     }
                 }
                 // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)

@@ -175,6 +175,21 @@
     function renderBrainRow(h, s, busy, btn) {
         return h("div", { className: "botmod-row botmod-brain" }, h("span", { className: "botmod-label" }, "Brain:"), btn(s.neural === true ? "Static AI" : "GA brain", { action: "neural", on: s.neural !== true }), s.neuralPath !== undefined && s.neuralPath !== "" ? h("span", { className: "botmod-window" }, `weights: ${s.neuralPath}`) : null);
     }
+    function renderTeamRow(h, s, busy, btn) {
+        const team = s.botTeam === true;
+        return h("div", { className: "botmod-row botmod-brain" }, h("span", { className: "botmod-label" }, "Squad:"), btn(team ? "Free-for-all" : "Squad mode", { action: "team", on: !team }, team ? "botmod-primary" : ""), h("span", { className: "botmod-window" }, team ? "all bots are allies" : "bots fight each other"));
+    }
+    function renderVsRow(h, s, busy, post) {
+        const toggles = [
+            { label: "Bots", target: "bot", on: s.botVsBot === true },
+            { label: "Zombies", target: "zombie", on: s.botVsZombie === true },
+            { label: "Players", target: "player", on: s.botVsPlayer === true }
+        ];
+        return h("div", { className: "botmod-row botmod-brain" }, h("span", { className: "botmod-label" }, "Shoot at:"), toggles.map((t) => h("button", {
+            key: t.target, className: `botmod-btn${t.on ? " botmod-primary" : ""}`, disabled: busy !== "",
+            onClick: () => post({ action: "vs", target: t.target, on: !t.on })
+        }, `${t.label}${t.on ? "" : " OFF"}`)), h("span", { className: "botmod-window" }, "squad mode overrides vs Bots"));
+    }
     function renderConfigRow(h, s) {
         return h("div", { className: "botmod-row botmod-cfg" }, h("span", { className: "botmod-window" }, `vision ${num(s.visionRange)}m · attack ${num(s.attackRange)}m · spawn r ${num(s.spawnRadius)}m` +
             ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
@@ -240,7 +255,7 @@
         const btn = makeBtn(h, busy, post);
         const armedBtn = makeArmedBtn(h, armed, setArmed, busy, post);
         const pill = (on, onLabel, offLabel) => h("span", { className: `botmod-pill ${on ? "botmod-ok" : "botmod-off"}` }, on ? onLabel : offLabel);
-        return h("div", { className: "botmod-panel" }, renderBotHeader(h, s, onlinePlayers, pill), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderConfigRow(h, s), renderScoreboard(h, bots, busy, post, sort, setSort));
+        return h("div", { className: "botmod-panel" }, renderBotHeader(h, s, onlinePlayers, pill), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderConfigRow(h, s), renderScoreboard(h, bots, busy, post, sort, setSort));
     }
     // Menu entry registered only when the web session cookie is present; the
     // dashboard reloads the page after login/logout, so this re-evaluates.

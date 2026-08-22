@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Net;
 using System.Text;
-using Newtonsoft.Json.Linq;
 using Utf8Json;
 using Webserver;
 using Webserver.WebAPI;
-using BotMod.Config;
 using BotMod.Core;
 using UnityEngine;
 
@@ -22,9 +19,6 @@ namespace BotMod.Web
     public sealed class Bot : AbsRestApi
     {
         public Bot() : base(null) { }
-
-        static string CanonicalConfigPath => "/mods/BotMod/Config/botmod.json"; // host-mounted, survives restarts
-        static string GameConfigPath => BotConfig.DefaultPathBesideAssembly();  // the copy the running game reads
 
         public override void HandleRestGet(RequestContext context)
         {
@@ -152,6 +146,37 @@ namespace BotMod.Web
                             Respond(writer, context, "difficulty", level);
                         }
                         break;
+                    case "team":
+                        {
+                            // {"action":"team","on":bool} - squad mode: all bots are
+                            // one team (never target/damage each other). Persisted.
+                            bool on = _jsonInput != null && _jsonInput.TryGetValue("on", out object o)
+                                && Convert.ToString(o).ToLowerInvariant() == "true";
+                            ModApi.Config.BotTeam = on;
+                            ModApi.PersistConfigField("BotTeam", on);
+                            Respond(writer, context, "team", on);
+                        }
+                        break;
+                    case "vs":
+                        {
+                            // {"action":"vs","target":"bot|zombie|player","on":bool} -
+                            // bots shoot that target class (same as `bot vs`). Persisted.
+                            string target = _jsonInput != null && _jsonInput.TryGetValue("target", out object t)
+                                ? Convert.ToString(t).ToLowerInvariant() : "";
+                            bool on = _jsonInput != null && _jsonInput.TryGetValue("on", out object o)
+                                && Convert.ToString(o).ToLowerInvariant() == "true";
+                            string field = null;
+                            switch (target)
+                            {
+                                case "bot": case "bots": ModApi.Config.BotVsBot = on; field = "BotVsBot"; break;
+                                case "zombie": case "zombies": ModApi.Config.BotVsZombie = on; field = "BotVsZombie"; break;
+                                case "player": case "players": case "human": ModApi.Config.BotVsPlayer = on; field = "BotVsPlayer"; break;
+                                default: SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_TARGET", null); return;
+                            }
+                            ModApi.PersistConfigField(field, on);
+                            Respond(writer, context, "vs", target, "on", on);
+                        }
+                        break;
                     default:
                         SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_ACTION", null);
                         break;
@@ -187,22 +212,7 @@ namespace BotMod.Web
             return result;
         }
 
-        static void PersistEnabled(bool enabled)
-        {
-            // Keep the canonical (host-mounted) copy and the running game copy
-            // in sync so the flag survives container restarts.
-            foreach (string path in new[] { CanonicalConfigPath, GameConfigPath })
-            {
-                try
-                {
-                    if (!File.Exists(path)) continue;
-                    JObject root = JObject.Parse(File.ReadAllText(path));
-                    root["Enabled"] = enabled;
-                    File.WriteAllText(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
-                }
-                catch (Exception ex) { ModApi.Log("bot config persist failed (" + path + "): " + ex.Message); }
-            }
-        }
+        static void PersistEnabled(bool enabled) => ModApi.PersistConfigField("Enabled", enabled);
 
         static void Respond(JsonWriter writer, RequestContext context, string key, object value, string key2 = null, object value2 = null, string key3 = null, object value3 = null)
         {
@@ -289,6 +299,9 @@ namespace BotMod.Web
                 strafeChance = cfg.StrafeChance,
                 dodgeOnHitChance = cfg.DodgeOnHitChance,
                 botVsBot = cfg.BotVsBot,
+                botVsZombie = cfg.BotVsZombie,
+                botVsPlayer = cfg.BotVsPlayer,
+                botTeam = cfg.BotTeam,
                 botHealth = cfg.BotHealth,
                 useSpawnpoints = cfg.UseSpawnpoints,
                 players = players,

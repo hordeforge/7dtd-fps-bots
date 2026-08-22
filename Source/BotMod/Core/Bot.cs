@@ -594,6 +594,10 @@ namespace BotMod.Core
 
         void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire = true)
         {
+            // Squad mode: never fire on a teammate. FindTarget already excludes
+            // them via IsFriendly; this guard covers a stale target picked up
+            // before the toggle or an aggro-swap that bypassed the scan.
+            if (cfg.BotTeam && target != null && BotManager.Instance.IsBotEntity(target.entityId)) return;
             if (Time.time < _reactionUntil) return;
             if (Time.time < _burstPauseUntil) return;
             // Ammo pacing (zdtd_bot parity): an empty magazine starts a reload
