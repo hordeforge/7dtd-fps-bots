@@ -26,7 +26,7 @@ namespace BotMod
                 Config.Normalize();
                 try { BotCharacterDB.Load(Config); }
                 catch (Exception ex) { Warn("characters.json load failed, using defaults: " + ex); }
-                Log($"BotMod v0.4.0 loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
+                Log($"BotMod v{BotModVersion.Number} loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
 
                 if (!Config.Enabled)
                     Log("Disabled by config (enabled=false). Use 'bot enable' or edit Config/botmod.json then 'bot reload'.");

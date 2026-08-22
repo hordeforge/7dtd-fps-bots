@@ -30,6 +30,17 @@ fi
 OUT="$ROOT/dist/BotMod"
 SRC="$ROOT/Source/BotMod"
 
+# Version drift guard: BotModVersion.Number is canonical. ModInfo.xml is what
+# the engine's mod listing shows and cannot reference the C# constant, so the
+# build fails when they disagree instead of shipping mismatched versions.
+CS_VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)";/\1/p' "$SRC/Core/BotModVersion.cs" || true)"
+XML_VERSION="$(sed -n 's/.*<Version value="\([^"]*\)".*/\1/p' "$SRC/ModInfo.xml" || true)"
+if [[ -z "$CS_VERSION" || "$CS_VERSION" != "$XML_VERSION" ]]; then
+  echo "ERROR: version drift: Source/BotMod/Core/BotModVersion.cs=$CS_VERSION vs Source/BotMod/ModInfo.xml=$XML_VERSION" >&2
+  echo "Bump both together (single commit) and add a CHANGELOG.md entry." >&2
+  exit 1
+fi
+
 # WebMod compiler version. Must match TSC_VERSION in scripts/lint-webui.sh,
 # whose freshness gate compares the committed bundle.js against a compile with
 # this exact version; building the shipped artifact with any other tsc makes

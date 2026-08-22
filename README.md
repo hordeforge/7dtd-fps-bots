@@ -110,6 +110,8 @@ make build         # full build: BotMod.dll + web bundle into dist/BotMod
 make check         # exactly what CI runs (shellcheck, vnu HTML lint, tsc/oxlint/bundle freshness)
 ```
 
+Released versions and upgrade notes are documented in `CHANGELOG.md`.
+
 CI runs only `make check`; `make test` needs mono installed locally, and
 `make build` needs the game's Managed DLLs (`SEVENDTD_DS_DIR`/`SEVENDTD_GAME_DIR`
 override the Steam paths scripts/build.sh probes). After editing

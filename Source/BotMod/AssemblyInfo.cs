@@ -1,3 +1,4 @@
 using System.Reflection;
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+using BotMod.Core;
+[assembly: AssemblyVersion(BotModVersion.Number)]
+[assembly: AssemblyFileVersion(BotModVersion.Number)]
