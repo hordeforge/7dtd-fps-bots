@@ -186,9 +186,9 @@ def build(runs, out: Path, replays):
         cd = curves_b64(runs, best_run_name)
         hs = held_strip_b64(runs)
         net = best_net_b64()
-        chunks.append(f"""<h2>1 · Evolution curves</h2><div class="card"><img src="data:image/png;base64,{cd}"></div>""")
-        chunks.append(f"""<h2>2 · Held-out stability</h2><div class="card"><img src="data:image/png;base64,{hs}"></div>""")
-        chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2><div class="card"><img src="data:image/png;base64,{net}"></div>""")
+        chunks.append(f"""<h2>1 · Evolution curves</h2><div class="card"><img alt="evolution curves" src="data:image/png;base64,{cd}"></div>""")
+        chunks.append(f"""<h2>2 · Held-out stability</h2><div class="card"><img alt="held-out stability strip" src="data:image/png;base64,{hs}"></div>""")
+        chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2><div class="card"><img alt="champion controller network" src="data:image/png;base64,{net}"></div>""")
 
     # Arena replays
     if replays:
@@ -196,7 +196,7 @@ def build(runs, out: Path, replays):
         chunks.append('<div class="grid">')
         for label, html in replays.items():
             b64 = base64.b64encode(html.encode()).decode()
-            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#93c5fd">{label}</div><iframe id="f{abs(hash(label))%9999}" width="100%" height="430"></iframe></div>')
+            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#93c5fd">{label}</div><iframe id="f{abs(hash(label))%9999}" style="width:100%" height="430"></iframe></div>')
         chunks.append('</div>')
         # Set srcdoc via JS so large embedded HTML/payloads don't need escaping in attributes.
         chunks.append("<script>")

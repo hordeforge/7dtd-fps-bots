@@ -43,5 +43,9 @@
       <HintPath>$(GameManagedDir)/LogLibrary.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Utf8Json">
+      <HintPath>$(GameManagedDir)/Utf8Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 </Project>

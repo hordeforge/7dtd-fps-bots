@@ -27,6 +27,13 @@ if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && dotne
   if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
   if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
 if [ -f "$SRC/Config/entityclasses.xml" ]; then cp "$SRC/Config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; elif [ -f "$ROOT/config/entityclasses.xml" ]; then cp "$ROOT/config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; fi
+  # WebMod: compile the TypeScript panel to bundle.js (dashboard loads
+  # /webmods/BotMod/bundle.js) and copy it plus the stylesheet into dist.
+  command -v tsc >/dev/null 2>&1 || { echo "ERROR: tsc (TypeScript) not found; cannot build WebMod" >&2; exit 1; }
+  tsc -p "$SRC/WebMod/tsconfig.json"
+  mkdir -p "$OUT/WebMod"
+  cp "$SRC/WebMod/bundle.js" "$OUT/WebMod/bundle.js"
+  cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"
   echo "OK -> $OUT/BotMod.dll"
   ls -la "$OUT"
   exit 0
@@ -46,6 +53,7 @@ refs=(
   -r:"$MANAGED/UnityEngine.AIModule.dll"
   -r:"$HARMONY"
   -r:"$MANAGED/Newtonsoft.Json.dll"
+  -r:"$MANAGED/Utf8Json.dll"
   -r:"$MANAGED/System.Xml.dll"
   -r:"$MANAGED/LogLibrary.dll"
   -r:"$MANAGED/System.Xml.dll"
@@ -58,5 +66,12 @@ cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
 if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
 if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
 if [ -f "$SRC/Config/entityclasses.xml" ]; then cp "$SRC/Config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; elif [ -f "$ROOT/config/entityclasses.xml" ]; then cp "$ROOT/config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; fi
+# WebMod: compile the TypeScript panel to bundle.js (dashboard loads
+# /webmods/BotMod/bundle.js) and copy it plus the stylesheet into dist.
+command -v tsc >/dev/null 2>&1 || { echo "ERROR: tsc (TypeScript) not found; cannot build WebMod" >&2; exit 1; }
+tsc -p "$SRC/WebMod/tsconfig.json"
+mkdir -p "$OUT/WebMod"
+cp "$SRC/WebMod/bundle.js" "$OUT/WebMod/bundle.js"
+cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"
 echo "OK -> $OUT/BotMod.dll"
 ls -la "$OUT"

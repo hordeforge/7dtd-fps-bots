@@ -158,9 +158,9 @@ def build(runs: list[Path], out: Path):
         sec = [f"<h2 style='margin:18px 0 4px'>{run_dir.name}</h2>",
                f"<p style='color:#334155;font-size:13px'>{headline}</p>",
                f"<p style='color:#64748b;font-size:11px'>source: <code>{csv_path}</code> · {len(gens)} rows</p>"]
-        if band: sec.append(f"<div style='margin:10px 0'><img style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{band}' /></div>")
-        if wh:   sec.append(f"<div style='margin:10px 0'><img style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{wh}' /></div>")
-        if topo: sec.append(f"<div style='margin:10px 0'><img style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{topo}' /></div>")
+        if band: sec.append(f"<div style='margin:10px 0'><img alt='fitness band over generations' style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{band}' /></div>")
+        if wh:   sec.append(f"<div style='margin:10px 0'><img alt='weight histogram' style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{wh}' /></div>")
+        if topo: sec.append(f"<div style='margin:10px 0'><img alt='best network topology' style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{topo}' /></div>")
         if not HAS_MPL:
             sec.append("<p style='color:#b45309'>matplotlib not installed — showing headline only. <code>pip install matplotlib</code></p>")
         parts.append("\n".join(sec))

@@ -130,6 +130,28 @@ namespace BotMod.Web
                             Respond(writer, context, "neural", on, "loaded", on ? BotMod.AI.BotNeuralBrain.Loaded : false, "reason", why);
                         }
                         break;
+                    case "removeone":
+                        {
+                            // {"action":"removeOne","entityId":N} - remove a single bot.
+                            int entityId = 0;
+                            if (_jsonInput != null && _jsonInput.TryGetValue("entityId", out object id))
+                                int.TryParse(Convert.ToString(id), out entityId);
+                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), false);
+                            Respond(writer, context, "removed", removed, "entityId", entityId);
+                        }
+                        break;
+                    case "skill":
+                        {
+                            // {"action":"skill","level":0-4} - same as `bot skill`.
+                            int level = ModApi.Config.Difficulty;
+                            if (_jsonInput != null && _jsonInput.TryGetValue("level", out object lv))
+                                int.TryParse(Convert.ToString(lv), out level);
+                            level = Math.Max(0, Math.Min(4, level));
+                            ModApi.Config.Difficulty = level;
+                            ModApi.Config.Normalize();
+                            Respond(writer, context, "difficulty", level);
+                        }
+                        break;
                     default:
                         SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_ACTION", null);
                         break;
@@ -261,6 +283,14 @@ namespace BotMod.Web
                 neural = cfg.UseNeuralBrain,
                 neuralLoaded = BotMod.AI.BotNeuralBrain.Loaded,
                 neuralPath = BotMod.AI.BotNeuralBrain.LoadedPath,
+                visionRange = cfg.VisionRange,
+                attackRange = cfg.AttackRange,
+                spawnRadius = cfg.SpawnRadius,
+                strafeChance = cfg.StrafeChance,
+                dodgeOnHitChance = cfg.DodgeOnHitChance,
+                botVsBot = cfg.BotVsBot,
+                botHealth = cfg.BotHealth,
+                useSpawnpoints = cfg.UseSpawnpoints,
                 players = players,
                 bots = bots
             });

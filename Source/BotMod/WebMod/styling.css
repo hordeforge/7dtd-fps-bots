@@ -1,6 +1,6 @@
 /* BotMod WebMod styles. The dashboard loads this file globally, so every
    selector is scoped to the bot panel or the bot sidebar entry. */
-.botmod-panel { padding: 1rem; }
+.botmod-panel { padding: 1rem; box-sizing: border-box; height: 100%; overflow-y: auto; }
 .botmod-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .botmod-head h2 { margin: 0; }
 .botmod-window { opacity: .6; font-size: .8rem; margin-left: auto; }
@@ -38,3 +38,10 @@ a[data-for="tooltip-Bot"]::before {
   -webkit-mask: url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z%27 fill=%27%23000%27/%3E%3C/svg%3E') center/contain no-repeat;
   mask: url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z%27 fill=%27%23000%27/%3E%3C/svg%3E') center/contain no-repeat;
 }
+
+.botmod-sortable { cursor: pointer; user-select: none; }
+.botmod-sortable:hover { color: #8ab4f8; }
+.botmod-cfg { opacity: .75; }
+.botmod-remove { font-size: .72rem; padding: .05rem .45rem; }
+.botmod-armed { border-color: rgba(255, 112, 112, .9); color: #ff7070; font-weight: 700; animation: botmod-blink 1s step-start infinite; }
+@keyframes botmod-blink { 50% { opacity: .45; } }

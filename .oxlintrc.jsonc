@@ -1,0 +1,216 @@
+{
+  // oxlint config for the BotMod WebMod TypeScript source
+  // (Source/BotMod/WebMod/bundle.ts, scripts/lint-webui.sh, `make lint-webui`).
+  //
+  // Target: bundle.ts, compiled by tsc (WebMod/tsconfig.json, pinned
+  // TSC_VERSION) into the classic browser script bundle.js that the stock
+  // WebDashboard loads. env browser + es2024; the emitted target is ES2017,
+  // which is why the ES2022+ array APIs (at, toSorted, toReversed) are off.
+  //
+  // Rule set: identical to ../7dtd-apm/.oxlintrc.jsonc (the two webmod
+  // bundles share the same architecture: IIFE classic script, dashboard-
+  // injected React, untyped JSON payload boundary): the Rika-Labs/oxlint-
+  // standards v0.8.1 anti-slop baseline plus the strict-core subset applicable
+  // to browser classic scripts, extended with the typescript/unicorn rules the
+  // source passes and the dmmulroy/anti-slop plugin rules (vendored source at
+  // pinned SHA, fetched by scripts/lint-webui.sh). Warnings and errors are
+  // both enforced because scripts/lint-webui.sh runs with --deny-warnings.
+  //
+  // Thresholds match the strict preset: max-lines-per-function 60 (BotPanel
+  // and the render helpers are split to fit), max-classes-per-file 1,
+  // max-lines 1500, max-nested-callbacks 4.
+  //
+  // Deliberate off entries:
+  //   no-array-sort, no-array-reverse, unicorn/prefer-at: tsconfig targets
+  //     ES2017 (no lib bump), so toSorted/toReversed/at are unavailable; the
+  //     code keeps [...x].sort() / [...x].reverse() / index access instead.
+  //   @rikalabs/no-single-use-trivial-helpers: the render helpers (renderSpawnRow,
+  //     renderScoreboard, bySortKey, ...) exist to keep BotPanel under the
+  //     60-line cap; inlining them would blow the cap.
+  //   @rikalabs/no-trivial-runtime-guard-helpers: only the standard
+  //     Array.isArray builtin is used; the rule bans the builtin call itself.
+  //   eslint/no-implicit-globals, import/unambiguous: the bundle is a classic
+  //     script; top-level functions are the page contract, and there are no
+  //     imports by design.
+  //   vitest/*, jsdoc/*, strict-runtime node/*: not applicable (no tests, no
+  //     node runtime).
+  //   eslint/no-void: typescript/no-floating-promises (enforced below) requires
+  //     the void operator to mark fire-and-forget promises; no-void would ban it.
+  //
+  // Type-aware: options.typeAware runs the strict preset's typescript/* rules
+  // that need real type info (no-unsafe-*, strict-boolean-expressions,
+  // no-floating-promises, prefer-nullish-coalescing, ...). lint-webui.sh
+  // installs the separate oxlint-tsgolint binary and puts it on PATH. The
+  // tsconfig is strict (strictNullChecks): several of these rules refuse to
+  // run without it. The payload is untyped runtime JSON, so the boundary casts
+  // in the shape guards carry documented disable comments instead of an any
+  // alias.
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "env": { "browser": true, "es2024": true },
+  "options": { "typeAware": true },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "plugins": ["typescript", "unicorn"],
+  "jsPlugins": [
+    "@rikalabs/oxlint-standards/plugin",
+    { "name": "anti-slop", "specifier": "./anti-slop-src/index.ts" }
+  ],
+  "rules": {
+    // ---- dead / debug code ----
+    "no-debugger": "error",
+    "no-console": "error", // dashboard panel: console is debug leftover, never intended output
+    "no-unused-vars": "error",
+    "no-empty": "error",
+    "no-empty-function": "error",
+    "no-unreachable": "error",
+    "no-useless-catch": "error",
+    "no-self-compare": "error",
+    "no-constant-condition": "error",
+    "no-sequences": "error",
+    "no-alert": "error",
+    // ---- correctness of intent ----
+    "eqeqeq": ["error", "always"],
+    "no-cond-assign": "error",
+    "no-fallthrough": "error",
+    "no-implicit-coercion": ["error", { "allow": ["!!"] }],
+    "radix": "error",
+    "no-eval": "error",
+    "no-new-func": "error",
+    "no-new-wrappers": "error",
+    "no-script-url": "error",
+    "no-throw-literal": "error",
+    "no-param-reassign": "error",
+    "no-async-promise-executor": "error",
+    "no-promise-executor-return": "error",
+    "no-undef": "error",
+    // ---- idiomatic modern JS ----
+    "no-var": "error",
+    "prefer-const": "error",
+    "prefer-template": "error",
+    "no-useless-concat": "error",
+    "object-shorthand": "error",
+    "prefer-destructuring": "error",
+    "prefer-spread": "error",
+    // ---- shape caps (strict-core thresholds) ----
+    "max-lines-per-function": ["error", { "max": 60, "skipBlankLines": true, "skipComments": true }],
+    "max-classes-per-file": ["error", 1],
+    "max-lines": ["error", { "max": 1500, "skipBlankLines": true, "skipComments": true }],
+    "max-nested-callbacks": ["error", 4],
+    "no-nested-ternary": "error",
+    "no-lonely-if": "error",
+    "no-negated-condition": "error",
+    "no-else-return": "error",
+    "no-useless-return": "error",
+    "default-case": "error",
+    // ---- oxlint-standards strict-core native rules applicable to browser JS ----
+    "no-warning-comments": "error",
+    "no-shadow": ["error", { "hoist": "functions" }],
+    "no-return-assign": "error",
+    "no-loop-func": "error",
+    "no-constructor-return": "error",
+    "curly": ["error", "all"],
+    "no-multi-assign": "error",
+    "no-template-curly-in-string": "error",
+    "no-labels": "error",
+    "no-lone-blocks": "error",
+    "prefer-object-has-own": "error",
+    "no-implied-eval": "error",
+    "prefer-promise-reject-errors": "error",
+    "array-callback-return": "error",
+    // ---- typescript/* the source passes (2026-08-22) ----
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-definitions": ["error", "type"],
+    "typescript/array-type": ["error", { "default": "generic" }],
+    "typescript/explicit-function-return-type": "error",
+    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "as" }],
+    // ---- type-aware typescript/* (options.typeAware + oxlint-tsgolint; the
+    //      shape-guard boundary casts carry documented disables in bundle.ts) ----
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/strict-boolean-expressions": "error",
+    "typescript/no-unnecessary-condition": "error",
+    "typescript/prefer-nullish-coalescing": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-useless-default-assignment": "error",
+    "typescript/no-unnecessary-type-conversion": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-base-to-string": "error",
+    // ---- unicorn rules the source passes (2026-08-22) ----
+    "unicorn/catch-error-name": "error",
+    "unicorn/prefer-number-properties": "error",
+    "unicorn/prefer-global-this": "error",
+    "unicorn/prefer-optional-catch-binding": "error",
+    "unicorn/prefer-spread": "error",
+    "unicorn/explicit-length-check": "error",
+    "unicorn/numeric-separators-style": "error",
+    "unicorn/no-nested-ternary": "error",
+    // unicorn/consistent-function-scoping off: the whole bundle is one IIFE
+    // (plain-script global collision guard, see the bundle.ts header), so
+    // module-level helpers cannot hoist past the wrapper.
+    "unicorn/consistent-function-scoping": "off",
+    // ---- oxlint-standards custom plugin (@rikalabs/*): anti-slop heuristics ----
+    "@rikalabs/no-commented-out-code": "error",
+    "@rikalabs/no-identical-branches": "error",
+    "@rikalabs/no-tutorial-comments": "error",
+    "@rikalabs/no-ai-debt-comments": "error",
+    "@rikalabs/no-placeholder-implementation": "error",
+    "@rikalabs/no-disable-without-rationale": "error",
+    "@rikalabs/no-todo-without-issue": "error",
+    "@rikalabs/no-low-signal-variable-names": "error",
+    "@rikalabs/no-low-signal-public-names": "error",
+    "@rikalabs/no-generic-module-names": "error",
+    "@rikalabs/no-copy-paste-exports": "error",
+    "@rikalabs/no-debug-residue-filenames": "error",
+    "@rikalabs/no-standalone-classes": "error",
+    "@rikalabs/no-as-never": "error",
+    "@rikalabs/no-vague-verbs": "error",
+    "@rikalabs/no-bare-wrapper-functions": "error",
+    "@rikalabs/no-silent-catch-fallback": "error",
+    "@rikalabs/no-trivial-property-helpers": "error",
+    "@rikalabs/no-pass-through-intermediate-vars": "error",
+    "@rikalabs/no-anemic-errors": "error",
+    "@rikalabs/no-duplicate-context": "error",
+    "@rikalabs/no-is-record-helpers": "error",
+    "@rikalabs/no-property-default-fallbacks": "error",
+    "@rikalabs/no-double-type-assertion": "error",
+    "@rikalabs/no-redundant-const-assertion": "error",
+    "@rikalabs/no-hardcoded-secrets": "error",
+    "@rikalabs/no-sql-string-concat": "error",
+    // ---- dmmulroy/anti-slop plugin rules (vendored at pinned SHA; the
+    //      syntax/type-discipline rules the bundle passes). Boundary-typing
+    //      rules (no-unknown-*, no-unsafe-dictionary-type, no-runtime-typeof,
+    //      no-known-value-widening) are off: the payload is untyped runtime
+    //      JSON and React comes from the dashboard, so the shape guards at the
+    //      edge and the injected-API `unknown` are the deliberate contract,
+    //      not widening slop (see the per-entry notes below) ----
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-shape-in-symbol-names": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "anti-slop/no-known-value-widening": "off", // render helpers are annotated `: unknown` because the injected React.createElement shim returns unknown and explicit-function-return-type forces the annotation; there is no non-widening spelling
+    "anti-slop/no-runtime-typeof": "off", // typeof guards (unwrapSnap, num) are the untyped JSON boundary parse itself; extracting predicate helpers would fight @rikalabs/no-trivial-runtime-guard-helpers
+    "anti-slop/no-unknown-parameters": "off", // untyped JSON payload boundary: the shape-guard functions take candidate/o/v by design and parse at the edge
+    "anti-slop/no-unknown-returns": "off", // same boundary plus the injected React shim: CreateElement returns unknown by contract
+    "anti-slop/no-unsafe-dictionary-type": "off", // Record<string, unknown> is the untyped JSON payload contract; typing the full bot-status schema is a refactor, not a lint fix
+    // ---- off, with reason (see header) ----
+    "no-array-sort": "off",
+    "no-array-reverse": "off",
+    "unicorn/prefer-at": "off",
+    "no-void": "off",
+    "@rikalabs/no-single-use-trivial-helpers": "off",
+    "@rikalabs/no-trivial-runtime-guard-helpers": "off"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "es2020",
+    // strict: the WebMod is fully typed (no any) and the oxlint type-aware
+    // rules (strict-boolean-expressions, no-floating-promises) refuse to run
+    // without strictNullChecks.
+    "strict": true,
+    "outDir": ".",
+    "rootDir": ".",
+    "sourceMap": false,
+    "removeComments": false
+  },
+  "files": ["bundle.ts"]
+}
