@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using BotMod.Config;
 using Newtonsoft.Json.Linq;
 
 namespace BotMod.AI
@@ -15,6 +14,11 @@ namespace BotMod.AI
     public static class BotNeuralBrain
     {
         const int kVersion = 1;
+        // Frozen observation layout of version 1 (docs/research/01 §2, trainer
+        // tools/ga/ga.py INPUTS): TryEval packs exactly these 14 features into
+        // fixed scratch slots, so any other "inputs" value would load and then
+        // fail every evaluation (or read/write past the scratch buffer).
+        const int kInputs = 14;
         static bool _loaded;
         static string _loadedPath = "";
         static string _loadedHash = "";
@@ -182,7 +186,12 @@ namespace BotMod.AI
                     reason = "version mismatch: got " + version + " want " + kVersion;
                     _lastReason = reason; return false;
                 }
-                int inputs = obj.Value<int?>("inputs") ?? 14;
+                int inputs = obj.Value<int?>("inputs") ?? kInputs;
+                if (inputs != kInputs)
+                {
+                    reason = "unsupported inputs=" + inputs + " (v" + kVersion + " packs " + kInputs + " features)";
+                    _lastReason = reason; return false;
+                }
                 int hidden = obj.Value<int?>("hidden") ?? 16;
                 int outputs = obj.Value<int?>("outputs") ?? 5;
                 var arr = obj["weights"] as Newtonsoft.Json.Linq.JArray;

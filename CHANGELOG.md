@@ -39,6 +39,12 @@ fails on drift between them.
   retention window instead of executing twice; a concurrent duplicate gets
   `409 REQUEST_IN_PROGRESS`; failures are not cached and may be retried.
   Requests without `requestId` behave exactly as before.
+- Fuzz suites in `tests/BotMod.Web.Tests`, run by `scripts/test-idempotency.sh`
+  (`make test`): a differential model fuzzer hammering the idempotency ledger
+  with adversarial `requestId` shapes, clock jitter and capacity/retention
+  pressure, and a mutation fuzzer for the `evolved/best.json` weights-file
+  parser (the latter needs the game install's Newtonsoft.Json.dll and is
+  skipped when it is absent).
 
 ### Performance
 - Neural/LOS evaluations memoized per tick and O(1) bot lookup in
@@ -47,6 +53,9 @@ fails on drift between them.
 ### Fixed
 - Character lookup strips the `[Bot]` prefix so non-Grunt bot names resolve;
   aggro honors the `bot vs` gates; wandering skips allies and teammates.
+- `evolved/best.json` files whose `inputs` differs from the frozen v1
+  observation layout (14) are rejected at load with a clear reason instead of
+  loading successfully and then silently failing every bot tick.
 
 ## [0.4.0] - 2026-08-23
 
