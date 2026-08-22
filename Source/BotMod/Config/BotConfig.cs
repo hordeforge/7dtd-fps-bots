@@ -84,7 +84,7 @@ namespace BotMod.Config
                 if (loaded == null) return new BotConfig();
                 loaded.Normalize(); return loaded;
             }
-            catch (Exception ex) { ModApi.Log("BotConfig load failed: " + ex.Message); return new BotConfig(); }
+            catch (Exception ex) { ModApi.Warn("BotConfig load failed (" + path + "), using defaults: " + ex.Message); return new BotConfig(); }
         }
         public void Normalize()
         {

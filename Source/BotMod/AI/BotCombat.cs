@@ -52,7 +52,7 @@ namespace BotMod.AI
                         try
                         {
                             string msg = $"[Bot] {k} fragged {v}";
-                            global::Log.Out($"[BotMod] {msg} (K:{killer.KilledPlayers} Z:{killer.KilledZombies} D:{killer.Died} S:{killer.Score})");
+                            ModApi.Log($"{msg} (K:{killer.KilledPlayers} Z:{killer.KilledZombies} D:{killer.Died} S:{killer.Score})");
                             // Best-effort chat broadcast to connected players (reflection-based so the
                             // exact GameMessageServer signature never breaks the build; no-op if the
                             // API differs or no players are connected).
@@ -68,7 +68,7 @@ namespace BotMod.AI
                 // Victim-side Died/Score is normally handled by DamageEntity death path, but keep a trace.
                 if (victimIsBot && victim != null)
                 {
-                    try { global::Log.Out($"[BotMod] victim [Bot] {v} died (D:{victim.Died} S:{victim.Score})"); } catch { }
+                    try { ModApi.Log($"victim [Bot] {v} died (D:{victim.Died} S:{victim.Score})"); } catch { }
                 }
             }
             catch { }

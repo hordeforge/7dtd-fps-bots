@@ -22,7 +22,7 @@ namespace BotMod.Patches
                 // Our synthetic range
                 if (sid < 76561199000000000UL || sid > 76561199000010000UL) return true;
                 __result = Platform.EBeginUserAuthenticationResult.Ok;
-                Log.Out("[BotMod] synthetic auth bypass for SteamId=" + sid + " ip=" + (_cInfo.ip ?? "?"));
+                BotMod.ModApi.Log("synthetic auth bypass for SteamId=" + sid + " ip=" + (_cInfo.ip ?? "?"));
                 return false;
             }
             catch { }

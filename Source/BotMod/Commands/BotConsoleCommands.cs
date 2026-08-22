@@ -53,7 +53,7 @@ namespace BotMod.Commands
                     default: SdtdConsole.Instance.Output("Unknown bot subcommand: " + sub + ". Try: bot help"); break;
                 }
             }
-            catch (Exception ex) { SdtdConsole.Instance.Output("bot command failed: " + ex.Message); ModApi.Log("bot cmd failed: " + ex); }
+            catch (Exception ex) { SdtdConsole.Instance.Output("bot command failed: " + ex.Message); ModApi.Error("bot cmd failed: " + ex); }
         }
         void DoStatus()
         {

@@ -31,7 +31,7 @@ namespace BotMod.Web
         public override void HandleRestGet(RequestContext context)
         {
             PrepareEnvelopedResult(out JsonWriter writer);
-            writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "{}")));
+            writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "{}", "status")));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
 
@@ -45,24 +45,30 @@ namespace BotMod.Web
             string requestId = _jsonInput != null && _jsonInput.TryGetValue("requestId", out object rid) && rid != null
                 ? Convert.ToString(rid) : null;
             bool keyed = IdempotencyLedger.IsValidKey(requestId);
+            // One audit line per executed/replayed/rejected mutation; GET stays
+            // unlogged because the dashboard polls it continuously.
+            string reqTag = keyed ? requestId : "-";
             if (keyed)
             {
                 string cached;
                 IdempotencyLedger.BeginResult begin = IdempotencyLedger.TryBegin(requestId, out cached);
                 if (begin == IdempotencyLedger.BeginResult.Replay)
                 {
+                    ModApi.Log("web api action=" + action + " req=" + reqTag + " replay (cached response resent)");
                     writer.WriteRaw(Encoding.UTF8.GetBytes(cached));
                     SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
                     return;
                 }
                 if (begin == IdempotencyLedger.BeginResult.InProgress)
                 {
+                    ModApi.Log("web api action=" + action + " req=" + reqTag + " rejected REQUEST_IN_PROGRESS");
                     SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_IN_PROGRESS", null);
                     return;
                 }
             }
             string respBody = null;
             string errorCode = null;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 switch (action)
@@ -92,7 +98,7 @@ namespace BotMod.Web
                                 for (int i = 0; i < count; i++)
                                     if (BotManager.Instance.TrySpawnOne()) n++;
                                 return n;
-                            }, 0);
+                            }, 0, "spawn");
                             respBody = RespondJson("spawned", spawned);
                         }
                         break;
@@ -128,14 +134,14 @@ namespace BotMod.Web
                                     if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) n++;
                                 }
                                 return new { spawned = n, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
-                            }, new { spawned = 0, found = false, name = ident });
+                            }, new { spawned = 0, found = false, name = ident }, "spawnNear");
                             respBody = RespondJson("spawned", r.spawned, "found", r.found, "player", r.name);
                         }
                         break;
                     case "remove":
                     case "clear":
                         {
-                            int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), 0);
+                            int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), 0, "removeAll");
                             respBody = RespondJson("removed", removed);
                         }
                         break;
@@ -149,8 +155,10 @@ namespace BotMod.Web
                             {
                                 bool ok = RunOnMain(
                                     () => BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why),
-                                    false);
-                                if (!ok) ModApi.Log("BotNeuralBrain web enable: load failed (" + why + ")");
+                                    false, "neuralLoad");
+                                // Load failure stays visible in the response body
+                                // ("loaded":false,"reason":"...") and in this line.
+                                if (!ok) ModApi.Warn("web api neural on: weights load failed: " + why);
                             }
                             respBody = RespondJson("neural", on, "loaded", on ? BotMod.AI.BotNeuralBrain.Loaded : false, "reason", why);
                         }
@@ -161,7 +169,7 @@ namespace BotMod.Web
                             int entityId = 0;
                             if (_jsonInput != null && _jsonInput.TryGetValue("entityId", out object id))
                                 int.TryParse(Convert.ToString(id), out entityId);
-                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), false);
+                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), false, "removeOne");
                             respBody = RespondJson("removed", removed, "entityId", entityId);
                         }
                         break;
@@ -260,17 +268,19 @@ namespace BotMod.Web
             catch (Exception ex)
             {
                 if (keyed) IdempotencyLedger.Fail(requestId); // retryable: nothing cached
-                ModApi.Log("bot web api failed: " + ex);
+                ModApi.Error("web api action=" + action + " req=" + reqTag + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
                 SendEmptyResponse(context, HttpStatusCode.InternalServerError, null, "ERROR", ex);
                 return;
             }
             if (errorCode != null)
             {
                 if (keyed) IdempotencyLedger.Fail(requestId); // client error: retry may resubmit
+                ModApi.Log("web api action=" + action + " req=" + reqTag + " rejected " + errorCode);
                 SendEmptyResponse(context, HttpStatusCode.BadRequest, null, errorCode, null);
                 return;
             }
             if (keyed) IdempotencyLedger.Complete(requestId, respBody);
+            ModApi.Log("web api action=" + action + " req=" + reqTag + " ok in " + sw.ElapsedMilliseconds + "ms " + respBody);
             writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
@@ -279,8 +289,9 @@ namespace BotMod.Web
 
         /// <summary>Run a world-touching action on the game's main thread and
         /// wait for it (the web server handler runs on a thread pool thread;
-        /// Unity/world state must not be touched from there).</summary>
-        static T RunOnMain<T>(Func<T> fn, T fallback)
+        /// Unity/world state must not be touched from there). <paramref name="op"/>
+        /// names the operation so a dispatch timeout is attributable in the log.</summary>
+        static T RunOnMain<T>(Func<T> fn, T fallback, string op)
         {
             if (ThreadManager.IsMainThread()) return fn();
             T result = fallback;
@@ -293,7 +304,7 @@ namespace BotMod.Web
                 finally { done.Set(); }
             });
             if (!done.Wait(TimeSpan.FromSeconds(15)))
-                throw new TimeoutException("main-thread dispatch timeout");
+                throw new TimeoutException("main-thread dispatch timeout after 15s: " + op);
             if (error != null) throw error;
             return result;
         }

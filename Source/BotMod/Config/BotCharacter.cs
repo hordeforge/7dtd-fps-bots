@@ -117,7 +117,7 @@ namespace BotMod.Config
                     ch.Aggression = Math.Max(0f, Math.Min(1f, ch.Aggression + diffSkill * 0.2f - 0.1f));
                 }
             }
-            catch (Exception ex) { ModApi.Log("characters.json load failed: " + ex.Message); }
+            catch (Exception ex) { ModApi.Warn("characters.json load failed, using defaults: " + ex.Message); }
         }
         public static BotCharacter ForName(string name)
         {

@@ -24,7 +24,8 @@ namespace BotMod
                 ModPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
                 Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
                 Config.Normalize();
-                try { BotCharacterDB.Load(Config); } catch {}
+                try { BotCharacterDB.Load(Config); }
+                catch (Exception ex) { Warn("characters.json load failed, using defaults: " + ex); }
                 Log($"BotMod v0.4.0 loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
 
                 if (!Config.Enabled)
@@ -37,23 +38,23 @@ namespace BotMod
                 Log("Harmony patches applied.");
 
                 try { ModEvents.GameStartDone.RegisterHandler(OnGameStartDone); }
-                catch (Exception ex) { Log("ModEvents.GameStartDone register failed: " + ex.Message); }
+                catch (Exception ex) { Error("ModEvents.GameStartDone register failed: " + ex); }
 
                 try { ModEvents.GameUpdate.RegisterHandler(OnGameUpdate); }
-                catch (Exception ex) { Log("ModEvents.GameUpdate register failed: " + ex.Message); }
+                catch (Exception ex) { Error("ModEvents.GameUpdate register failed: " + ex); }
 
                 try { ModEvents.WorldShuttingDown.RegisterHandler(OnWorldShuttingDown); }
-                catch (Exception ex) { Log("WorldShuttingDown register failed: " + ex.Message); }
+                catch (Exception ex) { Error("WorldShuttingDown register failed: " + ex.Message); }
 
                 // Ensure npcSurvivor* is available on dedi even though the vanilla XML has it
                 // inside an HTML comment. Without this the engine has no EntitySurvivor class
                 // and BotSpawner falls back to zombieSoldier every time.
-                try { BotSurvivorPatch.EnsureSurvivorClasses(); } catch (Exception ex) { Log("EnsureSurvivorClasses: " + ex.Message); }
+                try { BotSurvivorPatch.EnsureSurvivorClasses(); } catch (Exception ex) { Warn("EnsureSurvivorClasses: " + ex.Message); }
                 Log("BotMod init OK. Commands: bot help");
             }
             catch (Exception ex)
             {
-                Log("InitMod failed: " + ex);
+                Error("InitMod failed: " + ex);
             }
         }
 
@@ -71,7 +72,7 @@ namespace BotMod
                     Log("BotNeuralBrain: " + (ok ? "loaded " + why : "not loaded (" + why + "), using heuristic."));
                 }
             }
-            catch (Exception ex) { Log("OnGameStartDone failed: " + ex); }
+            catch (Exception ex) { Error("OnGameStartDone failed: " + ex); }
         }
 
         static void OnGameUpdate(ref ModEvents.SGameUpdateData data)
@@ -81,12 +82,13 @@ namespace BotMod
                 if (!ShouldRun()) return;
                 BotManager.Instance.Tick(Time.deltaTime);
             }
-            catch (Exception ex) { Log("GameUpdate tick failed: " + ex); }
+            catch (Exception ex) { Error("GameUpdate tick failed: " + ex); }
         }
 
         static void OnWorldShuttingDown(ref ModEvents.SWorldShuttingDownData data)
         {
-            try { BotManager.Instance.OnWorldShuttingDown(); } catch { }
+            try { BotManager.Instance.OnWorldShuttingDown(); }
+            catch (Exception ex) { Warn("WorldShuttingDown cleanup failed: " + ex.Message); }
         }
 
         public static bool ShouldRun()
@@ -101,7 +103,8 @@ namespace BotMod
         {
             Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
             Config.Normalize();
-            try { BotMod.Config.BotCharacterDB.Load(Config); } catch {}
+            try { BotMod.Config.BotCharacterDB.Load(Config); }
+            catch (Exception ex) { Warn("characters.json load failed, keeping previous characters: " + ex); }
             Log($"Config reloaded: Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
             if (Config.UseNeuralBrain)
             {
@@ -115,6 +118,22 @@ namespace BotMod
         {
             try { global::Log.Out("[BotMod] " + msg); }
             catch { Console.WriteLine("[BotMod] " + msg); }
+        }
+
+        /// <summary>Recoverable problem: feature degraded or an operation failed
+        /// but the server keeps running. Surfaces as WARN in the server log.</summary>
+        public static void Warn(string msg)
+        {
+            try { global::Log.Warning("[BotMod] " + msg); }
+            catch { Console.WriteLine("[BotMod] WARNING: " + msg); }
+        }
+
+        /// <summary>Broken functionality: init failure, tick loop failure, or a
+        /// request that failed unexpectedly. Surfaces as ERR in the server log.</summary>
+        public static void Error(string msg)
+        {
+            try { global::Log.Error("[BotMod] " + msg); }
+            catch { Console.WriteLine("[BotMod] ERROR: " + msg); }
         }
 
         // Persist one config field to the host-mounted canonical copy
@@ -132,7 +151,7 @@ namespace BotMod
                     root[key] = JToken.FromObject(value);
                     File.WriteAllText(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
                 }
-                catch (Exception ex) { Log("bot config persist failed (" + path + "): " + ex.Message); }
+                catch (Exception ex) { Warn("bot config persist failed (" + path + "): " + ex.Message); }
             }
         }
     }

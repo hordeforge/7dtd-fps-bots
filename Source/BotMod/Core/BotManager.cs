@@ -11,6 +11,12 @@ namespace BotMod.Core
         readonly HashSet<int> _botEntityIds = new HashSet<int>();
         float _tickAccum;
         float _spawnRetryTimer;
+        // Tick failures repeat every frame while a bot is broken; log the first
+        // one in full, then suppress repeats for a cooldown so one bad bot
+        // cannot flood the server log (~60 lines/s otherwise).
+        const float TickFailLogCooldownSec = 10f;
+        float _tickFailCooldown;
+        int _tickFailsSuppressed;
         bool _started;
         BotManager() { }
         public IReadOnlyList<Bot> Bots => _bots;
@@ -62,12 +68,24 @@ namespace BotMod.Core
             if (world == null) return;
             _tickAccum += dt;
             _spawnRetryTimer -= dt;
+            if (_tickFailCooldown > 0f) _tickFailCooldown -= dt;
             if (_spawnRetryTimer <= 0f) { _spawnRetryTimer = 1f; MaintainPopulation(); }
             for (int i = _bots.Count - 1; i >= 0; i--)
             {
                 var b = _bots[i];
                 if (b.IsDeadOrUnloaded(world)) { _botEntityIds.Remove(b.EntityId); _bots.RemoveAt(i); continue; }
-                try { b.Tick(dt, world); } catch (Exception ex) { ModApi.Log("Bot tick failed id=" + b.EntityId + " " + ex.Message); }
+                try { b.Tick(dt, world); }
+                catch (Exception ex)
+                {
+                    if (_tickFailCooldown <= 0f)
+                    {
+                        string suppressed = _tickFailsSuppressed > 0 ? " (+ " + _tickFailsSuppressed + " suppressed)" : "";
+                        ModApi.Warn("Bot tick failed id=" + b.EntityId + suppressed + ": " + ex);
+                        _tickFailsSuppressed = 0;
+                        _tickFailCooldown = TickFailLogCooldownSec;
+                    }
+                    else _tickFailsSuppressed++;
+                }
             }
             if (_tickAccum > 30f) { _tickAccum = 0f; if (_bots.Count > 0) ModApi.Log($"Bots alive: {_bots.Count}/{ModApi.Config.TargetBotCount}"); }
         }
@@ -94,7 +112,7 @@ namespace BotMod.Core
             var wp = BotSpawner.PickWeapon(cfg, gun);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
             var character = BotMod.Config.BotCharacterDB.ForName(name);
-            if (e == null) { ModApi.Log("Spawn failed at " + pos); return false; }
+            if (e == null) { ModApi.Warn("Spawn failed at " + pos); return false; }
             BotSpawner.ConfigureBotEntity(e, cfg, wp, name);
             var bot = new Bot(e.entityId, name, Time.time, wp, character);
             _bots.Add(bot); _botEntityIds.Add(e.entityId);
@@ -107,7 +125,7 @@ namespace BotMod.Core
             foreach (var b in _bots.ToArray())
             {
                 try { if (world != null) { var ent = world.GetEntity(b.EntityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(b.EntityId, EnumRemoveEntityReason.Killed); } } _botEntityIds.Remove(b.EntityId); n++; }
-                catch (Exception ex) { ModApi.Log("Remove bot failed: " + ex.Message); }
+                catch (Exception ex) { ModApi.Warn("Remove bot failed: " + ex.Message); }
             }
             _bots.Clear(); _botEntityIds.Clear();
             if (n > 0) ModApi.Log($"Removed {n} bots ({reason}).");
@@ -118,7 +136,7 @@ namespace BotMod.Core
             var world = GameManager.Instance?.World;
             var bot = _bots.Find(b => b.EntityId == entityId);
             if (bot == null) return false;
-            try { if (world != null) { var ent = world.GetEntity(entityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(entityId, EnumRemoveEntityReason.Killed); } } } catch (Exception ex) { ModApi.Log("Remove bot failed: " + ex.Message); }
+            try { if (world != null) { var ent = world.GetEntity(entityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(entityId, EnumRemoveEntityReason.Killed); } } } catch (Exception ex) { ModApi.Warn("Remove bot failed: " + ex.Message); }
             _bots.Remove(bot); _botEntityIds.Remove(entityId);
             return true;
         }
