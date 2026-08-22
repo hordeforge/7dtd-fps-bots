@@ -81,14 +81,26 @@ namespace BotMod.Config
 
         public static BotConfig Load(string path)
         {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return new BotConfig();
-            try
+            if (string.IsNullOrEmpty(path)) return new BotConfig();
+            // Primary first; if it is missing or unparseable (torn write from an
+            // older non-atomic persist, manual edit gone wrong) recover the last
+            // known-good .bak instead of silently resetting every persisted
+            // setting to defaults.
+            foreach (string candidate in new[] { path, AtomicTextFile.BackupPath(path) })
             {
-                var loaded = JsonConvert.DeserializeObject<BotConfig>(File.ReadAllText(path));
-                if (loaded == null) return new BotConfig();
-                loaded.Normalize(); return loaded;
+                string json;
+                if (!AtomicTextFile.TryRead(candidate, out json)) continue;
+                try
+                {
+                    var loaded = JsonConvert.DeserializeObject<BotConfig>(json);
+                    if (loaded == null) continue;
+                    loaded.Normalize();
+                    if (candidate != path) ModApi.Warn("BotConfig restored from backup " + candidate + " (" + path + " was unreadable)");
+                    return loaded;
+                }
+                catch (Exception ex) { ModApi.Warn("BotConfig parse failed (" + candidate + "): " + ex.Message); }
             }
-            catch (Exception ex) { ModApi.Warn("BotConfig load failed (" + path + "), using defaults: " + ex.Message); return new BotConfig(); }
+            return new BotConfig();
         }
         public void Normalize()
         {

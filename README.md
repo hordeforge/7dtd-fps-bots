@@ -116,6 +116,10 @@ override the Steam paths scripts/build.sh probes). After editing
 `Source/BotMod/WebMod/bundle.ts`, run `make build` so the committed bundle.js
 passes the freshness gate in `make check`.
 
+Durability: what state survives which disaster, and the restore steps, are in
+`docs/recovery.md` (reinstalls preserve the operator config; persists are
+atomic with a `.bak` last-known-good).
+
 ## Validation
 
 ```bash

@@ -139,7 +139,10 @@ namespace BotMod
         // Persist one config field to the host-mounted canonical copy
         // (/mods/BotMod/Config/botmod.json) and the copy the running game reads,
         // so a toggle survives container restarts. The key is the JSON property
-        // name in BotConfig (e.g. "BotTeam", "BotVsBot", "Enabled").
+        // name in BotConfig (e.g. "BotTeam", "BotVsBot", "Enabled"). Writes go
+        // through AtomicTextFile: a crash mid-persist must not tear the JSON
+        // (an unparseable config resets all persisted operator state to
+        // defaults on next start) and leaves a .bak last-known-good behind.
         public static void PersistConfigField(string key, object value)
         {
             foreach (string path in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
@@ -149,7 +152,7 @@ namespace BotMod
                     if (!File.Exists(path)) continue;
                     var root = JObject.Parse(File.ReadAllText(path));
                     root[key] = JToken.FromObject(value);
-                    File.WriteAllText(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                    AtomicTextFile.Write(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
                 }
                 catch (Exception ex) { Warn("bot config persist failed (" + path + "): " + ex.Message); }
             }

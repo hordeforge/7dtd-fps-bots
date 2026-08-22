@@ -12,9 +12,29 @@ if [[ ! -f "$DS/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" ]]; then
   echo "  SEVENDTD_DS_DIR='/path/to/7 Days to Die Dedicated Server' make install" >&2
   exit 1
 fi
+
+# The deployed Config/botmod.json accumulates operator state the repo default
+# lacks (Enabled, BotVs*, squad mode, team assignments persisted by the web
+# dashboard / console). The rm -rf below must not destroy it: stage it out,
+# refresh the payload, put it back.
+PRESERVE="$(mktemp -d)"
+trap 'rm -rf "$PRESERVE"' EXIT
+kept=0
+for f in botmod.json botmod.json.bak; do
+  if [[ -f "$DST/Config/$f" ]]; then
+    mkdir -p "$PRESERVE/Config"
+    cp "$DST/Config/$f" "$PRESERVE/Config/$f"
+    kept=1
+  fi
+done
+
 rm -rf "$DST"
 mkdir -p "$DST"
 cp -r "$SRC/"* "$DST/"
+if [[ "$kept" == 1 ]]; then
+  cp "$PRESERVE"/Config/* "$DST/Config/"
+  echo "Preserved operator config across reinstall: $DST/Config/botmod.json(.bak)"
+fi
 echo "Installed -> $DST"
 ls -la "$DST"
 ls -la "$DST/Config" 2>&1 || true
