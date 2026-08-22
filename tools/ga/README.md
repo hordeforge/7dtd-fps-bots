@@ -22,8 +22,18 @@ tools/ga/
 
 ## How to run R0 (once the harness is wired to a headless binary)
 
+Requires Python 3 with NumPy, numba and matplotlib. Use a project-local
+virtualenv so nothing leaks into your system Python:
+
 ```bash
-python -m pip install -r tools/ga/requirements.txt
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r tools/ga/requirements.txt   # numpy, numba, matplotlib
+```
+
+`evolve.py`/`eval.py` import `combat_sim.py`, which compiles its hot loops with
+numba on first use (the first JIT pass takes a few seconds).
+
+```bash
 python tools/ga/clone.py --heuristic-traces traces/heur.jsonl --out evolved/clone.json
 python tools/ga/evolve.py --pop 32 --gens 40 --seed 42
 python tools/ga/eval.py evolved/best.json --held-out

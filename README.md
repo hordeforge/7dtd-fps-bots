@@ -100,6 +100,22 @@ bot reload | bot enable | bot disable
 
 Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).
 
+## Development
+
+`make help` lists all targets. The common loop:
+
+```bash
+make test          # C# unit tests (tests/BotMod.Web.Tests, mcs + mono)
+make build         # full build: BotMod.dll + web bundle into dist/BotMod
+make check         # exactly what CI runs (shellcheck, vnu HTML lint, tsc/oxlint/bundle freshness)
+```
+
+CI runs only `make check`; `make test` needs mono installed locally, and
+`make build` needs the game's Managed DLLs (`SEVENDTD_DS_DIR`/`SEVENDTD_GAME_DIR`
+override the Steam paths scripts/build.sh probes). After editing
+`Source/BotMod/WebMod/bundle.ts`, run `make build` so the committed bundle.js
+passes the freshness gate in `make check`.
+
 ## Validation
 
 ```bash

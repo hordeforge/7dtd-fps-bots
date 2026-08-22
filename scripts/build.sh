@@ -19,7 +19,13 @@ elif [[ -f "$CLIENT/7DaysToDie_Data/Managed/Assembly-CSharp.dll" ]]; then
   MANAGED="$CLIENT/7DaysToDie_Data/Managed"
   HARMONY="$CLIENT/Mods/0_TFP_Harmony/0Harmony.dll"
 else
-  echo "ERROR: Assembly-CSharp.dll not found" >&2; exit 1
+  echo "ERROR: Assembly-CSharp.dll not found; looked in:" >&2
+  echo "  $SRV/7DaysToDieServer_Data/Managed" >&2
+  echo "  $CLIENT/7DaysToDie_Data/Managed" >&2
+  echo "Install the 7 Days to Die Dedicated Server via Steam, or point" >&2
+  echo "SEVENDTD_DS_DIR (dedicated server) or SEVENDTD_GAME_DIR (client) at its" >&2
+  echo "install root, e.g.: SEVENDTD_DS_DIR=/path/to/'7 Days to Die Dedicated Server' make build" >&2
+  exit 1
 fi
 OUT="$ROOT/dist/BotMod"
 SRC="$ROOT/Source/BotMod"
