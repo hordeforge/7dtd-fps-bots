@@ -29,6 +29,11 @@ namespace BotMod.Web
         /// <summary>Replay window. Must exceed the retry horizon callers use.</summary>
         internal static TimeSpan Retention = TimeSpan.FromMinutes(10);
 
+        /// <summary>Clock for retention/pruning decisions. Production reads wall
+        /// time; deterministic tests substitute a virtual clock so replay-window
+        /// boundaries are exercised exactly, with no sleeps.</summary>
+        internal static Func<DateTime> UtcNow = () => DateTime.UtcNow;
+
         sealed class Entry
         {
             public DateTime StartedUtc;
@@ -54,14 +59,14 @@ namespace BotMod.Web
         {
             lock (Gate)
             {
-                PruneLocked(DateTime.UtcNow - Retention);
+                PruneLocked(UtcNow() - Retention);
                 Entry e;
                 if (Entries.TryGetValue(key, out e))
                 {
                     cachedBody = e.Body;
                     return e.Done ? BeginResult.Replay : BeginResult.InProgress;
                 }
-                Entries[key] = new Entry { StartedUtc = DateTime.UtcNow };
+                Entries[key] = new Entry { StartedUtc = UtcNow() };
                 cachedBody = null;
                 return BeginResult.Fresh;
             }
@@ -76,7 +81,7 @@ namespace BotMod.Web
                 if (!Entries.TryGetValue(key, out e)) return;
                 e.Done = true;
                 e.Body = body ?? "";
-                e.StartedUtc = DateTime.UtcNow; // replay window counts from completion
+                e.StartedUtc = UtcNow(); // replay window counts from completion
             }
         }
 
