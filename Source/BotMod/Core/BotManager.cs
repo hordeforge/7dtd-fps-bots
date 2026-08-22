@@ -18,6 +18,36 @@ namespace BotMod.Core
         public bool IsBotEntity(int entityId) => _botEntityIds.Contains(entityId);
         public bool IsBotEntity(Entity e) => e != null && _botEntityIds.Contains(e.entityId);
         public Bot GetBot(int entityId) => _bots.Find(b => b.EntityId == entityId);
+
+        // Teams are keyed by base bot name ([Bot] Grunt_42 -> Grunt, same split
+        // as BotCharacterDB) so an assignment survives death and respawn.
+        public static string BaseName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            if (name.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) name = name.Substring(6);
+            return name.Split('_')[0];
+        }
+        public int GetTeamId(int entityId)
+        {
+            if (ModApi.Config.BotTeamCount <= 0) return 0;
+            var bot = _bots.Find(b => b.EntityId == entityId);
+            if (bot == null) return 0;
+            string key = BaseName(bot.Name);
+            var map = ModApi.Config.TeamAssignments;
+            if (map != null && map.TryGetValue(key, out int t)) return Math.Max(0, t);
+            return 0;
+        }
+        // Single ally rule for every damage path (targeting, firing, DamageEntity):
+        // same entity, global no-bot-vs-bot, squad mode, or a shared nonzero team.
+        public bool AreAllies(int aId, int bId)
+        {
+            if (aId == bId) return true;
+            var cfg = ModApi.Config;
+            if (!cfg.BotVsBot) return true; // bots never fight bots
+            if (cfg.BotTeam) return true;   // squad mode: everyone allies
+            int ta = GetTeamId(aId), tb = GetTeamId(bId);
+            return ta != 0 && ta == tb;
+        }
         public void OnGameStartDone()
         {
             _started = true; _tickAccum = 0f; _spawnRetryTimer = 0f;

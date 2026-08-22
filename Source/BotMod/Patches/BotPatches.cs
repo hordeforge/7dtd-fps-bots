@@ -168,7 +168,8 @@ namespace BotMod.Patches
                         var cfg = ModApi.Config;
                         if (__instance is EntityPlayer && !cfg.BotVsPlayer) return false;
                         if (__instance is EntityZombie && !cfg.BotVsZombie) return false;
-                        if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && (cfg.BotTeam || !cfg.BotVsBot)) return false;
+                        // Squad mode, vsBot-off and same-team block bot-on-bot damage.
+                        if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && BotMod.Core.BotManager.Instance.AreAllies(attackerId, __instance.entityId)) return false;
                     }
                 }
                 // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)

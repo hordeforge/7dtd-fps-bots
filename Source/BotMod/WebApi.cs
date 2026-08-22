@@ -177,6 +177,47 @@ namespace BotMod.Web
                             Respond(writer, context, "vs", target, "on", on);
                         }
                         break;
+                    case "setteam":
+                        {
+                            // {"action":"setTeam","name":"<botName>","team":N} - assign
+                            // a bot to a team (0 = free-for-all). Keyed by base name,
+                            // persists to config, applies to live bots immediately.
+                            string name = _jsonInput != null && _jsonInput.TryGetValue("name", out object nm)
+                                ? Convert.ToString(nm) : "";
+                            int team = 0;
+                            if (_jsonInput != null && _jsonInput.TryGetValue("team", out object tv))
+                                int.TryParse(Convert.ToString(tv), out team);
+                            if (string.IsNullOrEmpty(name)) { SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_NAME", null); return; }
+                            string baseName = BotManager.BaseName(name);
+                            var cfg = ModApi.Config;
+                            team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
+                            if (team == 0) cfg.TeamAssignments.Remove(baseName); else cfg.TeamAssignments[baseName] = team;
+                            ModApi.PersistConfigField("TeamAssignments", cfg.TeamAssignments);
+                            Respond(writer, context, "name", baseName, "team", team);
+                        }
+                        break;
+                    case "teamcount":
+                        {
+                            // {"action":"teamCount","count":N} - number of team
+                            // buckets (0 = free-for-all only). Persisted.
+                            int count = ModApi.Config.BotTeamCount;
+                            if (_jsonInput != null && _jsonInput.TryGetValue("count", out object c))
+                                int.TryParse(Convert.ToString(c), out count);
+                            count = Math.Max(0, Math.Min(8, count));
+                            ModApi.Config.BotTeamCount = count;
+                            ModApi.Config.Normalize(); // drops assignments outside the range
+                            ModApi.PersistConfigField("BotTeamCount", count);
+                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+                            Respond(writer, context, "teamCount", count);
+                        }
+                        break;
+                    case "clearteams":
+                        {
+                            ModApi.Config.TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+                            Respond(writer, context, "cleared", true);
+                        }
+                        break;
                     default:
                         SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_ACTION", null);
                         break;
@@ -268,6 +309,7 @@ namespace BotMod.Web
                     {
                         name = b.Name,
                         entityId = b.EntityId,
+                        team = BotManager.Instance.GetTeamId(b.EntityId),
                         weapon = b.Weapon.GunId ?? "?",
                         status = b.Status(world),
                         health = ent != null ? (int)ent.Health : 0,
@@ -302,6 +344,7 @@ namespace BotMod.Web
                 botVsZombie = cfg.BotVsZombie,
                 botVsPlayer = cfg.BotVsPlayer,
                 botTeam = cfg.BotTeam,
+                teamCount = cfg.BotTeamCount,
                 botHealth = cfg.BotHealth,
                 useSpawnpoints = cfg.UseSpawnpoints,
                 players = players,

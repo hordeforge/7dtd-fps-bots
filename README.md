@@ -39,19 +39,28 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 - Toggle **static AI vs GA brain** (`bot neural on/off`, reloads the weights)
 - **Squad mode** (`bot team on/off`): all bots become one team and never
   target/damage each other (players/zombies still fair game)
+- **Team drag-and-drop**: team buckets (FFA + Team 1..N, `teamCount` default 2)
+  with colored headers and member chips; drag a scoreboard row or a chip onto a
+  bucket to assign it. Each row also has a team `<select>` as a fallback.
+  Assignments key on bot name, persist to the config, and apply to live bots
+  immediately (same-team bots never fight; `+`/`−` buttons change `teamCount`,
+  "Clear teams" resets).
 - **Shoot-at toggles** (`bot vs bot|zombie|player on/off`): which target
   classes bots engage; all three on = free-for-all. Squad mode overrides vs bot.
-- Scoreboard: per-bot kills (players/zombies), deaths, score, level, health
+- Scoreboard: per-bot kills (players/zombies), deaths, score, level, health,
+  team (colored dot + select)
 
 API: authenticated `GET /api/bot` (status + online `players` list +
 scoreboard), `POST /api/bot` with
-`{"action":"enable|disable|spawn|spawnNear|remove|neural|team|vs", ...}`
+`{"action":"enable|disable|spawn|spawnNear|remove|neural|team|vs|setTeam|teamCount|clearTeams", ...}`
 (permission level 0). `spawnNear` takes
 `{"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}`
 and responds `{"spawned":N,"found":bool,"player":"<name>"}`. `team` takes
 `{"action":"team","on":bool}`; `vs` takes
-`{"action":"vs","target":"bot|zombie|player","on":bool}` (both persist to
-`config/botmod.json` and apply live). World-touching
+`{"action":"vs","target":"bot|zombie|player","on":bool}`; teams take
+`{"action":"setTeam","name":"<botName>","team":N}` (N=0 free-for-all),
+`{"action":"teamCount","count":N}`, `{"action":"clearTeams"}`. All persist to
+`config/botmod.json` and apply live. World-touching
 actions are dispatched to the game's main thread.
 
 ## Console commands
@@ -73,6 +82,9 @@ bot remove all | bot remove <id>
 bot neural <on|off|reload|status>  # toggle/reload the GA-evolved neural controller
 bot vs bot|zombie|player <on|off>  # bots shoot that target class (all on = FFA)
 bot team <on|off>                  # squad mode: all bots one team, never fight each other
+bot team assign <name> <id>        # put that bot on team id (0 = free-for-all)
+bot team list | bot team clear     # show / clear team assignments
+bot teams <0-8>                    # number of teams (0 = free-for-all only)
 bot reload | bot enable | bot disable
 ```
 
@@ -81,6 +93,7 @@ bot reload | bot enable | bot disable
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
 - `BotEntityClass` (default `mixed` = `zombieSoldier*` pool, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
 - `BotVsBot/BotVsZombie/BotVsPlayer` (which classes bots shoot; `bot vs <t> <on|off>`), `BotTeam` (squad mode; `bot team <on|off>`).
+- `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight.
 - `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
 - `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `RespawnDelaySec=3/SpawnProtectionSec`.
 - `TargetBotCount=6 MaxBots=16`.
@@ -93,13 +106,14 @@ Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).
 make build && make install
 ./7DaysToDieServer.x86_64 -logfile /tmp/bot.log -quit -batchmode -nographics -dedicated -configfile /tmp/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.3.0 loading... diff=2 weapon=mixed
+# [BotMod] BotMod v0.4.0 loading... diff=2 weapon=mixed
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
 # [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) ...
 # [BotMod] Bots alive: 6/6
 ```
 
-Damage hook on `EntityAlive.DamageEntity` gates `BotVs*` (and `BotTeam`: in squad
-mode bot-on-bot damage is always blocked, even with `BotVsBot=true`) and also
-routes hits on bots to `Bot.OnDamaged` for dodge/aggro swap. Bots respect
-blocks/doors and are visible to vanilla clients.
+Damage hook on `EntityAlive.DamageEntity` gates `BotVs*` and teams: bot-on-bot
+damage is blocked when `BotVsBot=false`, in squad mode (`BotTeam`), or when both
+bots share a nonzero team. The hook also routes hits on bots to `Bot.OnDamaged`
+for dodge/aggro swap. Bots respect blocks/doors and are visible to vanilla
+clients.

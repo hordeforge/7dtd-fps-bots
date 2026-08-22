@@ -22,7 +22,10 @@ namespace BotMod.Commands
             "  bot count 8                  - keep 8 alive\n" +
             "  bot reload                   - reload Config/botmod.json\n" +
             "  bot vs bot|zombie|player <on|off> - bots shoot that target class\n" +
-            "  bot team <on|off>            - squad mode: all bots one team, never fight each other";
+            "  bot team <on|off>            - squad mode: all bots one team, never fight each other\n" +
+            "  bot team assign <name> <id>  - put that bot on team id (0 = free-for-all)\n" +
+            "  bot team list | bot team clear - show / clear team assignments\n" +
+            "  bot teams <0-8>              - number of teams (0 = free-for-all only)";
 
         public override void Execute(List<string> _params, CommandSenderInfo _senderInfo)
         {
@@ -46,6 +49,7 @@ namespace BotMod.Commands
                     case "neural": DoNeural(_params); break;
                     case "vs": case "shoot": DoVs(_params); break;
                     case "team": case "squad": DoTeam(_params); break;
+                    case "teams": DoTeams(_params); break;
                     default: SdtdConsole.Instance.Output("Unknown bot subcommand: " + sub + ". Try: bot help"); break;
                 }
             }
@@ -55,7 +59,7 @@ namespace BotMod.Commands
         {
             var cfg = ModApi.Config; var mgr = BotManager.Instance;
             SdtdConsole.Instance.Output($"BotMod: enabled={cfg.Enabled} target={cfg.TargetBotCount} max={cfg.MaxBots} alive={mgr.BotCount} class={cfg.BotEntityClass} weapon={cfg.BotWeapon} diff={cfg.Difficulty} vision={cfg.VisionRange} attack={cfg.AttackRange}");
-            SdtdConsole.Instance.Output($"  team={cfg.BotTeam} vsBot={cfg.BotVsBot} vsZombie={cfg.BotVsZombie} vsPlayer={cfg.BotVsPlayer} (bot team on|off / bot vs <target> on|off)");
+            SdtdConsole.Instance.Output($"  team={cfg.BotTeam} teams={cfg.BotTeamCount} assigned={(cfg.TeamAssignments != null ? cfg.TeamAssignments.Count : 0)} vsBot={cfg.BotVsBot} vsZombie={cfg.BotVsZombie} vsPlayer={cfg.BotVsPlayer} (bot team on|off / bot vs <target> on|off)");
             SdtdConsole.Instance.Output($"  spawn: radius={cfg.SpawnRadius} nearPlayer={cfg.SpawnNearPlayerChance} spawnpoints={cfg.UseSpawnpoints} strafe={cfg.StrafeChance} dodge={cfg.DodgeOnHitChance}");
         }
         void DoList()
@@ -195,14 +199,64 @@ namespace BotMod.Commands
         }
         void DoTeam(List<string> p)
         {
-            if (p.Count < 2 || !ParseOnOff(p[1], out bool on))
+            string sub2 = p.Count >= 2 ? p[1].ToLowerInvariant() : "list";
+            if (ParseOnOff(p.Count >= 2 ? p[1] : "", out bool on))
             {
-                SdtdConsole.Instance.Output("Usage: bot team <on|off>  (on = all bots are one squad and never fight each other)");
+                ModApi.Config.BotTeam = on;
+                ModApi.PersistConfigField("BotTeam", on);
+                SdtdConsole.Instance.Output(on ? "Squad mode ON: all bots are allies. (players/zombies still fair game)" : "Squad mode OFF: bots fight per team assignment.");
                 return;
             }
-            ModApi.Config.BotTeam = on;
-            ModApi.PersistConfigField("BotTeam", on);
-            SdtdConsole.Instance.Output(on ? "Squad mode ON: all bots are allies. (players/zombies still fair game)" : "Squad mode OFF: bots revert to vs-bot setting.");
+            switch (sub2)
+            {
+                case "assign": case "set": DoTeamAssign(p); break;
+                case "clear": case "reset": DoTeamClear(); break;
+                case "list": case "ls": case "status": DoTeamList(); break;
+                default:
+                    SdtdConsole.Instance.Output("Usage: bot team <on|off> | bot team assign <botName> <teamId> | bot team list | bot team clear\n  teamId 0 = free-for-all, 1.." + ModApi.Config.BotTeamCount + ". Also: bot teams <count> sets the number of teams.");
+                    break;
+            }
+        }
+        void DoTeamAssign(List<string> p)
+        {
+            if (p.Count < 4 || !int.TryParse(p[3], out int team))
+            {
+                SdtdConsole.Instance.Output("Usage: bot team assign <botName> <teamId>  (teamId 0 = free-for-all, 1.." + ModApi.Config.BotTeamCount + ")"); return;
+            }
+            var cfg = ModApi.Config;
+            if (team < 0 || team > cfg.BotTeamCount) { SdtdConsole.Instance.Output("teamId must be 0.." + cfg.BotTeamCount + "."); return; }
+            string name = BotManager.BaseName(p[2]);
+            bool live = false;
+            foreach (var b in BotManager.Instance.Bots) if (BotManager.BaseName(b.Name) == name) { live = true; break; }
+            if (team == 0) cfg.TeamAssignments.Remove(name); else cfg.TeamAssignments[name] = team;
+            ModApi.PersistConfigField("TeamAssignments", cfg.TeamAssignments);
+            SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).") + (live ? "" : " No live bot with that name - applies to future spawns."));
+        }
+        void DoTeamList()
+        {
+            var cfg = ModApi.Config;
+            SdtdConsole.Instance.Output("Teams: count=" + cfg.BotTeamCount + " squadMode=" + cfg.BotTeam + " assigned=" + (cfg.TeamAssignments != null ? cfg.TeamAssignments.Count : 0));
+            if (cfg.TeamAssignments == null || cfg.TeamAssignments.Count == 0) { SdtdConsole.Instance.Output("  (none - all bots free-for-all)"); return; }
+            foreach (var kv in cfg.TeamAssignments) SdtdConsole.Instance.Output($"  {kv.Key} -> team {kv.Value}");
+        }
+        void DoTeamClear()
+        {
+            ModApi.Config.TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+            SdtdConsole.Instance.Output("All team assignments cleared - every bot is free-for-all.");
+        }
+        void DoTeams(List<string> p)
+        {
+            if (p.Count < 2 || !int.TryParse(p[1], out int n))
+            {
+                SdtdConsole.Instance.Output("Teams count: " + ModApi.Config.BotTeamCount + " (0 = free-for-all only). Usage: bot teams <0-8>"); return;
+            }
+            n = Math.Max(0, Math.Min(8, n));
+            ModApi.Config.BotTeamCount = n;
+            ModApi.Config.Normalize(); // drops assignments outside the new range
+            ModApi.PersistConfigField("BotTeamCount", n);
+            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+            SdtdConsole.Instance.Output("Team count set to " + n + (n == 0 ? " - free-for-all only." : "."));
         }
         static bool ParseOnOff(string v, out bool on)
         {

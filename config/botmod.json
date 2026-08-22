@@ -49,6 +49,8 @@
   "BotVsZombie": true,
   "BotVsPlayer": true,
   "BotTeam": false,
+  "BotTeamCount": 2,
+  "TeamAssignments": {},
   "PathRecalcIntervalSec": 0.45,
   "StuckTimeoutSec": 2.0,
   "RandomWanderRadius": 60,

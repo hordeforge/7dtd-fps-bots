@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Newtonsoft.Json;
@@ -46,6 +47,10 @@ namespace BotMod.Config
         // Squad mode: all bots are one team and never target or damage each other,
         // regardless of BotVsBot. Players and zombies are still fair game.
         public bool BotTeam { get; set; } = false;
+        // Team deathmatch: bots with the same nonzero team are allies (keyed by
+        // base bot name so assignments survive respawn). 0 = free-for-all (no teams).
+        public int BotTeamCount { get; set; } = 2;
+        public Dictionary<string, int> TeamAssignments { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         public float PathRecalcIntervalSec { get; set; } = 0.45f;
         public float StuckTimeoutSec { get; set; } = 2.0f;
         public float RandomWanderRadius { get; set; } = 60f;
@@ -106,6 +111,11 @@ namespace BotMod.Config
             SpawnNearPlayerChance = Math.Max(0f, Math.Min(1f, SpawnNearPlayerChance));
             StrafeChance = Math.Max(0f, Math.Min(1f, StrafeChance));
             DodgeOnHitChance = Math.Max(0f, Math.Min(1f, DodgeOnHitChance));
+            BotTeamCount = Math.Max(0, Math.Min(8, BotTeamCount));
+            if (TeamAssignments == null) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            // Drop assignments outside the current team range back to free-for-all.
+            foreach (string k in new List<string>(TeamAssignments.Keys))
+                if (TeamAssignments[k] < 0 || TeamAssignments[k] > BotTeamCount) TeamAssignments[k] = 0;
             if (BotNames == null || BotNames.Length == 0) BotNames = new[] { "Bot" };
             if (LoadoutPool == null || LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };
             // Apply difficulty preset over tunables that weren't hand-tweaked far from defaults

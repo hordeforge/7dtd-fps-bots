@@ -115,10 +115,10 @@ namespace BotMod.AI
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {
             bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
-            // Squad mode allies every bot with every bot; otherwise respect vsBot.
-            // Bot bodies are zombieSoldier (EntityZombie) - the friendly checks
-            // below must not exempt them from the vsBot gate.
-            if (otherIsBot) return cfg.BotTeam || !cfg.BotVsBot;
+            // Squad mode, vsBot-off, and same-team all make bots allies; otherwise
+            // bots are fair game. Bot bodies are zombieSoldier (EntityZombie) - the
+            // friendly checks below must not exempt them from the vsBot gate.
+            if (otherIsBot) return BotManager.Instance.AreAllies(me.entityId, other.entityId);
             if (other is EntityPlayer && !cfg.BotVsPlayer) return true;
             if (other is EntityZombie && !cfg.BotVsZombie) return true;
             if (other is EntityTrader) return true;

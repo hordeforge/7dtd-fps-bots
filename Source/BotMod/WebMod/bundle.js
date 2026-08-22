@@ -135,6 +135,20 @@
         }
         return `${b.nearestPlayerDist}m${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
     }
+    // Team palette: index 0 = free-for-all (neutral), 1..8 team colors. Kept in
+    // sync with the buckets, row dots, chips, and per-row selects.
+    const TEAM_COLORS = [
+        "#9aa0a6", "#ff7070", "#8ab4f8", "#57d977", "#f9ab00", "#c58af9", "#4dd0e1", "#f48fb1", "#ffe082"
+    ];
+    const TEAM_LABELS = [
+        "FFA", "Team 1", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8"
+    ];
+    function teamColor(team) {
+        return TEAM_COLORS[Math.min(numOr(team, 0), TEAM_COLORS.length - 1)];
+    }
+    function teamLabel(team) {
+        return TEAM_LABELS[Math.min(numOr(team, 0), TEAM_LABELS.length - 1)];
+    }
     function renderBotHeader(h, s, onlinePlayers, pill) {
         const playerSuffix = onlinePlayers.length > 1 ? "s" : "";
         const onlineText = onlinePlayers.length > 0
@@ -190,6 +204,55 @@
             onClick: () => post({ action: "vs", target: t.target, on: !t.on })
         }, `${t.label}${t.on ? "" : " OFF"}`)), h("span", { className: "botmod-window" }, "squad mode overrides vs Bots"));
     }
+    function renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver) {
+        const teamCount = Math.max(0, Math.min(8, numOr(s.teamCount, 2)));
+        const buckets = [];
+        for (let t = 0; t <= teamCount; t++) {
+            buckets.push({
+                team: t,
+                label: teamLabel(t),
+                color: teamColor(t),
+                members: bots.filter((b) => numOr(b.team, 0) === t)
+            });
+        }
+        return h("div", { className: "botmod-row botmod-brain botmod-teams" }, h("span", { className: "botmod-label" }, "Teams:"), buckets.map((bkt) => h("div", {
+            key: bkt.team,
+            className: `botmod-bucket${dropOver === bkt.team ? " botmod-drop-active" : ""}`,
+            style: { borderColor: bkt.color },
+            onDragOver: (e) => {
+                e.preventDefault();
+                if (dragName !== null) {
+                    setDropOver(bkt.team);
+                }
+            },
+            onDragLeave: () => {
+                if (dropOver === bkt.team) {
+                    setDropOver(null);
+                }
+            },
+            onDrop: () => {
+                if (dragName !== null && dragName !== "") {
+                    post({ action: "setTeam", name: dragName, team: bkt.team });
+                }
+                setDropOver(null);
+                setDragName(null);
+            }
+        }, h("span", { className: "botmod-bucket-head", style: { color: bkt.color } }, `${bkt.label} · ${bkt.members.length}`), bkt.members.length === 0
+            ? h("span", { className: "botmod-bucket-empty" }, "drag a bot here")
+            : bkt.members.map((b) => h("span", {
+                key: b.entityId,
+                className: "botmod-chip",
+                draggable: true,
+                onDragStart: () => setDragName(b.name),
+                onDragEnd: () => setDragName(null)
+            }, b.name)))), h("button", {
+            className: "botmod-btn", title: "Fewer teams", disabled: busy !== "" || teamCount <= 1,
+            onClick: () => post({ action: "teamCount", count: teamCount - 1 })
+        }, "− teams"), h("button", {
+            className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= 8,
+            onClick: () => post({ action: "teamCount", count: teamCount + 1 })
+        }, "+ teams"), armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"), h("span", { className: "botmod-window" }, "drag a bot onto a team · picks persist"));
+    }
     function renderConfigRow(h, s) {
         return h("div", { className: "botmod-row botmod-cfg" }, h("span", { className: "botmod-window" }, `vision ${num(s.visionRange)}m · attack ${num(s.attackRange)}m · spawn r ${num(s.spawnRadius)}m` +
             ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
@@ -201,11 +264,33 @@
         }
         return sort.dir < 0 ? " ▼" : " ▲";
     }
-    function renderScoreboard(h, bots, busy, post, sort, setSort) {
+    function renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver) {
         const th = (label, key) => h("th", { key: label, className: "botmod-sortable", onClick: () => setSort((srt) => ({ key, dir: srt.key === key ? -srt.dir : -1 })) }, `${label}${sortArrow(sort, key)}`);
-        return h("div", { className: "botmod-scoreboard" }, h("h3", null, `Scoreboard (${bots.length})`), bots.length === 0
+        const teamCount = Math.max(0, Math.min(8, numOr(s.teamCount, 2)));
+        const teamOptions = [];
+        for (let t = 0; t <= teamCount; t++) {
+            teamOptions.push(h("option", { key: t, value: String(t) }, teamLabel(t)));
+        }
+        return h("div", { className: "botmod-scoreboard" }, h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team`), bots.length === 0
             ? h("p", { className: "botmod-empty" }, "No bots alive.")
-            : h("table", { className: "botmod-table" }, h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => h("tr", { key: b.entityId }, h("td", null, b.name), h("td", null, b.weapon), h("td", null, b.health), h("td", null, b.players), h("td", null, b.zombies), h("td", null, b.deaths), h("td", null, b.score), h("td", null, b.level), h("td", null, nearLabel(b)), h("td", { className: "botmod-state" }, b.status), h("td", null, h("button", {
+            : h("table", { className: "botmod-table" }, h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => h("tr", {
+                key: b.entityId,
+                draggable: true,
+                className: dragName === b.name ? "botmod-drag" : "",
+                title: "Drag onto a team bucket",
+                onDragStart: (e) => {
+                    e.dataTransfer.setData("text/plain", b.name);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragName(b.name);
+                },
+                onDragEnd: () => {
+                    setDragName(null);
+                    setDropOver(null);
+                }
+            }, h("td", null, h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) } }), b.name), h("td", null, b.weapon), h("td", null, b.health), h("td", null, b.players), h("td", null, b.zombies), h("td", null, b.deaths), h("td", null, b.score), h("td", null, b.level), h("td", null, nearLabel(b)), h("td", null, h("select", {
+                className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
+                onChange: (e) => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
+            }, teamOptions)), h("td", { className: "botmod-state" }, b.status), h("td", null, h("button", {
                 className: "botmod-btn botmod-danger botmod-remove", title: "Remove bot",
                 disabled: busy !== "", onClick: () => post({ action: "removeOne", entityId: b.entityId })
             }, "✕")))))));
@@ -232,6 +317,8 @@
         const [nearWeapon, setNearWeapon] = React.useState("");
         const [armed, setArmed] = React.useState(""); // destructive buttons: click to arm, click again to run
         const [sort, setSort] = React.useState({ key: "score", dir: -1 });
+        const [dragName, setDragName] = React.useState(null);
+        const [dropOver, setDropOver] = React.useState(null); // dragged bot name + hovered team bucket
         if (query.isError === true) {
             const status = num((_b = (_a = query.error) === null || _a === void 0 ? void 0 : _a.response) === null || _b === void 0 ? void 0 : _b.status);
             const msg = status === 403
@@ -255,13 +342,13 @@
         const btn = makeBtn(h, busy, post);
         const armedBtn = makeArmedBtn(h, armed, setArmed, busy, post);
         const pill = (on, onLabel, offLabel) => h("span", { className: `botmod-pill ${on ? "botmod-ok" : "botmod-off"}` }, on ? onLabel : offLabel);
-        return h("div", { className: "botmod-panel" }, renderBotHeader(h, s, onlinePlayers, pill), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderConfigRow(h, s), renderScoreboard(h, bots, busy, post, sort, setSort));
+        return h("div", { className: "botmod-panel" }, renderBotHeader(h, s, onlinePlayers, pill), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver), renderConfigRow(h, s), renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver));
     }
     // Menu entry registered only when the web session cookie is present; the
     // dashboard reloads the page after login/logout, so this re-evaluates.
     const loggedIn = document.cookie.split(";").some((c) => c.trim().startsWith("sid="));
     const webMod = {
-        about: "FPS bots: enable/disable, spawn, static AI vs GA brain, scoreboard.",
+        about: "FPS bots: enable/disable, spawn, static AI vs GA brain, drag-and-drop teams, scoreboard.",
         routes: loggedIn ? { "Bot": BotPanel } : {},
         settings: {},
         mapComponents: []
