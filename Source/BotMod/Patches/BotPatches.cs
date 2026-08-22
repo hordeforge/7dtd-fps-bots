@@ -69,18 +69,16 @@ namespace BotMod.Patches
     /// for a zombie-typed id today, but this lays the deduplicated wiring for when the Tab source is patched to interleave bots.</summary>
     public static class BotScoreNet
     {
-        static MethodInfo _sendPlayerStats;
         static bool _probed;
         static void EnsureProbe()
         {
             if (_probed) return; _probed = true;
             try
             {
-                // NetPackagePlayerStats has a Setup(entityId, EntityAlive/Player) shape on dedi; reflect-probe the overload.
+                // NetPackagePlayerStats exists on dedi; Refresh works through EntityAlive.Stats
+                // regardless of whether the typed packet type is present.
                 var t = Type.GetType("NetPackagePlayerStats, Assembly-CSharp");
                 if (t == null) return;
-                foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance))
-                    if (m.Name == "Setup" || m.Name == "SendStats") { _sendPlayerStats = m; break; }
             }
             catch { }
         }

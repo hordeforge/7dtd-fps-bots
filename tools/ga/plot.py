@@ -8,7 +8,7 @@ import csv
 from pathlib import Path
 
 try:
-    import matplotlib.pyplot as plt  # type: ignore
+    import matplotlib.pyplot as plt
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False

@@ -30,13 +30,6 @@ namespace BotMod.Core
         float _burstPauseUntil;
         float _strafeUntil;
         int _strafeDir = 1;
-        float _fireThrottleWaitUntil;
-        float _fireThrottleShootUntil;
-        float _idealYaw, _idealPitch;
-        float _viewYaw, _viewPitch;
-        float _viewYawVel, _viewPitchVel;
-        float _enemySightTime;
-        float _weaponChangeTime;
         uint _rngState; // deterministic LCG seeded from entityId (like zdtd_bot per-slot RNG)
         Vector3 _lastTargetPos = Vector3.zero;
         Vector3 _targetVel = Vector3.zero;
@@ -74,7 +67,6 @@ namespace BotMod.Core
             EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
             _lastPos = Vector3.zero;
             _burstLeft = weapon.BurstMin;
-            _viewYaw = 0f; _viewPitch = 0f; _enemySightTime = -10f;
             _rngState = (uint)entityId * 2654435761u + 97u;
             _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
             _ammo = weapon.MagSize; // zdtd_bot ammo pacing, ported
@@ -255,7 +247,6 @@ namespace BotMod.Core
                 Vector3 myPos = me.position;
                 float dist = Vector3.Distance(myPos, tPos);
                 bool canSee = BotBrain.CanSee(me, _target, world, cfg);
-                if (canSee) _enemySightTime = Time.time;
                 if (canSee) // update the last-known position we saw the target at (zdtd_bot lost-sight combat memory, ported)
                 {
                     _lastKnownTargetPos = tPos;
@@ -649,8 +640,6 @@ namespace BotMod.Core
                         // apply yaw/pitch
                         Quaternion rot = Quaternion.AngleAxis(yaw, Vector3.up) * Quaternion.AngleAxis(pitch, Vector3.Cross(dir, Vector3.up).normalized);
                         dir = rot * dir;
-                        // ray check per pellet
-                        Vector3 from = me.position + Vector3.up * 1.45f;
                         // miss if LOS blocked to aim point - but we already checked canSee
                     }
                     // Damage per pellet: spread damage for shotguns

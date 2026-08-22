@@ -26,7 +26,7 @@ try:
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
-    np = None  # type: ignore
+    np = None  # type: ignore[assignment]
 
 CAB = "#2563eb"  # blue
 ACCENT = "#0ea5e9"

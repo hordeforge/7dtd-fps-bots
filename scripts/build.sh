@@ -87,7 +87,8 @@ refs=(
 )
 # sort -z: deterministic compile order regardless of readdir order.
 mapfile -d '' sources < <(find "$SRC" -type f -name '*.cs' -print0 | sort -z)
-mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 \
+# -warnaserror: the tree compiles warning-free; keep it that way.
+mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 -warnaserror \
   -out:"$OUT/BotMod.dll" "${refs[@]}" "${sources[@]}"
 copy_payload
 build_webmod

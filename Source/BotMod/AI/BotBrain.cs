@@ -294,7 +294,7 @@ namespace BotMod.AI
         {
             try
             {
-                Vector3 origin = target.position; Vector3 end = origin + Vector3.down * 64f;
+                Vector3 origin = target.position;
                 Ray ray = new Ray(origin, Vector3.down);
                 if (Physics.Raycast(ray, out RaycastHit hit, 70f, -1))
                 {

@@ -351,7 +351,6 @@ namespace BotMod.Core
                     try { alive.Health = Mathf.RoundToInt(cfg.BotHealth); } catch { }
                     // Give the gun and actually equip it so the Avatar renders it. Without the holding-item write
                     // the inventory has the gun but the model walks empty-handed.
-                    ItemValue held = null;
                     if (!string.IsNullOrEmpty(wp.GunId))
                     {
                         try
@@ -367,7 +366,6 @@ namespace BotMod.Core
                                 try { alive.inventory.SetHoldingItemIdx(0); } catch { }
                                 try { alive.inventory.updateHoldingItem(); } catch { }
                                 try { alive.inventory.ForceHoldingItemUpdate(); } catch { }
-                                held = iv;
                             }
                         }
                         catch (Exception ex) { ModApi.Log("Give weapon failed: " + ex.Message); }
@@ -388,7 +386,6 @@ namespace BotMod.Core
                     try
                     {
                         // Player-ish speeds (vanilla playerMale: moveSpeed 1.0-ish, we use cfg but cap to player bounds)
-                        float baseSpeed = 1.0f; // player base
                         // Don't override A* but ensure not godmode/no-collision
                         try { alive.IsGodMode.Value = false; } catch {}
                         try { alive.IsNoCollisionMode.Value = false; } catch {}
