@@ -9,6 +9,10 @@ namespace BotMod.Core
         public static BotManager Instance { get; } = new BotManager();
         readonly List<Bot> _bots = new List<Bot>();
         readonly HashSet<int> _botEntityIds = new HashSet<int>();
+        // O(1) id lookup for the per-damage-event / per-shot ally checks; a linear
+        // _bots.Find with a closure ran on every DamageEntity, trigger pull and
+        // FindTarget candidate.
+        readonly Dictionary<int, Bot> _botById = new Dictionary<int, Bot>();
         float _tickAccum;
         float _spawnRetryTimer;
         // Tick failures repeat every frame while a bot is broken; log the first
@@ -23,7 +27,7 @@ namespace BotMod.Core
         public int BotCount => _bots.Count;
         public bool IsBotEntity(int entityId) => _botEntityIds.Contains(entityId);
         public bool IsBotEntity(Entity e) => e != null && _botEntityIds.Contains(e.entityId);
-        public Bot GetBot(int entityId) => _bots.Find(b => b.EntityId == entityId);
+        public Bot GetBot(int entityId) => _botById.TryGetValue(entityId, out var b) ? b : null;
 
         // Teams are keyed by base bot name ([Bot] Grunt_42 -> Grunt, same split
         // as BotCharacterDB) so an assignment survives death and respawn.
@@ -66,11 +70,11 @@ namespace BotMod.Core
         public int GetTeamId(int entityId)
         {
             if (ModApi.Config.BotTeamCount <= 0) return 0;
-            var bot = _bots.Find(b => b.EntityId == entityId);
+            var bot = GetBot(entityId);
             if (bot == null) return 0;
-            string key = BaseName(bot.Name);
+            // Bot.TeamKey is the base name frozen at spawn; no per-call Split allocs.
             var map = ModApi.Config.TeamAssignments;
-            if (map != null && map.TryGetValue(key, out int t)) return Math.Max(0, t);
+            if (map != null && map.TryGetValue(bot.TeamKey, out int t)) return Math.Max(0, t);
             return 0;
         }
         // Single ally rule for every damage path (targeting, firing, DamageEntity):
@@ -87,10 +91,10 @@ namespace BotMod.Core
         public void OnGameStartDone()
         {
             _started = true; _tickAccum = 0f; _spawnRetryTimer = 0f;
-            _bots.Clear(); _botEntityIds.Clear();
+            _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
             ModApi.Log("BotManager ready. TargetBots=" + ModApi.Config.TargetBotCount + " diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon);
         }
-        public void OnWorldShuttingDown() { _started = false; _bots.Clear(); _botEntityIds.Clear(); }
+        public void OnWorldShuttingDown() { _started = false; _bots.Clear(); _botEntityIds.Clear(); _botById.Clear(); }
         public void Tick(float dt)
         {
             if (!_started) return;
@@ -103,7 +107,7 @@ namespace BotMod.Core
             for (int i = _bots.Count - 1; i >= 0; i--)
             {
                 var b = _bots[i];
-                if (b.IsDeadOrUnloaded(world)) { _botEntityIds.Remove(b.EntityId); _bots.RemoveAt(i); continue; }
+                if (b.IsDeadOrUnloaded(world)) { _botEntityIds.Remove(b.EntityId); _botById.Remove(b.EntityId); _bots.RemoveAt(i); continue; }
                 try { b.Tick(dt, world); }
                 catch (Exception ex)
                 {
@@ -145,7 +149,7 @@ namespace BotMod.Core
             if (e == null) { ModApi.Warn("Spawn failed at " + pos); return false; }
             BotSpawner.ConfigureBotEntity(e, cfg, wp, name);
             var bot = new Bot(e.entityId, name, Time.time, wp, character);
-            _bots.Add(bot); _botEntityIds.Add(e.entityId);
+            _bots.Add(bot); _botEntityIds.Add(e.entityId); _botById[e.entityId] = bot;
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
             return true;
         }
@@ -157,19 +161,19 @@ namespace BotMod.Core
                 try { if (world != null) { var ent = world.GetEntity(b.EntityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(b.EntityId, EnumRemoveEntityReason.Killed); } } _botEntityIds.Remove(b.EntityId); n++; }
                 catch (Exception ex) { ModApi.Warn("Remove bot failed: " + ex.Message); }
             }
-            _bots.Clear(); _botEntityIds.Clear();
+            _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
             if (n > 0) ModApi.Log($"Removed {n} bots ({reason}).");
             return n;
         }
         public bool RemoveBot(int entityId)
         {
             var world = GameManager.Instance?.World;
-            var bot = _bots.Find(b => b.EntityId == entityId);
+            var bot = GetBot(entityId);
             if (bot == null) return false;
             try { if (world != null) { var ent = world.GetEntity(entityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(entityId, EnumRemoveEntityReason.Killed); } } } catch (Exception ex) { ModApi.Warn("Remove bot failed: " + ex.Message); }
-            _bots.Remove(bot); _botEntityIds.Remove(entityId);
+            _bots.Remove(bot); _botEntityIds.Remove(entityId); _botById.Remove(entityId);
             return true;
         }
-        public void NotifyBotDeath(int entityId) { var bot = _bots.Find(b => b.EntityId == entityId); if (bot != null) bot.MarkDead(); }
+        public void NotifyBotDeath(int entityId) { var bot = GetBot(entityId); if (bot != null) bot.MarkDead(); }
     }
 }
