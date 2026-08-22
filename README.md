@@ -24,6 +24,29 @@ make install      # copies to Dedicated Server Mods/BotMod
 
 Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`). Edit and `bot reload` live. EAC off: `<property name="EACEnabled" value="false"/>`.
 
+## Web dashboard
+
+`make build` also compiles the TypeScript panel (`Source/BotMod/WebMod/bundle.ts`)
+into `Mods/BotMod/WebMod/`, which the stock web dashboard serves as a **Bot**
+sidebar entry (admin login required; hidden while logged out, same pattern as
+7dtd-apm-bridge):
+
+- Enable / disable bots (persists to the config, applies live)
+- Spawn N bots / remove all
+- **Spawn near player**: pick an online player (dropdown fed by the API) +
+  count + optional weapon -> bots spawn 12-30m from that player, out-of-sight
+  preferred (same path as `bot player <name>`)
+- Toggle **static AI vs GA brain** (`bot neural on/off`, reloads the weights)
+- Scoreboard: per-bot kills (players/zombies), deaths, score, level, health
+
+API: authenticated `GET /api/bot` (status + online `players` list +
+scoreboard), `POST /api/bot` with
+`{"action":"enable|disable|spawn|spawnNear|remove|neural", ...}`
+(permission level 0). `spawnNear` takes
+`{"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}`
+and responds `{"spawned":N,"found":bool,"player":"<name>"}`. World-touching
+actions are dispatched to the game's main thread.
+
 ## Console commands
 
 ```
@@ -34,6 +57,8 @@ bot spawn [n] [x z] [weapon] | bot player <name|id> [n] [weapon]  # e.g. bot spa
 bot player Kira              # 1 bot near Kira (12-30m, out-of-sight preferred)
 bot player Kira 3 gunMGT1AK47 # 3 AK bots near Kira
 bot player me               # from in-game console, spawns near you
+# note: test/LiteNetLib clients (loadgen bots) have an empty EntityName - match
+# them by their numeric entity id (bot player 322) or the literal "EntityPlayer".
 bot weapon <gunId|mixed>      # default for next spawns
 bot skill <0-4>               # 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare
 bot count <n>                 # keep n alive

@@ -111,7 +111,7 @@ namespace BotMod.Commands
             }
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {target.EntityName ?? target.PlayerDisplayName ?? ident} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
         }
-        static EntityPlayer FindPlayerByNameOrId(World world, string ident)
+        internal static EntityPlayer FindPlayerByNameOrId(World world, string ident)
         {
             if (world == null || string.IsNullOrEmpty(ident)) return null;
             // by entityId
