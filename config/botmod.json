@@ -1,6 +1,7 @@
 {
   "Enabled": true,
   "DedicatedOnly": true,
+  "AllowSyntheticAuthBypass": false,
   "TargetBotCount": 6,
   "MaxBots": 16,
   "BotEntityClass": "mixed",

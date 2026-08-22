@@ -131,7 +131,10 @@ namespace BotMod.Core
             if (_target == null || _target.IsDead() || Rng01() < 0.65f)
             {
                 var me = _cachedEntity;
-                if (me != null && Vector3.Distance(me.position, attacker.position) < cfg.VisionRange * 1.1f)
+                // Enforce the vs-class gates on the aggro path too: without this a hit
+                // from a disabled class (BotVsPlayer/Zombie=false) adopts itself as
+                // _target and the bot shoots back until the next scan drops it.
+                if (me != null && IsValidTarget(attacker, cfg) && Vector3.Distance(me.position, attacker.position) < cfg.VisionRange * 1.1f)
                 {
                     _target = attacker;
                     _loseTargetTimer = 0f;
@@ -544,7 +547,10 @@ namespace BotMod.Core
                         if (b == null || b.EntityId == EntityId) continue;
                         var e2 = world.GetEntity(b.EntityId) as EntityAlive;
                         if (e2 == null || e2.IsDead() || !e2.IsAlive()) continue;
-                        if (!cfg.BotVsBot) continue;
+                        // Single ally rule (BotManager.AreAllies): never converge on
+                        // teammates (team/squad modes) or any bot when vs-bot is off.
+                        // FindTarget excludes allies, so seeking them just clumps bots.
+                        if (BotManager.Instance.AreAllies(EntityId, b.EntityId)) continue;
                         float d = Vector3.Distance(mePos, e2.position);
                         if (d < bestD) { bestD = d; best = e2.position; }
                     }

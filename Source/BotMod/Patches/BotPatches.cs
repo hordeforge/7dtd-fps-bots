@@ -7,6 +7,8 @@ using UnityEngine;
 namespace BotMod.Patches
 {
     // EAC-off LAN uses synthetic ids; client never finishes full EOS/Steam handshake, so any post-Steam authorizer (Eac, Crossplay, etc.) would stall loopback joins. Let loopback synthetic ids auto-pass all IAuthorizer chains after PlayerId/Basic checks. Generic patch covers every authorizer type that implements IAuthorizer.Authorize, not just Steam.
+    // Gated by AllowSyntheticAuthBypass (default off): the range is predictable, so an
+    // always-on bypass lets anyone join a server running this mod without owning the game.
     [HarmonyPatch(typeof(Platform.Steam.AuthenticationServer), "AuthenticateUser")]
     public static class Patch_SteamAuthServer_SyntheticBypass
     {
@@ -15,6 +17,7 @@ namespace BotMod.Patches
             try
             {
                 if (_cInfo == null) return true;
+                if (!ModApi.Config.AllowSyntheticAuthBypass) return true;
                 var pid = _cInfo.PlatformId as Platform.Steam.UserIdentifierSteam;
                 if (pid == null) return true;
                 ulong sid = 0;

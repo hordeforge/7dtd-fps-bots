@@ -10,6 +10,10 @@ namespace BotMod.Config
     {
         public bool Enabled { get; set; } = true;
         public bool DedicatedOnly { get; set; } = true;
+        // Auth bypass for offline LAN/loadgen clients with synthetic Steam ids
+        // (76561199000000000..10000). Off by default: on leaves any server running
+        // this mod open to forged ids in that range.
+        public bool AllowSyntheticAuthBypass { get; set; } = false;
         public int TargetBotCount { get; set; } = 6;
         public int MaxBots { get; set; } = 16;
         // Bot body. "mixed" picks zombieSoldier variants: mod-spawned trader bodies

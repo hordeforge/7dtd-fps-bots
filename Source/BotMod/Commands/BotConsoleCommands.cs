@@ -44,8 +44,8 @@ namespace BotMod.Commands
                     case "skill": case "difficulty": DoSkill(_params); break;
                     case "player": case "near": case "at": DoPlayer(_params, _senderInfo); break;
                     case "reload": ModApi.ReloadConfig(); SdtdConsole.Instance.Output("BotMod config reloaded. diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon + " neural=" + (ModApi.Config.UseNeuralBrain ? "on" : "off") + " (" + BotMod.AI.BotNeuralBrain.LastReason + ")"); break;
-                    case "enable": ModApi.Config.Enabled = true; SdtdConsole.Instance.Output("BotMod enabled."); break;
-                    case "disable": ModApi.Config.Enabled = false; SdtdConsole.Instance.Output("BotMod disabled. Existing bots remain until removed."); break;
+                    case "enable": ModApi.Config.Enabled = true; ModApi.PersistConfigField("Enabled", true); SdtdConsole.Instance.Output("BotMod enabled (persisted)."); break;
+                    case "disable": ModApi.Config.Enabled = false; ModApi.PersistConfigField("Enabled", false); SdtdConsole.Instance.Output("BotMod disabled (persisted). Existing bots remain until removed."); break;
                     case "neural": DoNeural(_params); break;
                     case "vs": case "shoot": DoVs(_params); break;
                     case "team": case "squad": DoTeam(_params); break;

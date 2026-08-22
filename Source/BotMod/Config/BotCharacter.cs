@@ -121,10 +121,22 @@ namespace BotMod.Config
         }
         public static BotCharacter ForName(string name)
         {
-            string key = (name ?? "Grunt").Split('_')[0];
+            // Identity key must match BotManager.BaseName: spawned names look like
+            // "[Bot] Grunt_42" -> "Grunt". Splitting the raw name first yields
+            // "[Bot] Grunt" and misses every non-Grunt entry in characters.json.
+            string key = BaseKey(name);
             if (Characters.TryGetValue(key, out var c)) return c;
             if (Characters.TryGetValue("Grunt", out var g)) return g;
-            return BotCharacter.Defaults(name);
+            return BotCharacter.Defaults(key);
+        }
+        /// <summary>Base key for a bot name: strip the "[Bot] " tag, drop the _NN
+        /// suffix. Local copy of BotManager.BaseName because Core already
+        /// references Config (the reverse would be a dependency cycle).</summary>
+        static string BaseKey(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "Grunt";
+            if (name.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) name = name.Substring(6);
+            return name.Split('_')[0];
         }
     }
 }
