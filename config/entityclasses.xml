@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configs>
+  <!-- No custom entity classes: the dedi rejects appended non-zombie models with a
+       negative EntityClass id. Bots use the vanilla survivor NPC classes
+       (npcSurvivorRanged / npcSurvivorTemplate, EntitySurvivor with an UMA
+       Player/Male mesh) so they render as random player models on clients.
+       Kept as an empty patch to avoid parse churn. -->
+</configs>
