@@ -286,16 +286,18 @@ namespace BotMod.Core
             return _dmSpawns;
         }
 
-        // Prefer the vanilla survivor NPC bodies (stock positive ids, EntitySurvivor
-        // with an UMA Player/Male mesh) so bots render as random player models on
-        // clients. The trader bodies (npcTraderJoel) do not render for clients when
-        // spawned by a mod (verified: nothing shows, not even a name tag), and
-        // EntityPlayer classes require the full player join path. Custom appended
-        // human classes are rejected by this dedi build (negative EntityClass id).
-        static readonly string[] _botClassPool = new[] { "npcSurvivorRanged", "npcSurvivorTemplate", "npcSurvivorRanged", "npcSurvivorTemplate", "npcSurvivorRanged", "npcSurvivorTemplate", "npcSurvivorRanged", "npcSurvivorTemplate", "npcSurvivorRanged", "npcSurvivorTemplate" };
+        // Default pool: zombie soldier variants. Verified positive on this dedi and
+        // they render on clients (zombies are the game's core classes). The vanilla
+        // humanoid alternatives are NOT usable here: npcTraderJoel has a positive id
+        // but mod-spawned traders render NOTHING for clients (verified), EntityPlayer
+        // classes require the full player join path, and survivor/UMA classes
+        // (npcSurvivor*) return negative ids on this dedi build. A custom player-mesh
+        // class via the entityclasses patch is the path to true player models, pending
+        // the negative-id wall being solved.
+        static readonly string[] _botClassPool = new[] { "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier" };
         public static string PickBotClass(BotConfig cfg)
         {
-            if (cfg.BotEntityClass == null) return "npcSurvivorRanged";
+            if (cfg.BotEntityClass == null) return "zombieSoldier";
             if (cfg.BotEntityClass == "mixed") return _botClassPool[RngPick(_botClassPool.Length)];
             if (cfg.BotEntityClass != null && cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
             return cfg.BotEntityClass;
@@ -311,7 +313,7 @@ namespace BotMod.Core
                 int classId = EntityClass.FromString(want);
                 if (classId < 0)
                 {
-                    foreach (var alias in new[] { "npcSurvivorRanged", "npcSurvivorTemplate", "npcTraderJoel", "zombieSoldier", "zombieBoe", "zombieSteve" })
+                    foreach (var alias in new[] { "zombieSoldier", "zombieBoe", "npcTraderJoel", "npcSurvivorRanged" })
                     {
                         classId = EntityClass.FromString(alias);
                         if (classId >= 0) { want = alias; ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }

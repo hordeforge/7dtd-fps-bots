@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <configs>
-  <!-- No custom entity classes: the dedi rejects appended non-zombie models with a
-       negative EntityClass id. Bots use the vanilla survivor NPC classes
-       (npcSurvivorRanged / npcSurvivorTemplate, EntitySurvivor with an UMA
-       Player/Male mesh) so they render as random player models on clients.
-       Kept as an empty patch to avoid parse churn. -->
+  <!-- No custom entity classes: this dedi build assigns negative ids to appended
+       human classes (EntityClass.AddClass is also absent, so the Harmony inject
+       cannot add them). Bots use zombieSoldier bodies (positive id, renders on
+       clients). npcTraderJoel is positive but mod-spawned traders render nothing;
+       EntityPlayer needs the full player join path; survivor classes are mostly
+       negative. Kept as an empty patch to avoid parse churn. -->
 </configs>
