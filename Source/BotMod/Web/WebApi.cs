@@ -124,7 +124,7 @@ namespace BotMod.Web
                             {
                                 var world = GameManager.Instance?.World;
                                 if (world == null || string.IsNullOrEmpty(ident)) return new { spawned = 0, found = false, name = ident };
-                                EntityPlayer target = BotMod.Commands.ConsoleCmdBot.FindPlayerByNameOrId(world, ident);
+                                EntityPlayer target = BotManager.FindPlayerByNameOrId(world, ident);
                                 if (target == null) return new { spawned = 0, found = false, name = ident };
                                 int n = 0;
                                 for (int i = 0; i < count; i++)

@@ -33,6 +33,36 @@ namespace BotMod.Core
             if (name.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) name = name.Substring(6);
             return name.Split('_')[0];
         }
+        /// <summary>Resolve a player by entity id, client id, or (partial) name.
+        /// Shared by the `bot player` console command and the web API's spawnNear
+        /// so both surfaces accept the same identifiers.</summary>
+        public static EntityPlayer FindPlayerByNameOrId(World world, string ident)
+        {
+            if (world == null || string.IsNullOrEmpty(ident)) return null;
+            // by entityId
+            if (int.TryParse(ident, out int eid)) {
+                var e = world.GetEntity(eid) as EntityPlayer;
+                if (e != null) return e;
+                // also try ClientInfo entityId lookup
+                var cm = ConnectionManager.Instance;
+                if (cm != null) {
+                    var ci = cm.Clients.ForEntityId(eid);
+                    if (ci != null) { var ep = world.GetEntity(ci.entityId) as EntityPlayer; if (ep != null) return ep; }
+                }
+            }
+            string low = ident.ToLowerInvariant();
+            if (world.Players != null && world.Players.list != null) {
+                foreach (var p in world.Players.list) if (p != null) {
+                    string name = p.EntityName ?? p.PlayerDisplayName ?? "";
+                    if (name.ToLowerInvariant() == low || name.ToLowerInvariant().Contains(low)) return p;
+                }
+                // exact entityId string already tried; try prefix match
+                foreach (var p in world.Players.list) if (p != null) {
+                    if (p.entityId.ToString() == ident) return p;
+                }
+            }
+            return null;
+        }
         public int GetTeamId(int entityId)
         {
             if (ModApi.Config.BotTeamCount <= 0) return 0;

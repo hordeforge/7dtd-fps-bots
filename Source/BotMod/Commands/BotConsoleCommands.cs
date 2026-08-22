@@ -107,7 +107,7 @@ namespace BotMod.Commands
             else if (p.Count >= 3) { string last = p[p.Count - 1]; if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last; }
             var world = GameManager.Instance?.World;
             if (world == null) { SdtdConsole.Instance.Output("No world."); return; }
-            EntityPlayer target = FindPlayerByNameOrId(world, ident);
+            EntityPlayer target = BotManager.FindPlayerByNameOrId(world, ident);
             // Also try via sender fallback: if ident is "me" and sender has RemoteClientInfo
             if (target == null && (ident == "me" || ident == "self"))
                 target = FindPlayerBySender(world, sender);
@@ -119,33 +119,6 @@ namespace BotMod.Commands
                 if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;
             }
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {target.EntityName ?? target.PlayerDisplayName ?? ident} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
-        }
-        internal static EntityPlayer FindPlayerByNameOrId(World world, string ident)
-        {
-            if (world == null || string.IsNullOrEmpty(ident)) return null;
-            // by entityId
-            if (int.TryParse(ident, out int eid)) {
-                var e = world.GetEntity(eid) as EntityPlayer;
-                if (e != null) return e;
-                // also try ClientInfo entityId lookup
-                var cm = ConnectionManager.Instance;
-                if (cm != null) {
-                    var ci = cm.Clients.ForEntityId(eid);
-                    if (ci != null) { var ep = world.GetEntity(ci.entityId) as EntityPlayer; if (ep != null) return ep; }
-                }
-            }
-            string low = ident.ToLowerInvariant();
-            if (world.Players != null && world.Players.list != null) {
-                foreach (var p in world.Players.list) if (p != null) {
-                    string name = p.EntityName ?? p.PlayerDisplayName ?? "";
-                    if (name.ToLowerInvariant() == low || name.ToLowerInvariant().Contains(low)) return p;
-                }
-                // exact entityId string already tried; try prefix match
-                foreach (var p in world.Players.list) if (p != null) {
-                    if (p.entityId.ToString() == ident) return p;
-                }
-            }
-            return null;
         }
         static EntityPlayer FindPlayerBySender(World world, CommandSenderInfo sender)
         {
