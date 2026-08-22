@@ -17,9 +17,16 @@ The neural controller replaces the **decision + aim-bias + throttle** slice, not
 | **A — policy head** (chosen) | `WantsToCamp/Retreat/DecideGoal`, `_aimBiasYaw`, `TryShootBurst` gate, `_strafeDir` flip | Heuristic runs if `BotNeuralBrain` throws or weights missing |
 | **B — full motor** | Also `MoveTo` vector | Riskier; needs safety clamp |
 
-## 2. Observation vector (14 → 16 in)
+## 2. Observation vector (14 inputs, frozen)
 
 Built from data `Bot.Tick` already computes; no new sensors needed for v1.
+
+> Shipped shape is frozen at **14 inputs** (`W = 325`; `best.json` carries
+> `inputs: 14`). Rows 14-15 below were never wired and stay reserved. Since R8,
+> the trainer fills slot 4 with fire-spread fraction and slot 12 with
+> rounds-left fraction (they were dead placeholders,
+> `tools/ga/combat_sim.py`); the live mod keeps the original lose-timer /
+> enemy-velocity semantics for those slots (`Bot.BuildNeuralInputs`).
 
 | # | Feature | Source | Norm |
 |---|---|---|---|
@@ -35,8 +42,8 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 | 9 | `aggression`, `selfPreservation`, `camper` | `BotCharacter` | [0,1] each but packed → 3 dims here: indices 9,10,11 |
 | 12 | `enemyVelMag / 12` | `_targetVel.magnitude` | [0,1] |
 | 13 | `stuckFrac = min(stuckSince / StuckTimeoutSec, 1)` | `_stuckSince` | [0,1] |
-| 14 | `burstLeft / BurstMax` | `_burstLeft` | [0,1] |
-| 15 | `inAttackRange` | `dist <= Weapon.Range` | {0,1} |
+| 14 | `burstLeft / BurstMax` | `_burstLeft` | reserved, not shipped |
+| 15 | `inAttackRange` | `dist <= Weapon.Range` | reserved, not shipped |
 
 *Why 14-16 and not 100.* A dedi tick runs every 50 ms; even 16 bots × a few hundred FLOPs is noise. BLOPS budget: `16 × (14*16 + 16*5) ≈ 4k MACs/tick`.
 

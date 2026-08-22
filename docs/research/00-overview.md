@@ -18,7 +18,7 @@ Replace the hand-tuned heuristic loop (`Bot.Tick` → `BotBrain.FindTarget` / `L
 | **Determinism.** Clanker already proved per-bot LCG (`RngNext 1103515245`) makes fights replayable. | Determinism makes fitness stable generation-over-generation; same seed → same outcome. |
 | **No client mod, EAC-off dedi.** We cannot ship a Python training loop into the mod. | Trainer can run *out-of-process* (Python or Zig harness) and export only `float[] weights` into the mod. |
 
-Gradient RL (PPO/SAC) is still viable *offline* with a surrogate simulator, but for a first self-improving loop GA is simpler, debuggable, and fits the C# mod's constraints (no native libs, `netstandard` only). NEAT (evolving topology) and OpenAI-ES / CMA-ES are natural upgrades — see `01-architecture.md`.
+Gradient RL (PPO/SAC) is still viable *offline* with a surrogate simulator, but for a first self-improving loop GA is simpler, debuggable, and fits the C# mod's constraints (no native libs, `netstandard` only). NEAT (evolving topology) and OpenAI-ES / CMA-ES are natural upgrades — see `01-neuroevolution-architecture.md`.
 
 ## 3. The self-improving loop
 

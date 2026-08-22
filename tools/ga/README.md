@@ -15,7 +15,8 @@ tools/ga/
   clone.py         behavioural-cloning warm-start (heuristic traces → cloned net)
   plot.py          fitness.csv → plot.png + Pareto scatter
   ga.py            operators: tournament, crossover, mutation (imported by evolve)
-  harness.py       sense/act bridge to the headless zdtd binary (stubbed for R0)
+  harness.py       evaluation loop over combat_sim.py, the numba PvP+zombie sim
+                   (the headless zdtd-binary bridge was the R0 stub)
   requirements.txt numpy, matplotlib
 ```
 

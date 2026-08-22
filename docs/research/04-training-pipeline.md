@@ -2,7 +2,7 @@
 
 ## 1. Bird's eye
 
-The evolution loop is deliberately split into a **trainer** (owns GA, fitness, logging) and a **harness** (owns the sim tick). The trainer can be Python + harness bridge, or a Zig binary; the harness is the same one `zdtd` already uses (`src/server/game/bot.zig` + `src/server/scenarios.zig`). The mod itself never runs the GA; it only loads the outcome.
+The evolution loop is deliberately split into a **trainer** (owns GA, fitness, logging) and a **harness** (owns the sim tick). The trainer can be Python + harness bridge, or a Zig binary. As shipped (R1 pivot) the harness is the self-contained numba sim `tools/ga/combat_sim.py` driven by `harness.py` — no 7DTD binary; the `zdtd` headless bridge below is the planned fidelity upgrade, not the current pipeline. The mod itself never runs the GA; it only loads the outcome.
 
 ```
 ┌──────────────────┐      queued text SimCommands      ┌──────────────────┐
@@ -40,7 +40,7 @@ Everything in `7dtd-clanker/evolved/` (git-ignored except `best.json` when promo
 ```
 evolved/
   best.json                 # flat float[] of the current champion (committed when promoted)
-  best.meta.json            # { generation, fitness, mapSeeds, configHash, trainerVersion, date }
+  best.meta.json            # { generation, fitness, configHash } (as written by ga.save_best)
   runs/<ts>/                # one dir per training run, never overwritten
     config.json             # full hyperparam table (03 §4) + run_seed
     gen_000.json            # top-3 genomes of that gen (weights + fitness)

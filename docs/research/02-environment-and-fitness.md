@@ -37,7 +37,7 @@ The fitness landscape is meaningless without a fixed test suite. Three arena typ
 
 ## 3. Fitness function
 
-We use a scalarized multi-objective so GA selection stays simple. Weights are configurable; defaults below are from paper-parity tuning (Q3 bot skill calibration) and kept explicit in `evolved/fitness.json`.
+We use a scalarized multi-objective so GA selection stays simple. Weights are configurable; defaults below are from paper-parity tuning (Q3 bot skill calibration) and kept explicit in `tools/ga/harness.py` (`FIT_ELO/FIT_ECON/FIT_SURV/FIT_STUCK/FIT_CAMP`, threaded through `evolve.py --fit-*`); the canon 0.55/0.25/0.15/0.05 was confirmed Pareto by the R7 sweep.
 
 ```
 elo = kills - deaths * 1.0                // raw K/D
@@ -47,6 +47,7 @@ survival = mean(timeAlive / matchDuration)
 
 fitness = 0.55 * norm(elo) + 0.25 * norm(econ) + 0.15 * survival
         - 0.05 * stuckFrac                 // penalty, not a head
+        - 1.0 * campPen                    // camper with no kills (combat_sim camp_pen: 1.6 flat)
 
 norm(x) is rank-normalized per generation (see §3.2).
 ```
@@ -85,6 +86,11 @@ The current `zdtd` passes already rely on this (stuck, LOS, wander hash). Evolut
 
 ## 5. Running the environment
 
+> Status (2026-08-19, R1 pivot): training actually runs on the self-contained
+> numba sim `tools/ga/combat_sim.py` driven by `harness.py` — no 7DTD binary.
+> The zdtd-headless path below is the planned higher-fidelity step (see R8 §7
+> residuals), not the current pipeline.
+
 ### 5.1 Headless sim (recommended)
 
 - Use the `zdtd` headless path (`src/server/scenarios.zig` / `world_store` + `src/server/game/bot.zig`) without graphics, not the live 7DTD dedicated server, for speed (no physics sleep, no chunk streaming).
@@ -92,7 +98,10 @@ The current `zdtd` passes already rely on this (stuck, LOS, wander hash). Evolut
 
 ### 5.2 Live dedi (slower, realistic)
 
-- `BotNeuralBrain` can run inside the real mod, logging `evolved/match_*.jsonl`, and the trainer can harvest those logs. Useful for final validation but an order of magnitude slower than headless.
+- `BotNeuralBrain` can run inside the real mod (planned trace logging of
+  `evolved/match_*.jsonl` is not implemented in the mod today), and the trainer
+  can harvest those logs. Useful for final validation but an order of magnitude
+  slower than headless.
 
 ## 6. Shaping and guardrails
 

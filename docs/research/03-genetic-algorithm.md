@@ -5,7 +5,7 @@
 - **Genome:** `float[W]` with `W ≈ 325` (fixed MLP) or variable with NEAT. Optionally a small `ΔCharacter` tail (6 floats clamped to `[-0.2, 0.2]` offsets over `BotCharacter.Camper/Aggression/...`) so evolution can nudge personality alongside weights without editing `characters.json` by hand.
 - **Population:** `P = 32` (default). Larger helps diversity but linearly scales eval cost; 32 fits the dedi's cores.
 - **Elitism:** `k = 2` best genomes survive verbatim.
-- **Archive:** Hall of Fame of the last `H = 8` champions; every 5 generations a random Hall-of-Famer is an opponent pool member to prevent forgetting.
+- **Archive:** Hall of Fame of the last `H = 8` champions; every 12 generations a random Hall-of-Famer is injected back into the population (freshness-gated so an entry already in the live pop is not duplicated) to prevent forgetting.
 
 ## 2. Operators
 
@@ -31,12 +31,15 @@ Mutation is the main explorer (GA literature: crossover is overrated for small n
 
 | Mutator | Probability per child | Effect |
 |---|---|---|
-| Gaussian weight noise | 0.85 every child | Each weight `w += N(0, σ)` with `σ = 0.05 * (1 - 0.5 * rankNorm)` — fitter parents mutate less |
-| Sparse reset | 0.10 | Pick 1–3 weights, resample `U(-0.5, 0.5)` |
-| Swap | 0.03 | Swap two hidden-unit weight blocks (positional robustness) |
-| ΔCharacter nudge | 0.30 | One trait `+= U(-0.04, 0.04)`, clamped to [0,1] |
+| Gaussian weight noise | 0.92 every child | Each weight `w += N(0, σ)` with σ cosine-annealed over the run and scaled by rank: `σ = 0.05 * anneal * burst * (0.6 + 0.9*(1 - rankNorm))` — fitter parents mutate less |
+| Sparse reset | 0.14 (0.22 stagnant) | Pick 1–3 weights, resample `U(-0.7, 0.7)` |
+| Swap | 0.06 (0.12 stagnant) | Swap two hidden-unit weight blocks (positional robustness) |
+| ΔCharacter nudge | not implemented | The genome carries no trait tail (`W = 325` weights only); trait nudges would need the §1 ΔCharacter encoding first |
 
-No gradient; no momentum. Mutation scale decays slightly with rank so bad genomes explore further.
+No gradient; no momentum. When a plateau is detected the explorer burst fires
+(σ × 1.8, higher reset/swap probs). Shipped constants live in
+`tools/ga/ga.py::mutate`; they were tuned across R5-R11 (see the reports), so
+this table defers to that file where the two ever disagree.
 
 ### 2.4 Speciation (phase 2, NEAT)
 
@@ -62,8 +65,8 @@ Evolution collapses fast on small arenas. Countermeasures (cheap, deterministic)
 | Gaussian σ (base) | σ | 0.05 | 0.02..0.10 |
 | Sparse reset prob | ps | 0.10 | 0.05..0.20 |
 | Hall-of-Fame size | H | 8 | 4..16 |
-| Matches per genome | F | 3×3 arenas → 9 | 6..15 (cost tradeoff) |
-| Generations (run) | G | 80 | 40..200 |
+| Matches per genome | F | 36 train = dual-seed x2 draws over the 9-arena config mix (R9 draw regularization); eval gate pins F=18 | cost tradeoff |
+| Generations (run) | G | 40 (`evolve.py --gens`) | 40..400 in practice |
 | NEAT trigger: plateau gens | Gplat | 15 | 10..30 |
 
 Sweeping should touch at most 2 knobs per experiment; evolution is slow to evaluate so factorial sweeps are wasteful. Log every run; `evolved/runs/<ts>/config.json` freezes the table so results are reproducible.

@@ -7,7 +7,7 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 | Path | Meaning | Committed? |
 |---|---|---|
 | `best.json` | Champion weights (flat `float[W]` + meta) loaded by `BotNeuralBrain.TryLoad` | yes, when promoted |
-| `best.meta.json` | `{ generation, fitness, configHash, trainerVersion, date, mapSeeds }` | yes, alongside `best.json` |
+| `best.meta.json` | `{ generation, fitness, configHash }` (as written by `ga.save_best`) | yes, alongside `best.json` |
 | `runs/<ts>/` | One dir per training run: `config.json`, `gen_*.json`, `fitness.csv`, `leaderboards.jsonl` | no (artifact) |
 | `archive/` | Old `best.json` moved here before promotion | no |
 

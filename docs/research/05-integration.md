@@ -19,6 +19,11 @@ Bot.Tick(dt, world)
 
 Only two injection points, both guarded by `try/catch` so a thrown `NullRef` / `IndexOutOfRange` from a malformed `best.json` never crashes the tick — it logs once and falls back.
 
+R10 added a third injection point: **policy-driven movement** — the net
+composes forward/lateral velocity from its retreat/strafe outputs via
+`BotBrain.MoveDir` (`MoveWithFallback` keeps the Q3-style heuristic movement as
+fallback; see REPORT-2026-08-21-R10).
+
 ## 3. File and API
 
 ```
@@ -29,7 +34,7 @@ Source/BotMod/AI/BotNeuralBrain.cs
 |---|---|
 | `static bool TryLoad(string path, out string reason)` | Reads `evolved/best.json` + `best.meta.json`, validates shape, populates `Weights` + `ConfigHash`. Called on `OnGameStartDone` and `bot reload`. |
 | `static bool Loaded` | Whether a valid model is in memory |
-| `NeuralOutputs Eval(NeuralInputs obs)` | 325-float forward pass, handwritten loops, SIMD-friendly, no allocs on tick |
+| `static bool TryEval(in NeuralInputs obs, out NeuralOutputs outs)` | 325-float forward pass, handwritten loops, no allocs on tick; returns false (caller falls back) when not loaded or on any internal error |
 | `struct NeuralInputs` | 14 floats matching `01` §2, normalized already |
 | `struct NeuralOutputs` | 5 advisory floats (§`01` §3) |
 
@@ -71,7 +76,7 @@ Binary blob (`Float32LE`) is also accepted as `best.bin` for smaller IO, but JSO
 
 | Config flag | Location | Effect |
 |---|---|---|
-| `UseNeuralBrain` (bool, default `false` until validated) | `BotConfig` → `botmod.json` | When false, `BotNeuralBrain` is never called — heuristic only |
+| `UseNeuralBrain` (bool, default `false` in `BotConfig.cs`) | `BotConfig` → `botmod.json` | When false, `BotNeuralBrain` is never called — heuristic only. The deployed `config/botmod.json` ships it **true** since R13: the validation gates were met (R12/R13 GOAL MET) and the champion held 13.04 avg after the magazine alignment. |
 | `BotNeuralWeightPath` (string, default `evolved/best.json`) | `BotConfig` | Where to load the model from |
 | `bot neural reload` | console command | Re-reads `best.json` without restarting the server |
 | `bot neural off/on` | admin | Toggles flag live; useful for blind tests |
@@ -97,7 +102,7 @@ No exception propagates to `Bot.Tick`.
 
 ## 7. Testing
 
-- `tools/tests/BotNeuralBrainTests.cs` (next to `BotConfig.Tests` if any): loads a canned `best.json`, feeds all-zeros obs, asserts outputs are finite and in clamp, runs 10k random ticks and asserts no alloc spike (GC count).
+- `tools/tests/BotNeuralBrainTests.cs` (planned, **not yet present** — the repo has no C# test project): loads a canned `best.json`, feeds all-zeros obs, asserts outputs are finite and in clamp, runs 10k random ticks and asserts no alloc spike (GC count).
 - Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay `match_*.jsonl` — the traces must differ only via net decisions, not physics.
 
 ## 8. Migration path

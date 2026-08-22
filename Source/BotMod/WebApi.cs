@@ -15,6 +15,14 @@ namespace BotMod.Web
     /// with the stock entity scoreboard stats; POST /api/bot drives the same
     /// paths as the `bot` console command (enable/disable/spawn/remove/neural).
     /// The menu entry and data are admin-only (permission level 0).
+    ///
+    /// Duplicate semantics: POST bodies accept an optional client-generated
+    /// "requestId" idempotency key. Retries reusing a key within the ledger
+    /// retention window replay the recorded response instead of executing
+    /// again (a retried spawn does not spawn twice); a concurrent duplicate
+    /// with the same key gets 409 REQUEST_IN_PROGRESS; failures are not
+    /// cached, so a retry may run again. Without a key, execution is
+    /// unchanged and repeated calls repeat the effect.
     /// </summary>
     public sealed class Bot : AbsRestApi
     {
@@ -32,6 +40,29 @@ namespace BotMod.Web
             PrepareEnvelopedResult(out JsonWriter writer);
             string action = _jsonInput != null && _jsonInput.TryGetValue("action", out object a) && a != null
                 ? Convert.ToString(a).ToLowerInvariant() : null;
+            // Optional idempotency key: one per logical request, reused across
+            // retries (see class doc + IdempotencyLedger).
+            string requestId = _jsonInput != null && _jsonInput.TryGetValue("requestId", out object rid) && rid != null
+                ? Convert.ToString(rid) : null;
+            bool keyed = IdempotencyLedger.IsValidKey(requestId);
+            if (keyed)
+            {
+                string cached;
+                IdempotencyLedger.BeginResult begin = IdempotencyLedger.TryBegin(requestId, out cached);
+                if (begin == IdempotencyLedger.BeginResult.Replay)
+                {
+                    writer.WriteRaw(Encoding.UTF8.GetBytes(cached));
+                    SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
+                    return;
+                }
+                if (begin == IdempotencyLedger.BeginResult.InProgress)
+                {
+                    SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_IN_PROGRESS", null);
+                    return;
+                }
+            }
+            string respBody = null;
+            string errorCode = null;
             try
             {
                 switch (action)
@@ -39,12 +70,12 @@ namespace BotMod.Web
                     case "enable":
                         ModApi.Config.Enabled = true;
                         PersistEnabled(true);
-                        Respond(writer, context, "enabled", true);
+                        respBody = RespondJson("enabled", true);
                         break;
                     case "disable":
                         ModApi.Config.Enabled = false;
                         PersistEnabled(false);
-                        Respond(writer, context, "enabled", false);
+                        respBody = RespondJson("enabled", false);
                         break;
                     case "spawn":
                         {
@@ -62,7 +93,7 @@ namespace BotMod.Web
                                     if (BotManager.Instance.TrySpawnOne()) n++;
                                 return n;
                             }, 0);
-                            Respond(writer, context, "spawned", spawned);
+                            respBody = RespondJson("spawned", spawned);
                         }
                         break;
                     case "spawnnear":
@@ -98,14 +129,14 @@ namespace BotMod.Web
                                 }
                                 return new { spawned = n, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
                             }, new { spawned = 0, found = false, name = ident });
-                            Respond(writer, context, "spawned", r.spawned, "found", r.found, "player", r.name);
+                            respBody = RespondJson("spawned", r.spawned, "found", r.found, "player", r.name);
                         }
                         break;
                     case "remove":
                     case "clear":
                         {
                             int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), 0);
-                            Respond(writer, context, "removed", removed);
+                            respBody = RespondJson("removed", removed);
                         }
                         break;
                     case "neural":
@@ -121,7 +152,7 @@ namespace BotMod.Web
                                     false);
                                 if (!ok) ModApi.Log("BotNeuralBrain web enable: load failed (" + why + ")");
                             }
-                            Respond(writer, context, "neural", on, "loaded", on ? BotMod.AI.BotNeuralBrain.Loaded : false, "reason", why);
+                            respBody = RespondJson("neural", on, "loaded", on ? BotMod.AI.BotNeuralBrain.Loaded : false, "reason", why);
                         }
                         break;
                     case "removeone":
@@ -131,7 +162,7 @@ namespace BotMod.Web
                             if (_jsonInput != null && _jsonInput.TryGetValue("entityId", out object id))
                                 int.TryParse(Convert.ToString(id), out entityId);
                             bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), false);
-                            Respond(writer, context, "removed", removed, "entityId", entityId);
+                            respBody = RespondJson("removed", removed, "entityId", entityId);
                         }
                         break;
                     case "skill":
@@ -143,7 +174,7 @@ namespace BotMod.Web
                             level = Math.Max(0, Math.Min(4, level));
                             ModApi.Config.Difficulty = level;
                             ModApi.Config.Normalize();
-                            Respond(writer, context, "difficulty", level);
+                            respBody = RespondJson("difficulty", level);
                         }
                         break;
                     case "team":
@@ -154,7 +185,7 @@ namespace BotMod.Web
                                 && Convert.ToString(o).ToLowerInvariant() == "true";
                             ModApi.Config.BotTeam = on;
                             ModApi.PersistConfigField("BotTeam", on);
-                            Respond(writer, context, "team", on);
+                            respBody = RespondJson("team", on);
                         }
                         break;
                     case "vs":
@@ -171,10 +202,13 @@ namespace BotMod.Web
                                 case "bot": case "bots": ModApi.Config.BotVsBot = on; field = "BotVsBot"; break;
                                 case "zombie": case "zombies": ModApi.Config.BotVsZombie = on; field = "BotVsZombie"; break;
                                 case "player": case "players": case "human": ModApi.Config.BotVsPlayer = on; field = "BotVsPlayer"; break;
-                                default: SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_TARGET", null); return;
+                                default: errorCode = "INVALID_TARGET"; break;
                             }
-                            ModApi.PersistConfigField(field, on);
-                            Respond(writer, context, "vs", target, "on", on);
+                            if (errorCode == null)
+                            {
+                                ModApi.PersistConfigField(field, on);
+                                respBody = RespondJson("vs", target, "on", on);
+                            }
                         }
                         break;
                     case "setteam":
@@ -187,13 +221,13 @@ namespace BotMod.Web
                             int team = 0;
                             if (_jsonInput != null && _jsonInput.TryGetValue("team", out object tv))
                                 int.TryParse(Convert.ToString(tv), out team);
-                            if (string.IsNullOrEmpty(name)) { SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_NAME", null); return; }
+                            if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
                             string baseName = BotManager.BaseName(name);
                             var cfg = ModApi.Config;
                             team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
                             if (team == 0) cfg.TeamAssignments.Remove(baseName); else cfg.TeamAssignments[baseName] = team;
                             ModApi.PersistConfigField("TeamAssignments", cfg.TeamAssignments);
-                            Respond(writer, context, "name", baseName, "team", team);
+                            respBody = RespondJson("name", baseName, "team", team);
                         }
                         break;
                     case "teamcount":
@@ -208,26 +242,37 @@ namespace BotMod.Web
                             ModApi.Config.Normalize(); // drops assignments outside the range
                             ModApi.PersistConfigField("BotTeamCount", count);
                             ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
-                            Respond(writer, context, "teamCount", count);
+                            respBody = RespondJson("teamCount", count);
                         }
                         break;
                     case "clearteams":
                         {
                             ModApi.Config.TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                             ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
-                            Respond(writer, context, "cleared", true);
+                            respBody = RespondJson("cleared", true);
                         }
                         break;
                     default:
-                        SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_ACTION", null);
+                        errorCode = "INVALID_ACTION";
                         break;
                 }
             }
             catch (Exception ex)
             {
+                if (keyed) IdempotencyLedger.Fail(requestId); // retryable: nothing cached
                 ModApi.Log("bot web api failed: " + ex);
                 SendEmptyResponse(context, HttpStatusCode.InternalServerError, null, "ERROR", ex);
+                return;
             }
+            if (errorCode != null)
+            {
+                if (keyed) IdempotencyLedger.Fail(requestId); // client error: retry may resubmit
+                SendEmptyResponse(context, HttpStatusCode.BadRequest, null, errorCode, null);
+                return;
+            }
+            if (keyed) IdempotencyLedger.Complete(requestId, respBody);
+            writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
+            SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
 
         public override int[] DefaultMethodPermissionLevels() => new[] { 0, 0, 0, 0, 0 };
@@ -255,13 +300,14 @@ namespace BotMod.Web
 
         static void PersistEnabled(bool enabled) => ModApi.PersistConfigField("Enabled", enabled);
 
-        static void Respond(JsonWriter writer, RequestContext context, string key, object value, string key2 = null, object value2 = null, string key3 = null, object value3 = null)
+        /// <summary>Serialize the success payload. The caller sends it and, for
+        /// keyed requests, records it in the idempotency ledger for replays.</summary>
+        static string RespondJson(string key, object value, string key2 = null, object value2 = null, string key3 = null, object value3 = null)
         {
             var payload = new Dictionary<string, object> { [key] = value };
             if (key2 != null) payload[key2] = value2;
             if (key3 != null) payload[key3] = value3;
-            writer.WriteRaw(Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(payload)));
-            SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(payload);
         }
 
         static string BuildStatus()

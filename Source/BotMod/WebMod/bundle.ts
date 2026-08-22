@@ -97,6 +97,7 @@ type BotAction = {
   name?: string;
   team?: number;
   on?: boolean;
+  requestId?: string;
 };
 type SortState = { key: string; dir: number };
 type WebModContract = {
@@ -161,6 +162,17 @@ function toCount(v: string): number {
   return n;
 }
 
+// One idempotency key per logical command (per click): the server records the
+// first response under this key, so a retried POST (lost response after the
+// server acted, proxy retry) replays it instead of spawning twice.
+function newRequestId(): string {
+  const c: Crypto | undefined = typeof crypto === "undefined" ? undefined : crypto;
+  if (c !== undefined && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4294967296).toString(36)}`;
+}
+
 // Fire a bot command. The 5s poll shows the real state after the call, so a
 // failure only clears the busy flag; errors surface through the polled status.
 function postAction(opts: {
@@ -176,7 +188,8 @@ function postAction(opts: {
   }
   opts.setBusy(`${opts.body.action}${optNum(opts.body.count)}${optNum(opts.body.entityId)}`);
   opts.setArmed("");
-  void opts.HTTP.post("/api/bot", opts.body)
+  const body: BotAction = { ...opts.body, requestId: newRequestId() };
+  void opts.HTTP.post("/api/bot", body)
     .then((): void => { void opts.refetch(); })
     .catch((): void => {
       // the next poll shows the real state after a failed command

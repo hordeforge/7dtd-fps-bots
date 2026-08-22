@@ -46,16 +46,21 @@ The neuroevolution and bot-AI research for the 7dtd-clanker bot mod. Two layers:
 
 ## Current state (2026-08-21)
 
-- **Shipped champion**: `evolved/best.json`, gen 299 lineage, held **11.91 avg**
+- **Shipped champion**: `evolved/best.json`, gen 199 (R12 run
+  `2026-08-21_110155_pop64_g200_s42`, warm-started from the R11 gen-299
+  champion), held **13.04 avg**
   on the canonical gate (seeds 999/1234/4242, 40 matches):
   `python3 tools/ga/eval_static_vs_neural.py --seeds 999 1234 4242 --matches 40`
-  prints **GOAL MET** with margins +7.176/+7.747/+7.223.
+  prints **GOAL MET** with margins +8.044/+8.862/+8.223 (re-measured after the
+  R13 magazine alignment; before it the champion held 11.91 avg,
+  margins +7.176/+7.747/+7.223).
 - **Task**: fire cost (finite ammo + spread) + policy-driven movement + fixed-
   opponent duel arenas (R8/R10/R12). Training uses F=36 draw regularization;
   the gate pins F=18.
 - **Live mod**: `Source/BotMod` ports the R10 movement semantics (net-driven
   velocity with Q3 fallback); build/install via `make build` / `make install`.
-- **Open items**: static-bot parity alignment (R13 section 5, needs direction);
+- **Open items**: static-bot parity alignment (R13 section 5, items 1-3 still
+  need direction; item 4, magazine sizes, was executed in R13 section 6);
   live kite-pattern verification via the playtest client suite (R10/R11).
 
 ## Cross-repo
