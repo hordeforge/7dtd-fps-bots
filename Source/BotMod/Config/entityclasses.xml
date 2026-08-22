@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<configs>
-  <!-- No custom entity classes: the dedi rejects appended non-zombie models with a
-       negative EntityClass id. Bots use the vanilla npcTraderJoel human (positive id)
-       so they render as player bodies. Kept as an empty patch to avoid parse churn. -->
-</configs>

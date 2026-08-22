@@ -1,18 +1,22 @@
 ROOT := $(CURDIR)
 DS ?= $(HOME)/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server
-.PHONY: build build-mcs test install uninstall run clean lint-html lint-webui check
+SCRIPTS := $(ROOT)/scripts
+.PHONY: build build-mcs test install uninstall run clean lint-html lint-webui lint-shell check
 build:
-	$(ROOT)/scripts/build.sh
+	bash $(SCRIPTS)/build.sh
 build-mcs:
-	SEVENDTD_BUILD_BACKEND=mcs $(ROOT)/scripts/build.sh
+	SEVENDTD_BUILD_BACKEND=mcs bash $(SCRIPTS)/build.sh
+test:
+	bash $(SCRIPTS)/test-idempotency.sh
 lint-html:
-	chmod +x $(ROOT)/scripts/lint-html.sh
-	$(ROOT)/scripts/lint-html.sh
+	bash $(SCRIPTS)/lint-html.sh
 lint-webui:
-	bash $(ROOT)/scripts/lint-webui.sh
-check: lint-html lint-webui
+	bash $(SCRIPTS)/lint-webui.sh
+lint-shell:
+	shellcheck $(SCRIPTS)/*.sh
+check: lint-shell lint-html lint-webui
 install:
-	$(ROOT)/scripts/install.sh
+	bash $(SCRIPTS)/install.sh
 uninstall:
 	rm -rf "$(DS)/Mods/BotMod"
 clean:

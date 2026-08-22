@@ -170,7 +170,7 @@ function newRequestId(): string {
   if (c !== undefined && typeof c.randomUUID === "function") {
     return c.randomUUID();
   }
-  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4294967296).toString(36)}`;
+  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4_294_967_296).toString(36)}`;
 }
 
 // Fire a bot command. The 5s poll shows the real state after the call, so a

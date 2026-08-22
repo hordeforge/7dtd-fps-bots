@@ -13,7 +13,10 @@
 # tsc/oxlint run through npx pinned by TSC_VERSION/OXLINT_VERSION. The repo
 # deliberately does not track package.json/node_modules (.gitignore), so the
 # versions live here as the single source of truth (same policy as
-# ../7dtd-apm/scripts/lint-webui.sh).
+# ../7dtd-apm/scripts/lint-webui.sh). TSC_VERSION must stay equal to
+# TSC_VERSION in scripts/build.sh: the freshness gate below compares the
+# committed bundle.js against a compile with this exact compiler version, and
+# the shipped artifact is built with that same version.
 # Override locally: TSC_VERSION=5.9.3 OXLINT_VERSION=1.79.0 bash scripts/lint-webui.sh
 #
 # Requires: node/npm (npx).

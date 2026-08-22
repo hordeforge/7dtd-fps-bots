@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
+# Build BotMod.dll plus the mod payload into dist/BotMod.
+#
+# Backends (SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet):
+#   dotnet  SDK-style build per Source/BotMod/BotMod.csproj (preferred)
+#   mcs     mono compiler against the game's Managed DLLs (fallback)
+# Both compile the same sources against the Steam dedicated server (or client)
+# Managed directory, then assemble the identical payload below.
 set -euo pipefail
+export LC_ALL=C TZ=UTC
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRV="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
 CLIENT="${SEVENDTD_GAME_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days To Die}"
@@ -14,26 +23,45 @@ else
 fi
 OUT="$ROOT/dist/BotMod"
 SRC="$ROOT/Source/BotMod"
+
+# WebMod compiler version. Must match TSC_VERSION in scripts/lint-webui.sh,
+# whose freshness gate compares the committed bundle.js against a compile with
+# this exact version; building the shipped artifact with any other tsc makes
+# the two disagree. Override locally: TSC_VERSION=5.9.3 bash scripts/build.sh
+TSC_VERSION="${TSC_VERSION:-5.9.3}"
+
+# Stage from scratch: leftover files from removed/renamed sources must not
+# survive into the installed mod.
+rm -rf "$OUT"
 mkdir -p "$OUT/Config"
 
-BUILD_BACKEND="${SEVENDTD_BUILD_BACKEND:-auto}"
-if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && dotnet --list-sdks 2>/dev/null | grep -q .; then
-  echo "Building with dotnet SDK against: $MANAGED"
-  dotnet build "$SRC/BotMod.csproj" -c Release \
-    -p:GameManagedDir="$MANAGED" -p:HarmonyPath="$HARMONY" \
-    -p:BotModOutput="$OUT/"
+copy_payload() {
   cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
   cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
   if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
   if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
-if [ -f "$SRC/Config/entityclasses.xml" ]; then cp "$SRC/Config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; elif [ -f "$ROOT/config/entityclasses.xml" ]; then cp "$ROOT/config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; fi
-  # WebMod: compile the TypeScript panel to bundle.js (dashboard loads
-  # /webmods/BotMod/bundle.js) and copy it plus the stylesheet into dist.
-  command -v tsc >/dev/null 2>&1 || { echo "ERROR: tsc (TypeScript) not found; cannot build WebMod" >&2; exit 1; }
-  tsc -p "$SRC/WebMod/tsconfig.json"
+  cp "$ROOT/config/entityclasses.xml" "$OUT/Config/entityclasses.xml"
+  echo "patch -> $OUT/Config/entityclasses.xml"
+}
+
+build_webmod() {
+  # Compile the TypeScript panel to bundle.js (dashboard loads
+  # /webmods/BotMod/bundle.js); emit lands next to bundle.ts per
+  # WebMod/tsconfig.json, then bundle.js + styling.css ship in the payload.
+  npx --yes -p "typescript@$TSC_VERSION" tsc -p "$SRC/WebMod/tsconfig.json"
   mkdir -p "$OUT/WebMod"
   cp "$SRC/WebMod/bundle.js" "$OUT/WebMod/bundle.js"
   cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"
+}
+
+BUILD_BACKEND="${SEVENDTD_BUILD_BACKEND:-auto}"
+if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && [[ -n "$(dotnet --list-sdks 2>/dev/null)" ]]; then
+  echo "Building with dotnet SDK against: $MANAGED"
+  dotnet build "$SRC/BotMod.csproj" -c Release \
+    -p:GameManagedDir="$MANAGED" -p:HarmonyPath="$HARMONY" \
+    -p:BotModOutput="$OUT/"
+  copy_payload
+  build_webmod
   echo "OK -> $OUT/BotMod.dll"
   ls -la "$OUT"
   exit 0
@@ -56,22 +84,12 @@ refs=(
   -r:"$MANAGED/Utf8Json.dll"
   -r:"$MANAGED/System.Xml.dll"
   -r:"$MANAGED/LogLibrary.dll"
-  -r:"$MANAGED/System.Xml.dll"
 )
-mapfile -d '' sources < <(find "$SRC" -type f -name '*.cs' -print0)
+# sort -z: deterministic compile order regardless of readdir order.
+mapfile -d '' sources < <(find "$SRC" -type f -name '*.cs' -print0 | sort -z)
 mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 \
   -out:"$OUT/BotMod.dll" "${refs[@]}" "${sources[@]}"
-cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
-cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
-if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
-if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
-if [ -f "$SRC/Config/entityclasses.xml" ]; then cp "$SRC/Config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; elif [ -f "$ROOT/config/entityclasses.xml" ]; then cp "$ROOT/config/entityclasses.xml" "$OUT/Config/entityclasses.xml"; echo "patch -> $OUT/Config/entityclasses.xml"; fi
-# WebMod: compile the TypeScript panel to bundle.js (dashboard loads
-# /webmods/BotMod/bundle.js) and copy it plus the stylesheet into dist.
-command -v tsc >/dev/null 2>&1 || { echo "ERROR: tsc (TypeScript) not found; cannot build WebMod" >&2; exit 1; }
-tsc -p "$SRC/WebMod/tsconfig.json"
-mkdir -p "$OUT/WebMod"
-cp "$SRC/WebMod/bundle.js" "$OUT/WebMod/bundle.js"
-cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"
+copy_payload
+build_webmod
 echo "OK -> $OUT/BotMod.dll"
 ls -la "$OUT"
