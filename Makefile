@@ -1,5 +1,6 @@
 ROOT := $(CURDIR)
-DS ?= $(HOME)/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server
+# Same override as scripts/install.sh: SEVENDTD_DS_DIR wins over the default.
+DS ?= $(if $(SEVENDTD_DS_DIR),$(SEVENDTD_DS_DIR),$(HOME)/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server)
 SCRIPTS := $(ROOT)/scripts
 .PHONY: build build-mcs test install uninstall run clean lint-html lint-webui lint-shell check
 build:

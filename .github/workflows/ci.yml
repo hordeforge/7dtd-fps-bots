@@ -1,9 +1,29 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # actions/cache v4.3.0: npx downloads (vnu-jar, typescript, oxlint,
+      # tsgolint) and lint-webui.sh's tool cache are additive caches keyed by
+      # the pinned versions in scripts/*.sh; restore-keys keeps old entries so
+      # a version bump only fetches the delta.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.npm/_npx
+            ~/.cache/clanker
+          key: npx-${{ hashFiles('scripts/*.sh') }}
+          restore-keys: npx-
       - run: make check
