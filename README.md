@@ -2,6 +2,12 @@
 
 > **Part of [HordeForge](https://github.com/hordeforge)** — High-Performance Systems Engineering for 7 Days to Die.
 
+![CI](https://github.com/hordeforge/7dtd-fps-bots/actions/workflows/ci.yml/badge.svg)
+![license](https://img.shields.io/github/license/hordeforge/7dtd-fps-bots)
+![release](https://img.shields.io/github/v/release/hordeforge/7dtd-fps-bots)
+![languages](https://img.shields.io/github/languages/count/hordeforge/7dtd-fps-bots)
+![top language](https://img.shields.io/github/languages/top/hordeforge/7dtd-fps-bots)
+
 Server-side mod that spawns real FPS bots in 7 Days to Die dedicated servers. Names are prefixed `[Bot] Grunt_42` so they are instantly distinguishable in the player list and HUD. Bots spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
 
 ## What it does
