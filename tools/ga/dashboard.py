@@ -172,7 +172,7 @@ def build(runs, out: Path, replays):
             best_run_name = run.name
 
     chunks = []
-    chunks.append("""<!doctype html><html><head><meta charset="utf-8">
+    chunks.append("""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bot Evolution Dashboard</title>
 <style>
@@ -212,11 +212,11 @@ def build(runs, out: Path, replays):
         # run recorded held-out scores, and feeding "" through chart_card would
         # crash the whole dashboard on the PNG header parse.
         if cd:
-            chunks.append(f"""<h2>1 · Evolution curves</h2>{chart_card(cd, 'evolution curves')}""")
+            chunks.append(f"""<h2>1 · Evolution curves</h2>{chart_card(cd, f'Line chart of the best fitness per generation across {len(runs)} runs; the champion run is highlighted')}""")
         if hs:
-            chunks.append(f"""<h2>2 · Held-out stability</h2>{chart_card(hs, 'held-out stability strip')}""")
+            chunks.append(f"""<h2>2 · Held-out stability</h2>{chart_card(hs, 'Bar chart of the final held-out score per run, champion run on the left')}""")
         if net:
-            chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'champion controller network')}""")
+            chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'Diagram of the champion controller neural network: 14 inputs, 16 hidden units, 5 outputs')}""")
 
     # Arena replays
     if replays:
@@ -224,7 +224,7 @@ def build(runs, out: Path, replays):
         chunks.append('<div class="grid">')
         encoded = {label: base64.b64encode(html.encode()).decode() for label, html in replays.items()}
         for label in replays:
-            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{label}</div><iframe id="f{abs(hash(label))%9999}" style="width:100%" height="430"></iframe></div>')
+            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{label}</div><iframe id="f{abs(hash(label))%9999}" title="Arena replay {label}" style="width:100%" height="430"></iframe></div>')
         chunks.append('</div>')
         # Set srcdoc via JS so large embedded HTML/payloads don't need escaping in attributes.
         chunks.append("<script>")
@@ -245,11 +245,13 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
                      cfg.get("pop"), cfg.get("gens"), cfg.get("curriculum"),
                      cfg.get("islands"), f"{heldv[-1]:.2f}" if heldv else "—"))
     rows.sort(key=lambda r: float(r[5]) if r[5] != "—" else 0, reverse=True)
-    chunks.append("""<h2>5 · Runs</h2><div class="card"><table><tr><th>run</th><th>pop</th><th>gens</th><th>curriculum</th><th>islands</th><th>held</th></tr>""")
+    chunks.append("""<h2>5 · Runs</h2><div class="card"><table><caption style="text-align:left">Summary of every GA run: population, generations, curriculum, islands, final held-out score</caption><thead><tr><th scope="col">run</th><th scope="col">pop</th><th scope="col">gens</th><th scope="col">curriculum</th><th scope="col">islands</th><th scope="col">held</th></tr></thead><tbody>""")
     for r in rows:
         chunks.append(f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td><td>{r[5]}</td></tr>")
-    chunks.append("</table></div>")
-    chunks.append(f"""<p style="color:#64748b;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div></body></html>""")
+    chunks.append("</tbody></table></div>")
+    # Footer note in #94a3b8 (not the dimmer #64748b): it must keep 4.5:1
+    # contrast on the dark page background.
+    chunks.append(f"""<p style="color:#94a3b8;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div></body></html>""")
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(chunks))

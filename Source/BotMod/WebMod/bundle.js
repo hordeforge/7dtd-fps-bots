@@ -75,12 +75,15 @@
     }
     // Fire a bot command. The 5s poll shows the real state after the call, so a
     // failure only clears the busy flag; errors surface through the polled status.
+    // `say` feeds the screen-reader status region (the busy state disables every
+    // control, which sighted users see but assistive tech would not announce).
     function postAction(opts) {
         if (opts.busy !== "") {
             return;
         }
         opts.setBusy(`${opts.body.action}${optNum(opts.body.count)}${optNum(opts.body.entityId)}`);
         opts.setArmed("");
+        opts.say(`${opts.body.action}: command sent`);
         const body = Object.assign(Object.assign({}, opts.body), { requestId: newRequestId() });
         void opts.HTTP.post("/api/bot", body)
             .then(() => { void opts.refetch(); })
@@ -92,13 +95,15 @@
             opts.setBusy("");
         });
     }
-    // Destructive buttons: click to arm, click again within 4 s to run.
+    // Destructive buttons: click to arm, click again within 4 s to run. The arm
+    // step is announced (`say`) because the only visual cue is the label change.
     function armOrRun(opts) {
         if (opts.armed === opts.label) {
             opts.onConfirm();
             return;
         }
         opts.setArmed(opts.label);
+        opts.say(`${opts.label} armed, activate again within 4 seconds to confirm`);
         setTimeout(() => opts.setArmed((a) => (a === opts.label ? "" : a)), ARM_TIMEOUT_MS);
     }
     function makeBtn(h, busy, post) {
@@ -108,13 +113,13 @@
             onClick: () => post(body)
         }, label);
     }
-    function makeArmedBtn(h, armed, setArmed, busy, post) {
+    function makeArmedBtn(h, armed, setArmed, busy, say, post) {
         return (label, body, cls) => {
             const isArmed = armed === label;
             return h("button", {
                 className: `botmod-btn${cls === undefined ? "" : ` ${cls}`}${isArmed ? " botmod-armed" : ""}`,
                 disabled: busy !== "",
-                onClick: () => armOrRun({ armed, setArmed, label, onConfirm: () => post(body) })
+                onClick: () => armOrRun({ armed, setArmed, label, say, onConfirm: () => post(body) })
             }, isArmed ? "Confirm?" : label);
         };
     }
@@ -170,6 +175,7 @@
     function renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn) {
         return h("div", { className: "botmod-row" }, armedBtn(enabled ? "Disable" : "Enable", { action: enabled ? "disable" : "enable" }, enabled ? "botmod-danger" : "botmod-primary"), armedBtn("Remove all", { action: "remove" }, "botmod-danger"), h("input", {
             className: "botmod-num", type: "number", min: 1, max: 16, value: spawnCount,
+            "aria-label": "Bots to spawn",
             onChange: (e) => setSpawnCount(e.target.value)
         }), btn("Spawn", { action: "spawn", count: toCount(spawnCount) }, "botmod-primary"), [1, 4, 8].map((n) => h("button", { key: n, className: "botmod-btn", disabled: busy !== "", onClick: () => post({ action: "spawn", count: n }) }, `+${n}`)));
     }
@@ -184,12 +190,15 @@
             ? h("span", { className: "botmod-window" }, "no players online")
             : h("select", {
                 className: "botmod-select", value: nearPlayer,
+                "aria-label": "Player",
                 onChange: (e) => setNearPlayer(e.target.value)
             }, onlinePlayers.map((p) => h("option", { key: p.entityId, value: p.name }, p.name))), h("input", {
             className: "botmod-num", type: "number", min: 1, max: 16, value: nearCount,
+            "aria-label": "Bots to spawn near player",
             onChange: (e) => setNearCount(e.target.value)
         }), h("input", {
             className: "botmod-weapon", type: "text", placeholder: "weapon (opt)", value: nearWeapon,
+            "aria-label": "Weapon (optional)",
             onChange: (e) => setNearWeapon(e.target.value)
         }), btn("Spawn near", {
             action: "spawnNear", player: nearPlayer,
@@ -262,49 +271,74 @@
         }, "− teams"), h("button", {
             className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= 8,
             onClick: () => post({ action: "teamCount", count: teamCount + 1 })
-        }, "+ teams"), armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"), h("span", { className: "botmod-window" }, "drag a bot onto a team · picks persist"));
+        }, "+ teams"), armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"), h("span", { className: "botmod-window" }, "drag a bot onto a team (or use its Team column) · picks persist"));
     }
     function renderConfigRow(h, s) {
         return h("div", { className: "botmod-row botmod-cfg" }, h("span", { className: "botmod-window" }, `vision ${num(s.visionRange)}m · attack ${num(s.attackRange)}m · spawn r ${num(s.spawnRadius)}m` +
             ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
             `${s.botVsBot === true ? " · vsBot" : ""} · hp ${num(s.botHealth)}`));
     }
-    function sortArrow(sort, key) {
+    function ariaSortValue(sort, key) {
         if (sort.key !== key) {
-            return "";
+            return "none";
         }
-        return sort.dir < 0 ? " ▼" : " ▲";
+        return sort.dir < 0 ? "descending" : "ascending";
     }
+    // The arrow glyph duplicates what aria-sort already announces; hide it from AT.
+    function sortArrowNode(h, sort, key) {
+        if (sort.key !== key) {
+            return null;
+        }
+        return h("span", { key: "arrow", "aria-hidden": "true" }, sort.dir < 0 ? " ▼" : " ▲");
+    }
+    // One scoreboard row: draggable for pointer users; the Team select is the
+    // keyboard/screen-reader path to the same action (dragging needs an
+    // alternative that does not rely on pointer precision, WCAG 2.5.7).
+    function botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver) {
+        return h("tr", {
+            key: b.entityId,
+            draggable: true,
+            className: dragName === b.name ? "botmod-drag" : "",
+            title: "Drag onto a team bucket",
+            onDragStart: (e) => {
+                e.dataTransfer.setData("text/plain", b.name);
+                e.dataTransfer.effectAllowed = "move";
+                setDragName(b.name);
+            },
+            onDragEnd: () => {
+                setDragName(null);
+                setDropOver(null);
+            }
+        }, h("td", null, h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) }, "aria-hidden": "true" }), b.name), h("td", null, b.weapon), h("td", null, b.health), h("td", null, b.players), h("td", null, b.zombies), h("td", null, b.deaths), h("td", null, b.score), h("td", null, b.level), h("td", null, nearLabel(b)), h("td", null, h("select", {
+            className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
+            "aria-label": `Team for ${b.name}`,
+            onChange: (e) => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
+        }, teamOptions)), h("td", { className: "botmod-state" }, b.status), h("td", null, h("button", {
+            className: "botmod-btn botmod-danger botmod-remove", title: "Remove bot",
+            "aria-label": `Remove bot ${b.name}`,
+            disabled: busy !== "", onClick: () => post({ action: "removeOne", entityId: b.entityId })
+        }, "✕")));
+    }
+    // Sortable column header: a real button inside the th keeps sorting keyboard
+    // operable (2.1.1); aria-sort exposes the current direction so the arrow glyph
+    // can stay hidden from assistive tech.
     function renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver) {
-        const th = (label, key) => h("th", { key: label, className: "botmod-sortable", onClick: () => setSort((srt) => ({ key, dir: srt.key === key ? -srt.dir : -1 })) }, `${label}${sortArrow(sort, key)}`);
+        const th = (label, key) => h("th", {
+            key: label,
+            className: "botmod-sortable",
+            "aria-sort": ariaSortValue(sort, key)
+        }, h("button", {
+            className: "botmod-sort-btn",
+            onClick: () => setSort((srt) => ({ key, dir: srt.key === key ? -srt.dir : -1 }))
+        }, label, sortArrowNode(h, sort, key)));
         const teamCount = Math.max(0, Math.min(8, numOr(s.teamCount, 2)));
         const teamOptions = [];
         for (let t = 0; t <= teamCount; t++) {
             teamOptions.push(h("option", { key: t, value: String(t) }, teamLabel(t)));
         }
-        return h("div", { className: "botmod-scoreboard" }, h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team`), bots.length === 0
+        return h("div", { className: "botmod-scoreboard" }, h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team or use the Team column`), bots.length === 0
             ? h("p", { className: "botmod-empty" }, "No bots alive.")
-            : h("table", { className: "botmod-table" }, h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => h("tr", {
-                key: b.entityId,
-                draggable: true,
-                className: dragName === b.name ? "botmod-drag" : "",
-                title: "Drag onto a team bucket",
-                onDragStart: (e) => {
-                    e.dataTransfer.setData("text/plain", b.name);
-                    e.dataTransfer.effectAllowed = "move";
-                    setDragName(b.name);
-                },
-                onDragEnd: () => {
-                    setDragName(null);
-                    setDropOver(null);
-                }
-            }, h("td", null, h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) } }), b.name), h("td", null, b.weapon), h("td", null, b.health), h("td", null, b.players), h("td", null, b.zombies), h("td", null, b.deaths), h("td", null, b.score), h("td", null, b.level), h("td", null, nearLabel(b)), h("td", null, h("select", {
-                className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
-                onChange: (e) => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
-            }, teamOptions)), h("td", { className: "botmod-state" }, b.status), h("td", null, h("button", {
-                className: "botmod-btn botmod-danger botmod-remove", title: "Remove bot",
-                disabled: busy !== "", onClick: () => post({ action: "removeOne", entityId: b.entityId })
-            }, "✕")))))));
+            : h("table", { className: "botmod-table" }, h("caption", { className: "botmod-sronly" }, "Bot scoreboard"), h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver)))));
     }
     function BotPanel({ React, HTTP, useQuery }) {
         var _a, _b;
@@ -327,6 +361,7 @@
         const [nearCount, setNearCount] = React.useState("1");
         const [nearWeapon, setNearWeapon] = React.useState("");
         const [armed, setArmed] = React.useState(""); // destructive buttons: click to arm, click again to run
+        const [announce, setAnnounce] = React.useState(""); // polite live region for state changes SR users would otherwise miss
         const [sort, setSort] = React.useState({ key: "score", dir: -1 });
         const [dragName, setDragName] = React.useState(null);
         const [dropOver, setDropOver] = React.useState(null); // dragged bot name + hovered team bucket
@@ -335,25 +370,26 @@
             const msg = status === 403
                 ? "Authentication required: log in to the dashboard as an admin (permission level 0) to control bots."
                 : `Bot API unavailable (HTTP ${status === 0 ? "error" : String(status)}).`;
-            return h("div", { className: "botmod-panel" }, h("h2", null, "Bot Control"), h("span", { className: "botmod-pill botmod-bad" }, "AUTH REQUIRED"), h("p", null, msg), h("button", { className: "botmod-btn", onClick: () => { location.href = "/"; } }, "Log in"));
+            return h("div", { className: "botmod-panel" }, h("h2", null, "Bot Control"), h("span", { className: "botmod-pill botmod-bad", role: "status" }, "AUTH REQUIRED"), h("p", { role: "alert" }, msg), h("button", { className: "botmod-btn", onClick: () => { location.href = "/"; } }, "Log in"));
         }
         const s = unwrapSnap(query.data);
         const enabled = s.enabled === true;
         const bots = listOrEmpty(s.bots);
         const onlinePlayers = listOrEmpty(s.players);
-        // Keep the selected target valid across refetches (players can leave).
-        if (nearPlayer !== "" && onlinePlayers.length > 0 && !onlinePlayers.some((p) => p.name === nearPlayer)) {
-            setNearPlayer(onlinePlayers[0].name);
-        }
-        if (nearPlayer === "" && onlinePlayers.length > 0) {
+        // Keep the selected target valid across refetches (players can leave); an
+        // unset selection also picks the first player here.
+        if (onlinePlayers.length > 0 && !onlinePlayers.some((p) => p.name === nearPlayer)) {
             setNearPlayer(onlinePlayers[0].name);
         }
         const refetch = () => (query.refetch === undefined ? Promise.resolve() : query.refetch());
-        const post = (body) => postAction({ HTTP, busy, setBusy, setArmed, refetch, body });
+        const post = (body) => postAction({ HTTP, busy, setBusy, setArmed, say: setAnnounce, refetch, body });
         const btn = makeBtn(h, busy, post);
-        const armedBtn = makeArmedBtn(h, armed, setArmed, busy, post);
+        const armedBtn = makeArmedBtn(h, armed, setArmed, busy, setAnnounce, post);
         const pill = (on, onLabel, offLabel) => h("span", { className: `botmod-pill ${on ? "botmod-ok" : "botmod-off"}` }, on ? onLabel : offLabel);
-        return h("div", { className: "botmod-panel" }, renderBotHeader(h, s, onlinePlayers, pill), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver), renderConfigRow(h, s), renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver));
+        return h("div", { className: "botmod-panel", "aria-busy": busy !== "" }, renderBotHeader(h, s, onlinePlayers, pill), 
+        // Screen-reader channel for arm/confirm and command-sent state changes;
+        // role=status implies a polite live region.
+        h("p", { key: "srstatus", className: "botmod-sronly", role: "status" }, announce), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver), renderConfigRow(h, s), renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver));
     }
     // Menu entry registered only when the web session cookie is present; the
     // dashboard reloads the page after login/logout, so this re-evaluates.

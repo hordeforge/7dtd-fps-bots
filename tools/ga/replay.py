@@ -358,7 +358,7 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
     js_frames = json.dumps(_round_floats(frames))
     js_walls = json.dumps(walls)
     # Build with token substitution (not an f-string) so the embedded JS/CSS braces are literal.
-    html = """<!doctype html><html><head><meta charset="utf-8">
+    html = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>@TITLE@</title>
 <style>
  body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e2e8f0;margin:0}
@@ -385,20 +385,20 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
  <div>Ticks <b>@TICKS@</b></div>
 </div>
 <div class="legend">
- <span><span class="dot" style="background:#f87171"></span>Bots (tag=weapon)</span>
- <span><span class="dot" style="background:#34d399"></span>Zombies</span>
- <span><span class="dot" style="background:#fde047"></span>Shots</span>
+ <span><span class="dot" style="background:#f87171" aria-hidden="true"></span>Bots (tag=weapon)</span>
+ <span><span class="dot" style="background:#34d399" aria-hidden="true"></span>Zombies</span>
+ <span><span class="dot" style="background:#fde047" aria-hidden="true"></span>Shots</span>
  <span style="color:#94a3b8">Weapon tags: Pistol P · Shotgun S · AK AK · Sniper Sn · AutoShotgun Au · SMG SM</span>
  <span style="color:#94a3b8">Walls block LOS (aim around them)</span>
 </div>
 <div class="ctl">
  <button onclick="play()">&#9654; Play</button>
  <button onclick="pause()">&#9208; Pause</button>
- <button onclick="reset()">&#9198;</button>
+ <button onclick="reset()" aria-label="Reset to first frame">&#9198;</button>
  <span style="font-size:12px" id="frame">0/0</span>
- <input type="range" id="scrub" min="0" max="0" value="0" oninput="goto(this.value)">
+ <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Jump to frame" oninput="goto(this.value)">
 </div>
-<canvas id="c" width="@W@" height="@H@"></canvas>
+<canvas id="c" width="@W@" height="@H@" role="img" aria-label="Top-down arena replay animation: bot circles versus zombie circles on the training map">Top-down arena replay animation (canvas unsupported).</canvas>
 <div id="log"></div>
 </div>
 <script>
@@ -449,6 +449,8 @@ function play(){ playing=true; }
 function pause(){ playing=false; }
 function reset(){ fi=0; draw(F[0]); document.getElementById('log').textContent=''; }
 function goto(i){ fi=+i; draw(F[fi]); }
+// Respect the OS reduce-motion setting by loading paused; Play still works.
+if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { playing = false; }
 setInterval(step, 80);
 draw(F[0]);
 </script></body></html>"""
