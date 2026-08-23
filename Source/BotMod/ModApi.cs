@@ -155,6 +155,23 @@ namespace BotMod
         {
             float now = Time.time;
             if (now < _warnGateUntil) { _warnSuppressed++; return; }
+            EmitRateLimitedWarn(now, msg);
+        }
+
+        /// <summary>Lazy variant of <see cref="WarnRateLimited(string)"/> for
+        /// sites where building the message costs real work (Exception.ToString
+        /// walks the stack): the factory runs only when the gate is open, so a
+        /// failure repeating every frame pays the string construction once per
+        /// cooldown window instead of on every suppressed call.</summary>
+        public static void WarnRateLimited(Func<string> msgFactory)
+        {
+            float now = Time.time;
+            if (now < _warnGateUntil) { _warnSuppressed++; return; }
+            EmitRateLimitedWarn(now, msgFactory());
+        }
+
+        static void EmitRateLimitedWarn(float now, string msg)
+        {
             string suppressed = _warnSuppressed > 0 ? " (+ " + _warnSuppressed + " suppressed)" : "";
             Warn(msg + suppressed);
             _warnSuppressed = 0;

@@ -68,9 +68,10 @@ namespace BotMod.Core
             if (ModApi.Config.BotTeamCount <= 0) return 0;
             var bot = GetBot(entityId);
             if (bot == null) return 0;
-            // Bot.TeamKey is the base name frozen at spawn; no per-call Split allocs.
+            // Bot.TeamKey is the base name frozen at spawn; no per-call Split allocs,
+            // and the canonical fast path skips re-normalizing it per damage event.
             // Locked lookup: web threads mutate TeamAssignments concurrently.
-            return ModApi.Config.GetTeamAssignment(bot.TeamKey);
+            return ModApi.Config.GetTeamAssignmentCanonical(bot.TeamKey);
         }
         // Single ally rule for every damage path (targeting, firing, DamageEntity):
         // same entity, global no-bot-vs-bot, squad mode, or a shared nonzero team.
@@ -108,7 +109,9 @@ namespace BotMod.Core
                     // Tick failures repeat every frame while a bot is broken;
                     // the shared flood gate logs the first one in full, then
                     // counts repeats so one bad bot cannot flood the log.
-                    ModApi.WarnRateLimited("Bot tick failed id=" + b.EntityId + ": " + ex);
+                    // Lazy message: ex.ToString() walks the stack, so it must
+                    // not run per frame while the gate suppresses.
+                    ModApi.WarnRateLimited(() => "Bot tick failed id=" + b.EntityId + ": " + ex);
                 }
             }
             if (_tickAccum > 30f) { _tickAccum = 0f; if (_bots.Count > 0) ModApi.Log($"Bots alive: {_bots.Count}/{ModApi.Config.TargetBotCount}"); }

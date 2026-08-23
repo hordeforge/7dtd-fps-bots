@@ -725,8 +725,10 @@ namespace BotMod.Core
                 // Without this log a throwing shot path fails silently every
                 // burst: bots look alive and armed but never fire, and the
                 // manager's per-tick wrapper never sees the exception. Flood
-                // gate keeps heavy combat from spamming the log.
-                ModApi.WarnRateLimited("Bot shot failed " + Name + " -> "
+                // gate keeps heavy combat from spamming the log. Lazy message:
+                // ex.ToString() walks the stack, so it must not run per pull
+                // while the gate suppresses.
+                ModApi.WarnRateLimited(() => "Bot shot failed " + Name + " -> "
                     + (target != null ? target.entityId.ToString() : "?") + ": " + ex);
             }
             _burstLeft--;

@@ -18,6 +18,10 @@ namespace BotMod.AI
 
             try
             {
+                // Facing is candidate-independent: read me.transform once per
+                // acquisition instead of once per entity in the vision box.
+                Vector3 fwd = me.transform != null ? me.transform.forward : Vector3.forward;
+                fwd.y = 0; if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward; else fwd.Normalize();
                 var entities = world.GetEntitiesInBounds(null, new Bounds(myPos, new Vector3(cfg.VisionRange * 2f, 40f, cfg.VisionRange * 2f)));
                 if (entities != null)
                 {
@@ -32,8 +36,6 @@ namespace BotMod.AI
                         Vector3 dir = (alive.position - myPos); dir.y = 0;
                         if (dir == Vector3.zero) continue;
                         dir.Normalize();
-                        Vector3 fwd = me.transform != null ? me.transform.forward : Vector3.forward;
-                        fwd.y = 0; if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward; else fwd.Normalize();
                         float angle = Vector3.Angle(fwd, dir);
                         // Wide FOV for FPS feel; close targets always spotted
                         float fov = cfg.VisionAngle * (dist < 12f ? 1.1f : 1f);
@@ -60,7 +62,10 @@ namespace BotMod.AI
             {
                 try
                 {
+                    bool playersScanned = false;
                     if (world.Players != null && world.Players.list != null)
+                    {
+                        playersScanned = true;
                         foreach (var p in world.Players.list)
                         {
                             if (p == null || p == me || p.IsDead()) continue;
@@ -72,11 +77,18 @@ namespace BotMod.AI
                             if (preferredId >= 0 && p.entityId == preferredId) score *= preferredScale;
                             if (score < bestScore) { bestScore = score; best = p; }
                         }
+                    }
                     var alives = world.EntityAlives;
                     if (alives != null)
                         foreach (var a in alives)
                         {
                             if (a == null || a == me || a.IsDead() || !a.IsAlive()) continue;
+                            // Connected players were already scored above with
+                            // dist * 0.82, which is strictly lower than what
+                            // this loop computes for the same body (dist +
+                            // hp bonus), so a second pass cannot change the
+                            // pick; it only repeats their LOS raycast.
+                            if (playersScanned && a is EntityPlayer) continue;
                             // Scan every EntityAlive, not just zombies: bot bodies follow
                             // BotEntityClass (and its negative-id fallbacks), so they are
                             // not guaranteed to be zombie-typed.
@@ -102,7 +114,20 @@ namespace BotMod.AI
         {
             float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);
             if (hp < 0.35f + ch.SelfPreservation * 0.18f) return true;
-            return ch.Camper > 0.6f && hp > 0.7f && ((me.entityId * 2654435761u) % 100 < (uint)(ch.Camper*12));
+            return ch.Camper > 0.6f && hp > 0.7f && CampHashGate(me.entityId, ch.Camper);
+        }
+        /// <summary>Deterministic camper hold roll: passes for about Camper*12 percent
+        /// of entity ids (Q3 LTG parity). The hash runs in uint space on purpose:
+        /// C# promotes int*uint to long and % keeps the dividend's sign, so the
+        /// previous inline form ((me.entityId * 2654435761u) % 100) went negative
+        /// for every negative entity id and compared true against the unsigned
+        /// threshold unconditionally - fallback spawn classes camped every idle
+        /// tick instead of rolling. Same convention as Bot._rngState/WanderHash01.</summary>
+        internal static bool CampHashGate(int entityId, float camper)
+        {
+            if (float.IsNaN(camper) || float.IsInfinity(camper) || camper <= 0f) return false;
+            uint threshold = (uint)System.Math.Min(100f, camper * 12f); // saturates above camper=8.33
+            return ((uint)entityId * 2654435761u) % 100u < threshold;
         }
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {

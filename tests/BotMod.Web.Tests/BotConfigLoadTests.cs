@@ -116,6 +116,27 @@ static class BotConfigLoadTests
             Check("SetTeamAssignment stores NFC key", cfg.GetTeamAssignment(nfcKira) == 2);
         }
 
+        // Hot-path canonical lookup: Bot.TeamKey holds BotText.BaseName output
+        // (already IdentityKey-stable), and GetTeamId feeds it straight into
+        // GetTeamAssignmentCanonical on every DamageEntity event and targeting
+        // candidate. Pin that the fast path returns exactly what the
+        // normalizing lookup returns for those keys.
+        {
+            string nfdKira = "Ki\u0301ra";
+            var cfg = new BotConfig();
+            cfg.BotTeamCount = 4;
+            cfg.SetTeamAssignment("Grunt", 3);
+            cfg.SetTeamAssignment("[Bot] " + nfdKira + "_7", 2);
+            Check("canonical lookup matches normalizing lookup",
+                cfg.GetTeamAssignmentCanonical("Grunt") == cfg.GetTeamAssignment("Grunt"));
+            string kiraKey = BotText.BaseName("[Bot] " + nfdKira + "_7");
+            Check("BaseName key resolves through canonical lookup",
+                kiraKey == "K\u00edra" && cfg.GetTeamAssignmentCanonical(kiraKey) == 2);
+            Check("canonical lookup of unassigned key is free-for-all",
+                cfg.GetTeamAssignmentCanonical("Ranger") == 0);
+            Check("empty canonical key is free-for-all", cfg.GetTeamAssignmentCanonical("") == 0);
+        }
+
         // Paste noise in identity keys: a name copied from a web page can
         // carry zero-width characters; the stored key must collapse onto the
         // clean spelling, or the assignment silently never applies.

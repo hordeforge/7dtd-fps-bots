@@ -99,6 +99,25 @@ namespace BotMod.Config
             }
         }
 
+        /// <summary>Hot-path variant of <see cref="GetTeamAssignment"/> for keys
+        /// already in canonical form (output of BotText.BaseName, e.g.
+        /// Bot.TeamKey frozen at spawn): skips the per-call NFC check and
+        /// invisible-character rescan the general lookup applies to arbitrary
+        /// admin text. AreAllies runs on every DamageEntity event and every
+        /// FindTarget candidate, so that rescan (plus its potential Normalize
+        /// allocation) ran twice per ally comparison; a substring of a
+        /// canonical key stays canonical, so the OrdinalIgnoreCase dictionary
+        /// lookup alone returns the identical result here.</summary>
+        public int GetTeamAssignmentCanonical(string canonicalKey)
+        {
+            if (string.IsNullOrEmpty(canonicalKey)) return 0;
+            lock (TeamGate)
+            {
+                int t;
+                return TeamAssignments.TryGetValue(canonicalKey, out t) ? Math.Max(0, t) : 0;
+            }
+        }
+
         /// <summary>Copy for off-main persistence/enumeration so no thread ever
         /// iterates the live dictionary while another mutates it.</summary>
         public Dictionary<string, int> SnapshotTeamAssignments()

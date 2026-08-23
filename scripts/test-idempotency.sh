@@ -135,6 +135,12 @@ if $have_all && [[ -n "$harmony" ]]; then
     -out:"$work/webapiauthz.exe" "${sources[@]}" \
     "$root/tests/BotMod.Web.Tests/WebApiAuthzTests.cs" > /dev/null
   mono "$work/webapiauthz.exe"
+  # Numeric-correctness pins for BotBrain's hash arithmetic (int*uint sign
+  # promotion made negative-id bots pass the camper gate every time).
+  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:7.2 "${refs[@]}" \
+    -out:"$work/botarith.exe" "${sources[@]}" \
+    "$root/tests/BotMod.Web.Tests/BotBrainArithTests.cs" > /dev/null
+  mono "$work/botarith.exe"
 else
   echo "skip teamshammer (game DLLs or 0_TFP_Harmony not found; set SEVENDTD_DS_DIR to a dedicated-server install)"
 fi

@@ -132,7 +132,9 @@ namespace BotMod.Patches
                 // throwing persistently the BotVs*/team gating silently stops
                 // applying (damage falls through as vanilla). Rate-limited so
                 // a storm cannot flood the log while still naming the cause.
-                ModApi.WarnRateLimited("DamageEntity filter failed: " + ex);
+                // Lazy message: ex.ToString() walks the stack, so it must not
+                // run per event while the gate suppresses.
+                ModApi.WarnRateLimited(() => "DamageEntity filter failed: " + ex);
             }
             return true;
         }
