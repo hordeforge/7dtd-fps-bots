@@ -269,7 +269,8 @@ namespace BotMod.Commands
                     ModApi.PersistConfigField("UseNeuralBrain", true);
                     {
                         string why2; bool ok = BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why2);
-                        ModApi.Log("BotNeuralBrain: " + (ok ? "loaded " + why2 : "not loaded (" + why2 + ")"));
+                        if (ok) ModApi.Log("BotNeuralBrain: loaded " + why2);
+                        else ModApi.Warn("BotNeuralBrain not loaded (" + why2 + "), using heuristic.");
                         SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + why2 : "Neural ON but load failed: " + why2 + " — heuristic until reload succeeds.");
                     }
                     break;
@@ -282,7 +283,8 @@ namespace BotMod.Commands
                     {
                         string custom = p.Count >= 3 ? p[2] : ModApi.Config.BotNeuralWeightPath;
                         string why3; bool ok = BotMod.AI.BotNeuralBrain.TryLoad(custom, out why3);
-                        ModApi.Log("BotNeuralBrain reload: " + (ok ? "loaded " + why3 : "failed " + why3));
+                        if (ok) ModApi.Log("BotNeuralBrain reload: loaded " + why3);
+                        else ModApi.Warn("BotNeuralBrain reload failed: " + why3);
                         SdtdConsole.Instance.Output(ok ? "Neural reloaded: " + why3 : "Neural reload failed: " + why3);
                     }
                     break;

@@ -73,7 +73,8 @@ namespace BotMod
                 {
                     string why;
                     bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
-                    Log("BotNeuralBrain: " + (ok ? "loaded " + why : "not loaded (" + why + "), using heuristic."));
+                    if (ok) Log("BotNeuralBrain: loaded " + why);
+                    else Warn("BotNeuralBrain not loaded (" + why + "), using heuristic.");
                 }
             }
             catch (Exception ex) { Error("OnGameStartDone failed: " + ex); }
@@ -114,7 +115,8 @@ namespace BotMod
             {
                 string why;
                 bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
-                Log("BotNeuralBrain: " + (ok ? "reloaded " + why : "not loaded (" + why + "), using heuristic."));
+                if (ok) Log("BotNeuralBrain: reloaded " + why);
+                else Warn("BotNeuralBrain not loaded (" + why + "), keeping heuristic.");
             }
         }
 
@@ -138,6 +140,31 @@ namespace BotMod
         {
             try { global::Log.Error("[BotMod] " + msg); }
             catch { Console.WriteLine("[BotMod] ERROR: " + msg); }
+        }
+
+        // Flood gate for hot-path failure logs (per-frame ticks, per-shot combat,
+        // per-damage-event hooks). A failure that repeats every frame would flood
+        // the server log (~60 lines/s otherwise), so the first occurrence logs in
+        // full and repeats inside the cooldown are counted, then surfaced as
+        // "(+ N suppressed)" on the next emitted line (same contract the tick
+        // loop used before this became shared). One global gate: distinct failure
+        // sources can suppress each other during a storm; acceptable because each
+        // emitted line still names its source and storms are exactly when volume
+        // must stay bounded.
+        const float WarnCooldownSec = 10f;
+        static float _warnGateUntil;
+        static int _warnSuppressed;
+
+        /// <summary>Rate-limited Warn for per-frame / per-shot / per-damage call
+        /// sites. Main-thread only (reads UnityEngine.Time.time).</summary>
+        public static void WarnRateLimited(string msg)
+        {
+            float now = Time.time;
+            if (now < _warnGateUntil) { _warnSuppressed++; return; }
+            string suppressed = _warnSuppressed > 0 ? " (+ " + _warnSuppressed + " suppressed)" : "";
+            Warn(msg + suppressed);
+            _warnSuppressed = 0;
+            _warnGateUntil = now + WarnCooldownSec;
         }
 
         // Persist one config field to the host-mounted canonical copy
@@ -172,6 +199,12 @@ namespace BotMod
                     }
                     catch (Exception ex) { Warn("bot config persist failed (" + path + "): " + ex.Message); }
                 }
+                // One audit line per persisted mutation, covering both surfaces
+                // (web API handlers log their own request outcome; console
+                // commands only echo to the issuing telnet/console session,
+                // which never reaches the server log). Keeps state changes
+                // reconstructable from the log alone.
+                Log("config persist " + key + "=" + value);
             }
         }
     }

@@ -290,7 +290,7 @@ namespace BotMod.Core
                     if (list.Count > 0) { _dmSpawns = list; _dmSpawnsWorld = worldName; ModApi.Log($"DM spawns: {list.Count} from {path} (world={worldName})"); return list; }
                 }
             }
-            catch (Exception ex) { ModApi.Log("GetDmSpawns failed: " + ex.Message); }
+            catch (Exception ex) { ModApi.Warn("GetDmSpawns failed: " + ex.Message); }
             // Nothing found for THIS world: return null, never a list memoized
             // under another world's name. Hits above check _dmSpawnsWorld, so
             // the failure path must honor the same keying or bots would spawn
@@ -325,30 +325,39 @@ namespace BotMod.Core
                     foreach (var alias in new[] { "zombieSoldier", "zombieBoe", "npcTraderJoel", "npcSurvivorRanged" })
                     {
                         classId = EntityClass.FromString(alias);
-                        if (classId >= 0) { want = alias; ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
+                        if (classId >= 0) { want = alias; ModApi.Warn("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
                     }
                 }
-                if (classId < 0) { ModApi.Log("Unknown entity class: " + (entityClassName ?? "(null)") + " (resolved " + want + ")"); return null; }
+                if (classId < 0) { ModApi.Warn("Unknown entity class: " + (entityClassName ?? "(null)") + " (resolved " + want + ")"); return null; }
                 Entity e = null;
+                Exception createEx = null;
                 try
                 {
                     var ed = EntityFactory.SetupEntityCreationData(classId, pos);
                     try { ed.entityName = botName; } catch { }
                     e = EntityFactory.CreateEntity(ed);
                 }
-                catch { }
+                catch (Exception ex) { createEx = ex; }
                 if (e == null)
                 {
-                    try { e = EntityFactory.CreateEntity(classId, pos, Vector3.zero); } catch { }
+                    try { e = EntityFactory.CreateEntity(classId, pos, Vector3.zero); } catch (Exception ex) { if (createEx == null) createEx = ex; }
                 }
-                if (e == null) return null;
+                if (e == null)
+                {
+                    // Both creation paths failed: surface why here. The caller
+                    // only reports the position ("Spawn failed at ..."), so a
+                    // broken entity class would otherwise fail invisibly.
+                    ModApi.Warn("CreateEntity failed class=" + want + " id=" + classId + ": "
+                        + (createEx != null ? createEx.Message : "returned null"));
+                    return null;
+                }
                 TrySetEntityName(e, botName);
-                try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.Log("SpawnEntityInWorld failed: " + ex.Message); return null; }
+                try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.Warn("SpawnEntityInWorld failed: " + ex.Message); return null; }
                 var ent = world.GetEntity(e.entityId);
                 if (ent != null) TrySetEntityName(ent, botName);
                 return ent ?? e;
             }
-            catch (Exception ex) { ModApi.Log("SpawnBotEntity failed: " + ex); return null; }
+            catch (Exception ex) { ModApi.Warn("SpawnBotEntity failed: " + ex); return null; }
         }
 
         public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp, string botName = null)
@@ -377,7 +386,7 @@ namespace BotMod.Core
                                 try { alive.inventory.ForceHoldingItemUpdate(); } catch { }
                             }
                         }
-                        catch (Exception ex) { ModApi.Log("Give weapon failed: " + ex.Message); }
+                        catch (Exception ex) { ModApi.Warn("Give weapon failed: " + ex.Message); }
                     }
                     if (!string.IsNullOrEmpty(cfg.BotAmmo) && cfg.BotAmmoCount > 0)
                     {
@@ -410,7 +419,7 @@ namespace BotMod.Core
                     try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
                 }
             }
-            catch (Exception ex) { ModApi.Log("ConfigureBotEntity failed: " + ex.Message); }
+            catch (Exception ex) { ModApi.Warn("ConfigureBotEntity failed: " + ex.Message); }
         }
 
         static void TrySetEntityName(Entity e, string name)

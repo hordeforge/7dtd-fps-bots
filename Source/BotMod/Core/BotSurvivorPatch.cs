@@ -27,7 +27,7 @@ namespace BotMod.Core
                 else
                     ModApi.Log("BotSurvivorPatch: survivor still unavailable — bots stay soldier-pool.");
             }
-            catch (Exception ex) { ModApi.Log("EnsureSurvivorClasses: " + ex.Message); }
+            catch (Exception ex) { ModApi.Warn("EnsureSurvivorClasses: " + ex.Message); }
         }
 
         static void InjectFromSnippets()

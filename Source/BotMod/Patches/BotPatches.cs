@@ -84,7 +84,12 @@ namespace BotMod.Patches
                 BotMod.Core.BotManager.Instance.NotifyBotDeath(__instance.entityId);
                 if (!ModApi.Config.DropLootOnDeath) try { __instance.lootList = null; } catch { }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Deaths are rare; a failing death side effect (bookkeeping,
+                // loot drop) must stay visible.
+                BotMod.ModApi.Warn("BotDeathPatch failed for entity " + (__instance != null ? __instance.entityId.ToString() : "?") + ": " + ex);
+            }
         }
     }
 
@@ -121,7 +126,14 @@ namespace BotMod.Patches
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // This hook runs on every DamageEntity call; if it starts
+                // throwing persistently the BotVs*/team gating silently stops
+                // applying (damage falls through as vanilla). Rate-limited so
+                // a storm cannot flood the log while still naming the cause.
+                ModApi.WarnRateLimited("DamageEntity filter failed: " + ex);
+            }
             return true;
         }
     }

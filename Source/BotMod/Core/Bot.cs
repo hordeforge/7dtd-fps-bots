@@ -723,7 +723,15 @@ namespace BotMod.Core
                     if (pellets > 1) break; // one hit per pellet volley (vanilla groups pellets via ray)
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Without this log a throwing shot path fails silently every
+                // burst: bots look alive and armed but never fire, and the
+                // manager's per-tick wrapper never sees the exception. Flood
+                // gate keeps heavy combat from spamming the log.
+                ModApi.WarnRateLimited("Bot shot failed " + Name + " -> "
+                    + (target != null ? target.entityId.ToString() : "?") + ": " + ex);
+            }
             _burstLeft--;
             _ammo--; // one round per trigger pull (zdtd_bot ammo pacing parity)
             // Fire-rate gate: spacing inside a burst is the next-shot pause set

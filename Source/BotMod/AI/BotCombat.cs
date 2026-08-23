@@ -71,7 +71,12 @@ namespace BotMod.AI
                     try { ModApi.Log($"victim [Bot] {v} died (D:{victim.Died} S:{victim.Score})"); } catch { }
                 }
             }
-            catch { }
+            catch (System.Exception ex)
+            {
+                // Kill events are rare; an unexpected failure here (score crediting,
+                // chat announce) must not vanish without a trace.
+                ModApi.Warn("OnKilled failed: " + ex);
+            }
         }
 
         /// <summary>Best-effort server->client chat broadcast (dedicated-safe). Uses reflection

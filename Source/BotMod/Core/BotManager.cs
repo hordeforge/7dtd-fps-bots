@@ -16,12 +16,6 @@ namespace BotMod.Core
         readonly Dictionary<int, Bot> _botById = new Dictionary<int, Bot>();
         float _tickAccum;
         float _spawnRetryTimer;
-        // Tick failures repeat every frame while a bot is broken; log the first
-        // one in full, then suppress repeats for a cooldown so one bad bot
-        // cannot flood the server log (~60 lines/s otherwise).
-        const float TickFailLogCooldownSec = 10f;
-        float _tickFailCooldown;
-        int _tickFailsSuppressed;
         bool _started;
         BotManager() { }
         public IReadOnlyList<Bot> Bots => _bots;
@@ -104,7 +98,6 @@ namespace BotMod.Core
             if (world == null) return;
             _tickAccum += dt;
             _spawnRetryTimer -= dt;
-            if (_tickFailCooldown > 0f) _tickFailCooldown -= dt;
             if (_spawnRetryTimer <= 0f) { _spawnRetryTimer = 1f; MaintainPopulation(); }
             for (int i = _bots.Count - 1; i >= 0; i--)
             {
@@ -113,14 +106,10 @@ namespace BotMod.Core
                 try { b.Tick(dt, world); }
                 catch (Exception ex)
                 {
-                    if (_tickFailCooldown <= 0f)
-                    {
-                        string suppressed = _tickFailsSuppressed > 0 ? " (+ " + _tickFailsSuppressed + " suppressed)" : "";
-                        ModApi.Warn("Bot tick failed id=" + b.EntityId + suppressed + ": " + ex);
-                        _tickFailsSuppressed = 0;
-                        _tickFailCooldown = TickFailLogCooldownSec;
-                    }
-                    else _tickFailsSuppressed++;
+                    // Tick failures repeat every frame while a bot is broken;
+                    // the shared flood gate logs the first one in full, then
+                    // counts repeats so one bad bot cannot flood the log.
+                    ModApi.WarnRateLimited("Bot tick failed id=" + b.EntityId + ": " + ex);
                 }
             }
             if (_tickAccum > 30f) { _tickAccum = 0f; if (_bots.Count > 0) ModApi.Log($"Bots alive: {_bots.Count}/{ModApi.Config.TargetBotCount}"); }
