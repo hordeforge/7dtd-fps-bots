@@ -21,6 +21,8 @@ namespace BotMod.Core
         float _nextPathRecalc;
         float _stuckSince;
         Vector3 _lastPos;
+        // When GetEntity last returned null (grace for transient entity-dict lookup misses)
+        float _missingSince;
         Vector3 _wanderTarget;
         float _nextWander;
         float _loseTargetTimer;
@@ -91,7 +93,6 @@ namespace BotMod.Core
         uint RngNext() { _rngState = _rngState * 1103515245u + 12345u; return _rngState; }
         float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
         float RngSym() { return 2f * Rng01() - 1f; }
-        float _missingSince = 0f; // when GetEntity last returned null (grace for transient entity-dict lookup misses)
         public bool IsDeadOrUnloaded(World world)
         {
             if (_dead) return true;
@@ -169,7 +170,23 @@ namespace BotMod.Core
             var cfg = ModApi.Config;
             if (Time.time - SpawnTime < cfg.SpawnProtectionSec) return;
 
-            // Estimate target velocity for leading aim
+            UpdateTargetVelocity(dt);
+            AcquireTarget(me, world, cfg);
+
+            var ch = Character ?? BotCharacterDB.ForName(Name);
+            if (_target != null && _target.IsAlive()) RetreatToCover(me, world, cfg, ch);
+
+            if (_target != null && _target.IsAlive() && !IsDeadTgt(_target))
+            {
+                EngageTarget(me, world, cfg);
+                return;
+            }
+            IdleWanderOrCamp(me, world, cfg, ch);
+        }
+
+        /// <summary>Estimate target velocity for leading aim.</summary>
+        void UpdateTargetVelocity(float dt)
+        {
             if (_target != null && _target.IsAlive())
             {
                 Vector3 cur = _target.position;
@@ -178,339 +195,354 @@ namespace BotMod.Core
                 _lastTargetPos = cur;
             }
             else _lastTargetPos = Vector3.zero;
+        }
 
-            // Target acquisition (faster on higher difficulty)
+        /// <summary>Target acquisition (faster on higher difficulty), with grudge bias
+        /// (zdtd_bot parity) and the lose-target check when FindTarget comes up empty.</summary>
+        void AcquireTarget(EntityAlive me, World world, BotConfig cfg)
+        {
             float scanPeriod = Mathf.Lerp(0.55f, 0.22f, cfg.Difficulty / 4f);
-            if (Time.time >= _nextTargetScan)
+            if (Time.time < _nextTargetScan) return;
+            _nextTargetScan = Time.time + scanPeriod;
+            // Grudge bias (zdtd_bot parity): while the revenge memory is
+            // fresh, FindTarget out-scores the attacker (0.6x).
+            bool vengeful = Time.time < _grudgeUntil;
+            var found = BotBrain.FindTarget(me, world, cfg, vengeful ? _grudgeId : -1, 0.6f);
+            if (found != null)
             {
-                _nextTargetScan = Time.time + scanPeriod;
-                // Grudge bias (zdtd_bot parity): while the revenge memory is
-                // fresh, FindTarget out-scores the attacker (0.6x).
-                bool vengeful = Time.time < _grudgeUntil;
-                var found = BotBrain.FindTarget(me, world, cfg, vengeful ? _grudgeId : -1, 0.6f);
-                if (found != null)
+                AdoptTarget(found, cfg);
+            }
+            else if (_target != null)
+            {
+                _loseTargetTimer += scanPeriod;
+                float dist = Vector3.Distance(me.position, _target.position);
+                if (_target.IsDead() || !IsValidTarget(_target, cfg) || dist > cfg.LoseTargetRange || _loseTargetTimer > cfg.LoseTargetTimeSec || !TargetVisible(me, world, cfg) && dist > 18f)
                 {
-                    if (_target == null || _target.entityId != found.entityId)
-                    {
-                        _target = found;
-                        _loseTargetTimer = 0f;
-                        _state = BotBrain.State.Chase;
-                        _reactionUntil = Time.time + cfg.ReactionTimeSec;
-                        _hasLastKnownTarget = false; // fresh target: no last-known until we see it again (zdtd_bot lost-sight combat memory, ported)
-                        // zdtd_bot skill_aimerr, ported: roll a fixed per-engagement
-                        // aim bias so bots are imperfect-but-stable shots; better
-                        // aim skill (BotCharacter.AimAccuracy) shrinks the bias.
-                        float acc = Character?.AimAccuracy ?? 0.75f;
-                        _aimBiasYaw = RngSym() * Mathf.Max(0.03f, (1f - acc) * 0.45f);
-                        // announce occasionally
-                        if (Time.time > _nextTaunt && Rng01() < 0.12f)
-                        {
-                            _nextTaunt = Time.time + 12f + Rng01() * 10f;
-                            ModApi.Log($"{Name} acquired target #{found.entityId}");
-                        }
-                    }
+                    _target = null; _state = BotBrain.State.Wander;
+                    _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
                 }
-                else if (_target != null)
+            }
+        }
+
+        /// <summary>Switch to a newly found target: reset timers, roll the per-engagement
+        /// aim bias (zdtd_bot skill_aimerr), occasionally announce the acquire.</summary>
+        void AdoptTarget(EntityAlive found, BotConfig cfg)
+        {
+            if (_target != null && _target.entityId == found.entityId) return;
+            _target = found;
+            _loseTargetTimer = 0f;
+            _state = BotBrain.State.Chase;
+            _reactionUntil = Time.time + cfg.ReactionTimeSec;
+            _hasLastKnownTarget = false; // fresh target: no last-known until we see it again (zdtd_bot lost-sight combat memory, ported)
+            // zdtd_bot skill_aimerr, ported: roll a fixed per-engagement
+            // aim bias so bots are imperfect-but-stable shots; better
+            // aim skill (BotCharacter.AimAccuracy) shrinks the bias.
+            float acc = Character?.AimAccuracy ?? 0.75f;
+            _aimBiasYaw = RngSym() * Mathf.Max(0.03f, (1f - acc) * 0.45f);
+            // announce occasionally
+            if (Time.time > _nextTaunt && Rng01() < 0.12f)
+            {
+                _nextTaunt = Time.time + 12f + Rng01() * 10f;
+                ModApi.Log($"{Name} acquired target #{found.entityId}");
+            }
+        }
+
+        /// <summary>Q3-style decision: retreat toward cover on low health with high
+        /// SelfPreservation / low Aggression. Neural advisory (docs/research/05):
+        /// when a net is loaded it drives retreat for every engagement (bots,
+        /// zombies, players); heuristic is the fallback.</summary>
+        void RetreatToCover(EntityAlive me, World world, BotConfig cfg, BotCharacter ch)
+        {
+            bool doRetreat;
+            bool neuralDecided = false;
+            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
+            {
+                neuralDecided = true;
+                doRetreat = _neuralOuts.WantRetreat;
+            }
+            else doRetreat = false;
+            if (!neuralDecided)
+            {
+                float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
+                doRetreat = hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f;
+            }
+            // FPS finish-the-kill: if the enemy is also critically wounded, commit instead of
+            // retreating. Prevents a mutual-retreat stalemate where two low-HP bots both back
+            // off forever and never finish the fight.
+            if (doRetreat)
+            {
+                try
                 {
-                    _loseTargetTimer += scanPeriod;
-                    float dist = Vector3.Distance(me.position, _target.position);
-                    if (_target.IsDead() || !IsValidTarget(_target, cfg) || dist > cfg.LoseTargetRange || _loseTargetTimer > cfg.LoseTargetTimeSec || !TargetVisible(me, world, cfg) && dist > 18f)
+                    float enemyFrac = _target.Health / System.Math.Max(1f, cfg.BotHealth);
+                    if (enemyFrac <= 0.4f) doRetreat = false;
+                }
+                catch { }
+            }
+            if (!doRetreat) return;
+            // Cover search costs 8 LOS raycasts + ground scans, so it runs on the
+            // shared path-recalc cadence like every other MoveTo branch instead of
+            // every frame while retreating.
+            if (Time.time < _nextPathRecalc) return;
+            _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
+            Vector3 cover = BotBrain.FindCover(me, _target, world);
+            if (cover == Vector3.zero) return;
+            _state = BotBrain.State.Wander; // Retreat (reuse Wander while seeking cover)
+            BotBrain.MoveTo(me, cover);
+            if (Vector3.Distance(me.position, cover) < 4f) { /* reached cover */ }
+        }
+        /// <summary>Live-target combat: refresh last-seen memory, then either fight
+        /// at range or pursue the last-seen position.</summary>
+        void EngageTarget(EntityAlive me, World world, BotConfig cfg)
+        {
+            Vector3 tPos = _target.position;
+            Vector3 myPos = me.position;
+            float dist = Vector3.Distance(myPos, tPos);
+            bool canSee = TargetVisible(me, world, cfg);
+            if (canSee) // update the last-known position we saw the target at (zdtd_bot lost-sight combat memory, ported)
+            {
+                _lastKnownTargetPos = tPos;
+                _hasLastKnownTarget = true;
+            }
+            // Weapon-aware effective attack range: short/close guns stay at AttackRange,
+            // long guns (sniper/AK) get to use more of their real range advantage.
+            float effRange = Mathf.Min(Weapon.Range, cfg.AttackRange + Mathf.Max(0f, Weapon.Range - 55f) * 0.7f);
+            bool inRange = dist <= effRange;
+
+            if (inRange && canSee) AttackInRange(me, world, cfg, dist, canSee, effRange);
+            else ChaseTarget(me, world, cfg, canSee, tPos, myPos);
+        }
+
+        /// <summary>In-range combat: aim (with per-engagement bias), fire the gated
+        /// burst, then move via the neural policy or the Q3 fallback movement.</summary>
+        void AttackInRange(EntityAlive me, World world, BotConfig cfg, float dist, bool canSee, float effRange)
+        {
+            Vector3 tPos = _target.position;
+            Vector3 myPos = me.position;
+            _state = BotBrain.State.Attack;
+            Vector3 aim = BotBrain.LeadAimPoint(myPos, tPos, _targetVel, cfg, Weapon);
+            // Neural aimBias advisory drives every engagement (bot-vs-bot, bot-vs-zombie,
+            // bot-vs-player) so the evolved brain is exercised live. Classic is fallback.
+            // Reuses the tick's cached eval (see TryNeuralOnce).
+            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
+            {
+                float acc = Character != null ? Character.AimAccuracy : 0.75f;
+                float window = Mathf.Max(0.03f, (1f - acc) * 0.45f);
+                _aimBiasYaw = _neuralOuts.AimBiasYaw * window; // outs already tanh in [-1,1]
+            }
+            if (_aimBiasYaw != 0f)
+            {
+                Vector3 dir = aim - myPos;
+                dir = Quaternion.AngleAxis(_aimBiasYaw * Mathf.Rad2Deg, Vector3.up) * dir;
+                aim = myPos + dir;
+            }
+            BotBrain.FaceTowards(me, aim);
+            // Neural fire gate: drives every engagement, not just vs players, so the
+            // evolved brain's fire decision actually matters against bots and zombies.
+            // Reuses the tick's cached eval (see TryNeuralOnce).
+            bool wantToFire = true;
+            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg)) wantToFire = _neuralOuts.ShouldFire;
+            TryShootBurst(me, _target, aim, world, cfg, wantToFire);
+            // R10 neural movement: when the evolved brain is loaded it drives the
+            // 2D velocity directly (retreat -> forward, strafe -> lateral, camp ->
+            // hold), matching combat_sim. The hardcoded Q3 strafe/dodge logic below
+            // is the fallback when the brain is off or broken.
+            bool neuralMoved = false;
+            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
+            {
+                float retreat = _neuralOuts.RetreatLogit;
+                float strafe = _neuralOuts.StrafeLogit;
+                float fwd = 1.2f * (1f - 2f * retreat);
+                float lat = (strafe - 0.5f) * 2.4f;
+                if (_neuralOuts.WantCamp && me.Health > 55f && dist > 18f) fwd *= 0.15f;
+                Vector3 toT = tPos - me.position; toT.y = 0;
+                if (toT.sqrMagnitude > 0.001f)
+                {
+                    toT.Normalize();
+                    Vector3 perp = Vector3.Cross(Vector3.up, toT);
+                    Vector3 dir = toT * fwd + perp * lat;
+                    if (dir.sqrMagnitude > 0.001f)
                     {
-                        _target = null; _state = BotBrain.State.Wander;
-                        _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
+                        BotBrain.MoveDir(me, dir);
+                        _strafeDir = _neuralOuts.StrafeDir;
+                        neuralMoved = true;
                     }
                 }
             }
+            if (!neuralMoved) AttackMoveFallback(me, world, cfg, dist, canSee, effRange);
+        }
 
-            // Q3-style decision: retreat if low health + high SelfPreservation / low Aggression.
-            // Neural advisory (docs/research/05): when a net is loaded it drives retreat for
-            // every engagement (bots, zombies, players); heuristic is the fallback.
-            var ch = Character ?? BotCharacterDB.ForName(Name);
-            if (_target != null && _target.IsAlive())
+        /// <summary>Q3 fallback movement while in attack range (net off/broken or no
+        /// move decided): squad flanking, cover-while-reloading, phased dodge, and
+        /// weapon-aware standoff (strafe outside ~35% of effective range, backpedal inside).</summary>
+        void AttackMoveFallback(EntityAlive me, World world, BotConfig cfg, float dist, bool canSee, float effRange)
+        {
+            // Squad flanking: if another bot is strafing the same target in the same
+            // direction, flip mine so the team splits around the target (FPS handshake)
+            // instead of clumping on one side. FlankAway walks every other bot's
+            // entity, so it scans on a 0.25 s cadence rather than every frame.
+            if (Time.time >= _nextFlankScan)
             {
-                bool doRetreat;
-                bool neuralDecided = false;
-                // Neural retreat drives every engagement (heuristic is fallback when no net).
-                if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
-                {
-                    neuralDecided = true;
-                    doRetreat = _neuralOuts.WantRetreat;
-                }
-                else doRetreat = false;
-                if (!neuralDecided)
-                {
-                    float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
-                    doRetreat = hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f;
-                }
-                // FPS finish-the-kill: if the enemy is also critically wounded, commit instead of
-                // retreating. Prevents a mutual-retreat stalemate where two low-HP bots both back
-                // off forever and never finish the fight.
-                if (doRetreat)
-                {
-                    try
-                    {
-                        float enemyFrac = _target.Health / System.Math.Max(1f, cfg.BotHealth);
-                        if (enemyFrac <= 0.4f) doRetreat = false;
-                    }
-                    catch { }
-                }
-                if (doRetreat)
-                {
-                    // Cover search costs 8 LOS raycasts + ground scans, so it runs on the
-                    // shared path-recalc cadence like every other MoveTo branch instead of
-                    // every frame while retreating.
-                    if (Time.time >= _nextPathRecalc)
-                    {
-                        _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
-                        Vector3 cover = BotBrain.FindCover(me, _target, world);
-                        if (cover != Vector3.zero)
-                        {
-                            _state = BotBrain.State.Wander; // Retreat (reuse Wander while seeking cover)
-                            BotBrain.MoveTo(me, cover);
-                            if (Vector3.Distance(me.position, cover) < 4f) { /* reached cover */ }
-                        }
-                    }
-                }
+                _nextFlankScan = Time.time + 0.25f;
+                if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
             }
-            if (_target != null && _target.IsAlive() && !IsDeadTgt(_target))
+            // Cover-while-reloading (CS-bot lineage, docs/oss-fps-bot-survey.md):
+            // an empty mag with a live visible target seeks cover instead of
+            // standing in the open. Gated by the path-recalc cadence.
+            if (Time.time < _reloadUntil && canSee && Time.time >= _nextPathRecalc)
             {
-                Vector3 tPos = _target.position;
-                Vector3 myPos = me.position;
-                float dist = Vector3.Distance(myPos, tPos);
-                bool canSee = TargetVisible(me, world, cfg);
-                if (canSee) // update the last-known position we saw the target at (zdtd_bot lost-sight combat memory, ported)
+                Vector3 cover = BotBrain.FindCover(me, _target, world);
+                if (cover != Vector3.zero)
                 {
-                    _lastKnownTargetPos = tPos;
-                    _hasLastKnownTarget = true;
-                }
-                // Weapon-aware effective attack range: short/close guns stay at AttackRange,
-                // long guns (sniper/AK) get to use more of their real range advantage.
-                float effRange = Mathf.Min(Weapon.Range, cfg.AttackRange + Mathf.Max(0f, Weapon.Range - 55f) * 0.7f);
-                bool inRange = dist <= effRange;
-
-                if (inRange && canSee)
-                {
-                    _state = BotBrain.State.Attack;
-                    Vector3 aim = BotBrain.LeadAimPoint(myPos, tPos, _targetVel, cfg, Weapon);
-                    // Neural aimBias advisory drives every engagement (bot-vs-bot, bot-vs-zombie,
-                    // bot-vs-player) so the evolved brain is exercised live. Classic is fallback.
-                    // Reuses the tick's cached eval (see TryNeuralOnce).
-                    if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
-                    {
-                        float acc = Character != null ? Character.AimAccuracy : 0.75f;
-                        float window = Mathf.Max(0.03f, (1f - acc) * 0.45f);
-                        _aimBiasYaw = _neuralOuts.AimBiasYaw * window; // outs already tanh in [-1,1]
-                    }
-                    if (_aimBiasYaw != 0f)
-                    {
-                        Vector3 dir = aim - myPos;
-                        dir = Quaternion.AngleAxis(_aimBiasYaw * Mathf.Rad2Deg, Vector3.up) * dir;
-                        aim = myPos + dir;
-                    }
-                    BotBrain.FaceTowards(me, aim);
-                    // Neural fire gate: drives every engagement, not just vs players, so the
-                    // evolved brain's fire decision actually matters against bots and zombies.
-                    // Reuses the tick's cached eval (see TryNeuralOnce).
-                    bool wantToFire = true;
-                    if (UseNeuralGate() && TryNeuralOnce(me, world, cfg)) wantToFire = _neuralOuts.ShouldFire;
-                    TryShootBurst(me, _target, aim, world, cfg, wantToFire);
-                    // R10 neural movement: when the evolved brain is loaded it drives the
-                    // 2D velocity directly (retreat -> forward, strafe -> lateral, camp ->
-                    // hold), matching combat_sim. The hardcoded Q3 strafe/dodge logic below
-                    // is the fallback when the brain is off or broken.
-                    bool neuralMoved = false;
-                    if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
-                    {
-                        float retreat = _neuralOuts.RetreatLogit;
-                        float strafe = _neuralOuts.StrafeLogit;
-                        float fwd = 1.2f * (1f - 2f * retreat);
-                        float lat = (strafe - 0.5f) * 2.4f;
-                        if (_neuralOuts.WantCamp && me.Health > 55f && dist > 18f) fwd *= 0.15f;
-                        Vector3 toT = tPos - me.position; toT.y = 0;
-                        if (toT.sqrMagnitude > 0.001f)
-                        {
-                            toT.Normalize();
-                            Vector3 perp = Vector3.Cross(Vector3.up, toT);
-                            Vector3 dir = toT * fwd + perp * lat;
-                            if (dir.sqrMagnitude > 0.001f)
-                            {
-                                BotBrain.MoveDir(me, dir);
-                                _strafeDir = _neuralOuts.StrafeDir;
-                                neuralMoved = true;
-                            }
-                        }
-                    }
-                    if (!neuralMoved)
-                    {
-                        // Squad flanking: if another bot is strafing the same target in the same
-                        // direction, flip mine so the team splits around the target (FPS handshake)
-                        // instead of clumping on one side. FlankAway walks every other bot's
-                        // entity, so it scans on a 0.25 s cadence rather than every frame.
-                        if (Time.time >= _nextFlankScan)
-                        {
-                            _nextFlankScan = Time.time + 0.25f;
-                            if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
-                        }
-                        // Cover-while-reloading (CS-bot lineage, docs/oss-fps-bot-survey.md):
-                        // an empty mag with a live visible target seeks cover instead of
-                        // standing in the open. Gated by the path-recalc cadence.
-                        if (Time.time < _reloadUntil && canSee && Time.time >= _nextPathRecalc)
-                        {
-                            Vector3 cover = BotBrain.FindCover(me, _target, world);
-                            if (cover != Vector3.zero)
-                            {
-                                _nextPathRecalc = Time.time + 0.6f;
-                                BotBrain.MoveTo(me, cover);
-                            }
-                            else
-                            {
-                                BotBrain.Strafe(me, _target, _strafeDir);
-                            }
-                        }
-                        // Continuous FPS strafe when in attack range.
-                        // Weapon-aware standoff: if we're inside ~35% of effective weapon range
-                        // (too close for a ranged weapon), backpedal + circle to keep distance,
-                        // instead of standing in melee range. Shotguns close in, snipers keep range.
-                        float tooClose = Mathf.Max(6f, effRange * 0.35f);
-                        // Phased dodge (zdtd_bot dodge, ported back): while dodging, first
-                        // backpedal away, then flip to a hard strafe on the randomized dir.
-                        if (_dodgeTicks > 0)
-                        {
-                            _dodgeTicks--;
-                            if (Time.time >= _nextPathRecalc)
-                            {
-                                if (_dodgeBackRemain > 0) { _dodgeBackRemain--; BotBrain.Backpedal(me, _target, _strafeDir); }
-                                else { _strafeDir = -_strafeDir; BotBrain.Strafe(me, _target, _strafeDir); }
-                                _nextPathRecalc = Time.time + 0.12f;
-                            }
-                        }
-                        else if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
-                        {
-                            if (dist > tooClose)
-                            {
-                                if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
-                            }
-                            else // inside standoff - backpedal to reopen range
-                            {
-                                if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
-                            }
-                        }
-                        else if (dist < tooClose)
-                        {
-                            if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
-                        }
-                        else if (Rng01() < 0.12f) _strafeDir = -_strafeDir;
-                    }
+                    _nextPathRecalc = Time.time + 0.6f;
+                    BotBrain.MoveTo(me, cover);
                 }
                 else
                 {
-                    _state = BotBrain.State.Chase;
-                    // pursue where we last SAW the target, not its current unseen position
-                    // (zdtd_bot lost-sight combat memory, ported)
-                    Vector3 chaseDest = _hasLastKnownTarget ? _lastKnownTargetPos : tPos;
+                    BotBrain.Strafe(me, _target, _strafeDir);
+                }
+                return;
+            }
+            // Continuous FPS strafe when in attack range.
+            float tooClose = Mathf.Max(6f, effRange * 0.35f);
+            // Phased dodge (zdtd_bot dodge, ported back): while dodging, first
+            // backpedal away, then flip to a hard strafe on the randomized dir.
+            if (_dodgeTicks > 0)
+            {
+                _dodgeTicks--;
+                if (Time.time >= _nextPathRecalc)
+                {
+                    if (_dodgeBackRemain > 0) { _dodgeBackRemain--; BotBrain.Backpedal(me, _target, _strafeDir); }
+                    else { _strafeDir = -_strafeDir; BotBrain.Strafe(me, _target, _strafeDir); }
+                    _nextPathRecalc = Time.time + 0.12f;
+                }
+            }
+            else if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
+            {
+                if (dist > tooClose)
+                {
+                    if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
+                }
+                else // inside standoff - backpedal to reopen range
+                {
+                    if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
+                }
+            }
+            else if (dist < tooClose)
+            {
+                if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
+            }
+            else if (Rng01() < 0.12f) _strafeDir = -_strafeDir;
+        }
+
+        /// <summary>Pursue where we last SAW the target, not its current unseen position
+        /// (zdtd_bot lost-sight combat memory, ported): route through nearby cover when
+        /// healthy, and juke perpendicular when stuck against an obstacle.</summary>
+        void ChaseTarget(EntityAlive me, World world, BotConfig cfg, bool canSee, Vector3 tPos, Vector3 myPos)
+        {
+            _state = BotBrain.State.Chase;
+            Vector3 chaseDest = _hasLastKnownTarget ? _lastKnownTargetPos : tPos;
+            if (Time.time >= _nextPathRecalc)
+            {
+                _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
+                // FPS cover advance: when healthy and the target is out of sight, route
+                // through a nearby cover point between us and the target (peek from cover)
+                // rather than walking straight into the open. Gated by a cooldown so it
+                // doesn't jitter.
+                bool routeCover = !canSee && me.Health > cfg.BotHealth * 0.55f && Time.time >= _nextCoverRoute;
+                if (routeCover)
+                {
+                    Vector3 cover = BotBrain.FindCover(me, _target, world);
+                    if (cover != Vector3.zero && Vector3.Distance(cover, chaseDest) > Vector3.Distance(me.position, chaseDest) * 0.72f)
+                    {
+                        BotBrain.MoveTo(me, cover);
+                        _nextCoverRoute = Time.time + 3f + Rng01() * 3f;
+                    }
+                    else BotBrain.MoveTo(me, chaseDest);
+                }
+                else BotBrain.MoveTo(me, chaseDest);
+            }
+            float moved = Vector3.Distance(myPos, _lastPos);
+            if (moved < 0.18f)
+            {
+                if (_stuckSince == 0f) _stuckSince = Time.time;
+                else if (Time.time - _stuckSince > cfg.StuckTimeoutSec)
+                {
+                    // Stuck perpendicular-juke (zdtd_bot memory-juke, ported back):
+                    // offset perpendicular to the obstacle so the bot goes AROUND its
+                    // chase target instead of jumping/strafing randomly. When no target
+                    // or the offset is tiny, fall back to the old JumpOrStrafe nudge.
+                    Vector3 from = myPos;
+                    Vector3 toward = chaseDest - from; toward.y = 0;
+                    bool juked = false;
+                    if (toward.sqrMagnitude > 0.04f)
+                    {
+                        toward.Normalize();
+                        Vector3 perp = Vector3.Cross(Vector3.up, toward) * ((EntityId & 1) == 0 ? 3f : -3f);
+                        Vector3 jukePos = from + perp;
+                        try { BotBrain.MoveTo(me, jukePos); juked = true; } catch { }
+                    }
+                    if (!juked) { try { BotBrain.JumpOrStrafe(me); } catch { } }
+                    _stuckSince = 0f; _nextPathRecalc = Time.time + 0.2f;
+                }
+            }
+            else { _stuckSince = 0f; _lastPos = myPos; }
+        }
+
+        /// <summary>No live target: clear a dead one and rescan immediately so the bot
+        /// switches enemies without dead-target linger (FPS flow), then take the Q3 LTG
+        /// idle decision between camping (hold + facing sweep) and roaming/hunting.</summary>
+        void IdleWanderOrCamp(EntityAlive me, World world, BotConfig cfg, BotCharacter ch)
+        {
+            if (_target != null && IsDeadTgt(_target))
+            {
+                _target = null;
+                _hasLastKnownTarget = false;
+                _nextTargetScan = 0f; // force re-acquisition this tick
+            }
+            // Q3 LTG decision: idle camp-vs-roam stays heuristic on purpose.
+            // The net's camp output is only consumed inside engagements
+            // (attack movement); zombies must always pull idle bots out of
+            // cover, so no neural gate sits on this branch.
+            bool wantCamp = ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01());
+            BotBrain.GoalType maybeGoal = BotBrain.DecideGoal(me, cfg, ch);
+            if (wantCamp && maybeGoal == BotBrain.GoalType.Camp)
+            {
+                _state = BotBrain.State.Wander;
+                // Camp hold + facing sweep (zdtd_bot camp, ported back): instead of
+                // drifting to a wander point, pick a spot once, hold there for a few
+                // seconds and slowly sweep the facing (Q3/Doom3 LTG camper).
+                if (_campHoldUntil < Time.time && Time.time >= _nextWander)
+                {
+                    _nextWander = Time.time + 9f + Rng01() * 5f;
+                    _campHoldUntil = Time.time + 4f + Rng01() * 3f; // hold ~4-7 s
+                    _campYaw = 0f;
+                    _wanderTarget = BotBrain.FindCover(me, me, world);
+                    if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
+                    BotBrain.MoveTo(me, _wanderTarget);
+                }
+                else if (Vector3.Distance(me.position, _wanderTarget) < 3f || _campHoldUntil > Time.time)
+                {
+                    // Holding: sweep the facing slowly instead of standing static.
                     if (Time.time >= _nextPathRecalc)
                     {
-                        _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
-                        // FPS cover advance: when healthy and the target is out of sight, route
-                        // through a nearby cover point between us and the target (peek from cover)
-                        // rather than walking straight into the open. Gated by a cooldown so it
-                        // doesn't jitter.
-                        bool routeCover = !canSee && me.Health > cfg.BotHealth * 0.55f && Time.time >= _nextCoverRoute;
-                        if (routeCover)
-                        {
-                            Vector3 cover = BotBrain.FindCover(me, _target, world);
-                            if (cover != Vector3.zero && Vector3.Distance(cover, chaseDest) > Vector3.Distance(me.position, chaseDest) * 0.72f)
-                            {
-                                BotBrain.MoveTo(me, cover);
-                                _nextCoverRoute = Time.time + 3f + Rng01() * 3f;
-                            }
-                            else BotBrain.MoveTo(me, chaseDest);
-                        }
-                        else BotBrain.MoveTo(me, chaseDest);
+                        _nextPathRecalc = Time.time + 0.2f;
+                        _campYaw += 0.05f;
+                        try { me.SetLookPosition(me.position + Quaternion.Euler(0, _campYaw * Mathf.Rad2Deg, 0) * Vector3.forward); } catch { }
                     }
-                    float moved = Vector3.Distance(myPos, _lastPos);
-                    if (moved < 0.18f)
-                    {
-                        if (_stuckSince == 0f) _stuckSince = Time.time;
-                        else if (Time.time - _stuckSince > cfg.StuckTimeoutSec)
-                        {
-                            // Stuck perpendicular-juke (zdtd_bot memory-juke, ported back):
-                            // offset perpendicular to the obstacle so the bot goes AROUND its
-                            // chase target instead of jumping/strafing randomly. When no target
-                            // or the offset is tiny, fall back to the old JumpOrStrafe nudge.
-                            Vector3 from = myPos;
-                            Vector3 toward = chaseDest - from; toward.y = 0;
-                            bool juked = false;
-                            if (toward.sqrMagnitude > 0.04f)
-                            {
-                                toward.Normalize();
-                                Vector3 perp = Vector3.Cross(Vector3.up, toward) * ((EntityId & 1) == 0 ? 3f : -3f);
-                                Vector3 jukePos = from + perp;
-                                try { BotBrain.MoveTo(me, jukePos); juked = true; } catch { }
-                            }
-                            if (!juked) { try { BotBrain.JumpOrStrafe(me); } catch { } }
-                            _stuckSince = 0f; _nextPathRecalc = Time.time + 0.2f;
-                        }
-                    }
-                    else { _stuckSince = 0f; _lastPos = myPos; }
                 }
             }
             else
             {
-                // Target died or is no longer valid: clear it and rescan immediately so the
-                // bot switches to the next enemy without dead-target linger (FPS flow).
-                if (_target != null && IsDeadTgt(_target))
+                _state = BotBrain.State.Wander;
+                if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
                 {
-                    _target = null;
-                    _hasLastKnownTarget = false;
-                    _nextTargetScan = 0f; // force re-acquisition this tick
-                }
-                // Q3 LTG decision: idle camp-vs-roam stays heuristic on purpose.
-                // The net's camp output is only consumed inside engagements
-                // (attack movement); zombies must always pull idle bots out of
-                // cover, so no neural gate sits on this branch.
-                var campCh = Character ?? BotCharacterDB.ForName(Name);
-                bool wantCamp = ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01());
-                BotBrain.GoalType maybeGoal = BotBrain.DecideGoal(me, cfg, campCh);
-                if (wantCamp && maybeGoal == BotBrain.GoalType.Camp)
-                {
-                    _state = BotBrain.State.Wander;
-                    // Camp hold + facing sweep (zdtd_bot camp, ported back): instead of
-                    // drifting to a wander point, pick a spot once, hold there for a few
-                    // seconds and slowly sweep the facing (Q3/Doom3 LTG camper).
-                    if (_campHoldUntil < Time.time && Time.time >= _nextWander)
-                    {
-                        _nextWander = Time.time + 9f + Rng01() * 5f;
-                        _campHoldUntil = Time.time + 4f + Rng01() * 3f; // hold ~4-7 s
-                        _campYaw = 0f;
-                        _wanderTarget = BotBrain.FindCover(me, me, world);
-                        if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
-                        BotBrain.MoveTo(me, _wanderTarget);
-                    }
-                    else if (Vector3.Distance(me.position, _wanderTarget) < 3f || _campHoldUntil > Time.time)
-                    {
-                        // Holding: sweep the facing slowly instead of standing static.
-                        if (Time.time >= _nextPathRecalc)
-                        {
-                            _nextPathRecalc = Time.time + 0.2f;
-                            _campYaw += 0.05f;
-                            try { me.SetLookPosition(me.position + Quaternion.Euler(0, _campYaw * Mathf.Rad2Deg, 0) * Vector3.forward); } catch { }
-                        }
-                    }
-                }
-                else
-                {
-                    _state = BotBrain.State.Wander;
-                    if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
-                    {
-                        _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
-                        // Active hunt: prefer the nearest other bot/player so bots converge and
-                        // fight; fall back to random wander when none is close (FPS combat seeking).
-                        Vector3 seek = SeekNearestEnemy(me, world, cfg, cfg.VisionRange * 3f);
-                        if (seek != Vector3.zero) _wanderTarget = seek;
-                        else _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius, Rng01(), Rng01());
-                        BotBrain.MoveTo(me, _wanderTarget);
-                    }
+                    _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
+                    // Active hunt: prefer the nearest other bot/player so bots converge and
+                    // fight; fall back to random wander when none is close (FPS combat seeking).
+                    Vector3 seek = SeekNearestEnemy(me, world, cfg, cfg.VisionRange * 3f);
+                    if (seek != Vector3.zero) _wanderTarget = seek;
+                    else _wanderTarget = BotBrain.PickWanderTarget(me, world, cfg.RandomWanderRadius, Rng01(), Rng01());
+                    BotBrain.MoveTo(me, _wanderTarget);
                 }
             }
         }
@@ -597,7 +629,7 @@ namespace BotMod.Core
                     var bToT = target.position - e2.position; bToT.y = 0;
                     if (bToT.sqrMagnitude < 0.01f) continue;
                     var bCross = Vector3.Cross(Vector3.up, bToT.normalized);
-                    int bSide = (int)Mathf.Sign(Vector3.Dot(bCross, Vector3.right) * 1f);
+                    int bSide = (int)Mathf.Sign(Vector3.Dot(bCross, Vector3.right));
                     if (bSide == mySide) return true; // same side - flank away
                 }
                 return false;

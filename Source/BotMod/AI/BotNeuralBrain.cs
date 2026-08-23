@@ -22,7 +22,6 @@ namespace BotMod.AI
         static bool _loaded;
         static string _loadedPath = "";
         static string _loadedHash = "";
-        static int _inputs = 14;
         static int _hidden = 16;
         static int _outputs = 5;
         static float[] _weights;          // flat canonical order (see docs)
@@ -38,7 +37,7 @@ namespace BotMod.AI
         public static string LastReason => _lastReason;
         public static string LoadedPath => _loadedPath;
         public static string LoadedHash => _loadedHash;
-        public static int Inputs => _inputs;
+        public static int Inputs => kInputs;
         public static int Hidden => _hidden;
         public static int Outputs => _outputs;
         public static int WeightCount => _weights != null ? _weights.Length : 0;
@@ -114,8 +113,8 @@ namespace BotMod.AI
                 for (int h = 0; h < _hidden; h++)
                 {
                     float s = _b1[h];
-                    int row = h * _inputs;
-                    for (int i = 0; i < _inputs; i++) s += _w1[row + i] * x[i];
+                    int row = h * kInputs;
+                    for (int i = 0; i < kInputs; i++) s += _w1[row + i] * x[i];
                     _hiddenBuf[h] = (float)Math.Tanh(s);
                 }
                 // out = W2*hidden + b2
@@ -191,8 +190,7 @@ namespace BotMod.AI
                 {
                     reason = "unsupported inputs=" + inputs + " (v" + kVersion + " packs " + kInputs + " features)";
                     _lastReason = reason; return false;
-                }
-                int hidden = obj.Value<int?>("hidden") ?? 16;
+                }                int hidden = obj.Value<int?>("hidden") ?? 16;
                 int outputs = obj.Value<int?>("outputs") ?? 5;
                 var arr = obj["weights"] as Newtonsoft.Json.Linq.JArray;
                 if (arr == null) { reason = "missing weights[]"; _lastReason = reason; return false; }
@@ -216,7 +214,7 @@ namespace BotMod.AI
                 _w2 = new float[w2Len]; Array.Copy(w, off, _w2, 0, w2Len); off += w2Len;
                 _b2 = new float[b2Len]; Array.Copy(w, off, _b2, 0, b2Len); off += b2Len;
                 _weights = w;
-                _inputs = inputs; _hidden = hidden; _outputs = outputs;
+                _hidden = hidden; _outputs = outputs;
                 if (_hiddenBuf.Length < hidden) _hiddenBuf = new float[Math.Max(hidden, 32)];
                 if (_outBuf.Length < outputs) _outBuf = new float[Math.Max(outputs, 8)];
                 // scratchX sized to max inputs (32) already

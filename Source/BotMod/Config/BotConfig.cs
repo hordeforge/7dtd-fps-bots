@@ -115,6 +115,21 @@ namespace BotMod.Config
         public bool UseNeuralBrain { get; set; } = false;
         public string BotNeuralWeightPath { get; set; } = "evolved/best.json";
 
+        /// <summary>Apply a "vs" toggle from an admin surface (web `vs` action,
+        /// `bot vs` console command). Accepts singular/plural class names plus
+        /// the "human" alias. Returns false for an unknown target; otherwise
+        /// sets the flag and names the JSON field to persist.</summary>
+        public bool SetVsTarget(string target, bool on, out string field)
+        {
+            switch (target)
+            {
+                case "bot": case "bots": BotVsBot = on; field = "BotVsBot"; return true;
+                case "zombie": case "zombies": BotVsZombie = on; field = "BotVsZombie"; return true;
+                case "player": case "players": case "human": BotVsPlayer = on; field = "BotVsPlayer"; return true;
+                default: field = null; return false;
+            }
+        }
+
         public WeaponProfile ResolveWeapon(string gunId)
         {
             return WeaponProfile.ForGun(gunId ?? BotWeapon, this);

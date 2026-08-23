@@ -40,12 +40,10 @@ namespace BotMod.Web
         public override void HandleRestPost(RequestContext context, IDictionary<string, object> _jsonInput, byte[] _jsonInputData)
         {
             PrepareEnvelopedResult(out JsonWriter writer);
-            string action = _jsonInput != null && _jsonInput.TryGetValue("action", out object a) && a != null
-                ? Convert.ToString(a).ToLowerInvariant() : null;
+            string action = GetString(_jsonInput, "action")?.ToLowerInvariant();
             // Optional idempotency key: one per logical request, reused across
             // retries (see class doc + IdempotencyLedger).
-            string requestId = _jsonInput != null && _jsonInput.TryGetValue("requestId", out object rid) && rid != null
-                ? Convert.ToString(rid) : null;
+            string requestId = GetString(_jsonInput, "requestId");
             bool keyed = IdempotencyLedger.IsValidKey(requestId);
             // One audit line per executed/replayed/rejected mutation; GET stays
             // unlogged because the dashboard polls it continuously.
@@ -87,10 +85,7 @@ namespace BotMod.Web
                         break;
                     case "spawn":
                         {
-                            int count = 1;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("count", out object c))
-                                int.TryParse(Convert.ToString(c), out count);
-                            count = Math.Max(1, Math.Min(16, count));
+                            int count = Math.Max(1, Math.Min(16, GetInt(_jsonInput, "count", 1)));
                             // Bot spawning touches Unity/world state and must run
                             // on the main thread (a direct call from the web
                             // thread pool segfaulted the server).
@@ -109,16 +104,11 @@ namespace BotMod.Web
                             // {"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}
                             // Same path as `bot player <name>`: bots spawn 12-30m
                             // from the target player (out-of-sight preferred).
-                            string ident = _jsonInput != null && _jsonInput.TryGetValue("player", out object p)
-                                ? Convert.ToString(p) : null;
-                            int count = 1;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("count", out object c))
-                                int.TryParse(Convert.ToString(c), out count);
-                            count = Math.Max(1, Math.Min(16, count));
+                            string ident = GetString(_jsonInput, "player");
+                            int count = Math.Max(1, Math.Min(16, GetInt(_jsonInput, "count", 1)));
                             string weapon = null;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("weapon", out object w))
                             {
-                                string wv = Convert.ToString(w);
+                                string wv = GetString(_jsonInput, "weapon");
                                 if (!string.IsNullOrEmpty(wv) && (wv.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || wv == "mixed"))
                                     weapon = wv;
                             }
@@ -149,8 +139,7 @@ namespace BotMod.Web
                         break;
                     case "neural":
                         {
-                            bool on = _jsonInput != null && _jsonInput.TryGetValue("on", out object o)
-                                && Convert.ToString(o).ToLowerInvariant() == "true";
+                            bool on = GetBool(_jsonInput, "on");
                             ModApi.Config.UseNeuralBrain = on;
                             string why = "";
                             if (on)
@@ -168,9 +157,7 @@ namespace BotMod.Web
                     case "removeone":
                         {
                             // {"action":"removeOne","entityId":N} - remove a single bot.
-                            int entityId = 0;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("entityId", out object id))
-                                int.TryParse(Convert.ToString(id), out entityId);
+                            int entityId = GetInt(_jsonInput, "entityId", 0);
                             bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), false, "removeOne");
                             respBody = RespondJson("removed", removed, "entityId", entityId);
                         }
@@ -178,10 +165,7 @@ namespace BotMod.Web
                     case "skill":
                         {
                             // {"action":"skill","level":0-4} - same as `bot skill`.
-                            int level = ModApi.Config.Difficulty;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("level", out object lv))
-                                int.TryParse(Convert.ToString(lv), out level);
-                            level = Math.Max(0, Math.Min(4, level));
+                            int level = Math.Max(0, Math.Min(4, GetInt(_jsonInput, "level", ModApi.Config.Difficulty)));
                             ModApi.Config.Difficulty = level;
                             ModApi.Config.Normalize();
                             respBody = RespondJson("difficulty", level);
@@ -191,8 +175,7 @@ namespace BotMod.Web
                         {
                             // {"action":"team","on":bool} - squad mode: all bots are
                             // one team (never target/damage each other). Persisted.
-                            bool on = _jsonInput != null && _jsonInput.TryGetValue("on", out object o)
-                                && Convert.ToString(o).ToLowerInvariant() == "true";
+                            bool on = GetBool(_jsonInput, "on");
                             ModApi.Config.BotTeam = on;
                             ModApi.PersistConfigField("BotTeam", on);
                             respBody = RespondJson("team", on);
@@ -202,23 +185,14 @@ namespace BotMod.Web
                         {
                             // {"action":"vs","target":"bot|zombie|player","on":bool} -
                             // bots shoot that target class (same as `bot vs`). Persisted.
-                            string target = _jsonInput != null && _jsonInput.TryGetValue("target", out object t)
-                                ? Convert.ToString(t).ToLowerInvariant() : "";
-                            bool on = _jsonInput != null && _jsonInput.TryGetValue("on", out object o)
-                                && Convert.ToString(o).ToLowerInvariant() == "true";
-                            string field = null;
-                            switch (target)
-                            {
-                                case "bot": case "bots": ModApi.Config.BotVsBot = on; field = "BotVsBot"; break;
-                                case "zombie": case "zombies": ModApi.Config.BotVsZombie = on; field = "BotVsZombie"; break;
-                                case "player": case "players": case "human": ModApi.Config.BotVsPlayer = on; field = "BotVsPlayer"; break;
-                                default: errorCode = "INVALID_TARGET"; break;
-                            }
-                            if (errorCode == null)
+                            string target = GetString(_jsonInput, "target")?.ToLowerInvariant() ?? "";
+                            bool on = GetBool(_jsonInput, "on");
+                            if (ModApi.Config.SetVsTarget(target, on, out string field))
                             {
                                 ModApi.PersistConfigField(field, on);
                                 respBody = RespondJson("vs", target, "on", on);
                             }
+                            else errorCode = "INVALID_TARGET";
                         }
                         break;
                     case "setteam":
@@ -226,11 +200,8 @@ namespace BotMod.Web
                             // {"action":"setTeam","name":"<botName>","team":N} - assign
                             // a bot to a team (0 = free-for-all). Keyed by base name,
                             // persists to config, applies to live bots immediately.
-                            string name = _jsonInput != null && _jsonInput.TryGetValue("name", out object nm)
-                                ? Convert.ToString(nm) : "";
-                            int team = 0;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("team", out object tv))
-                                int.TryParse(Convert.ToString(tv), out team);
+                            string name = GetString(_jsonInput, "name") ?? "";
+                            int team = GetInt(_jsonInput, "team", 0);
                             if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
                             string baseName = BotManager.BaseName(name);
                             var cfg = ModApi.Config;
@@ -246,10 +217,7 @@ namespace BotMod.Web
                         {
                             // {"action":"teamCount","count":N} - number of team
                             // buckets (0 = free-for-all only). Persisted.
-                            int count = ModApi.Config.BotTeamCount;
-                            if (_jsonInput != null && _jsonInput.TryGetValue("count", out object c))
-                                int.TryParse(Convert.ToString(c), out count);
-                            count = Math.Max(0, Math.Min(8, count));
+                            int count = Math.Max(0, Math.Min(8, GetInt(_jsonInput, "count", ModApi.Config.BotTeamCount)));
                             ModApi.Config.BotTeamCount = count;
                             ModApi.Config.Normalize(); // drops assignments outside the range
                             ModApi.PersistConfigField("BotTeamCount", count);
@@ -314,6 +282,27 @@ namespace BotMod.Web
         }
 
         static void PersistEnabled(bool enabled) => ModApi.PersistConfigField("Enabled", enabled);
+
+        /// <summary>Optional string field of the POST body; null when absent.</summary>
+        static string GetString(IDictionary<string, object> body, string key)
+        {
+            return body != null && body.TryGetValue(key, out object v) && v != null ? Convert.ToString(v) : null;
+        }
+
+        /// <summary>Boolean flag of the POST body: true only when the value reads "true"
+        /// (case-insensitive); absent or any other value is false.</summary>
+        static bool GetBool(IDictionary<string, object> body, string key)
+        {
+            string v = GetString(body, key);
+            return v != null && v.ToLowerInvariant() == "true";
+        }
+
+        /// <summary>Integer field of the POST body; fallback when absent or unparseable.</summary>
+        static int GetInt(IDictionary<string, object> body, string key, int fallback)
+        {
+            string v = GetString(body, key);
+            return v != null && int.TryParse(v, out int n) ? n : fallback;
+        }
 
         /// <summary>Serialize the success payload. The caller sends it and, for
         /// keyed requests, records it in the idempotency ledger for replays.</summary>

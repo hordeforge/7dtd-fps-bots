@@ -324,7 +324,7 @@ namespace BotMod.Core
                         if (classId >= 0) { want = alias; ModApi.Log("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
                     }
                 }
-                if (classId < 0) { if (want != "mixed" && !entityClassName.Contains("mixed")) ModApi.Log("Unknown entity class: " + entityClassName + " (resolved " + want + ")"); return null; }
+                if (classId < 0) { ModApi.Log("Unknown entity class: " + (entityClassName ?? "(null)") + " (resolved " + want + ")"); return null; }
                 Entity e = null;
                 try
                 {

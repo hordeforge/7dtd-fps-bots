@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
@@ -67,48 +66,17 @@ namespace BotMod.Patches
     // team stamping removed: Entity.TeamNumber is not reliably on base Entity in this build; scoring uses explicit team=0 anyway.
 
     /// <summary>Every death re-fires the same scoreboard packet the XUi player list reads. Vanilla <c>AwardKill</c> only fires
-    /// for <c>EntityPlayer</c> killers, so a bot's frag would never surface in the HUD. We hook <c>OnEntityDeath</c> and push a
-    /// best-effort <c>NetPackagePlayerStats</c> refresh for any leader (bot or player) that just scored. Clients ignore the packet
-    /// for a zombie-typed id today, but this lays the deduplicated wiring for when the Tab source is patched to interleave bots.</summary>
+    /// for <c>EntityPlayer</c> killers, so a bot's frag would never surface in the HUD. We push a best-effort stat refresh for a
+    /// bot that just died so the HUD score column tracks. Clients ignore the packet for a zombie-typed id today, but this lays
+    /// the deduplicated wiring for when the Tab source is patched to interleave bots.</summary>
     public static class BotScoreNet
     {
-        static bool _probed;
-        static void EnsureProbe()
-        {
-            if (_probed) return; _probed = true;
-            try
-            {
-                // NetPackagePlayerStats exists on dedi; Refresh works through EntityAlive.Stats
-                // regardless of whether the typed packet type is present.
-                var t = Type.GetType("NetPackagePlayerStats, Assembly-CSharp");
-                if (t == null) return;
-            }
-            catch { }
-        }
-
+        /// <summary>Best effort: bump the stat's Changed flag so the normal 0.5s
+        /// TickWait push (waitTicks=5) ships the updated stats to clients.</summary>
         public static void Refresh(EntityAlive who)
         {
             if (who == null) return;
-            try
-            {
-                EnsureProbe();
-                // Best effort: force a stat resend via the path EntityAlive exposes.
-                // If the typed packet is not probeable, bump the stat's Changed flag so the normal 0.5s TickWait push (waitTicks=5) will ship it.
-                try { who.Stats?.Health?.SetChangedFlag(who.Health, who.Health - 1); } catch { }
-                // Also tick the dedicated's tracker-interest path when present.
-                try
-                {
-                    var world = GameManager.Instance?.World;
-                    if (world != null)
-                    {
-                        // Mark the entity's network stats dirty so NetEntityDistribution re-broadcasts them.
-                        var ned = typeof(World).GetMethod("GetNetEntityDistribution", BindingFlags.Public | BindingFlags.Instance);
-                        if (ned != null) { /* passive: Tick will now re-queue */ }
-                    }
-                }
-                catch { }
-            }
-            catch { }
+            try { who.Stats?.Health?.SetChangedFlag(who.Health, who.Health - 1); } catch { }
         }
     }
 
@@ -120,7 +88,7 @@ namespace BotMod.Patches
     /// on the killing blow. This patch only handles the victim side and the rarer paths where the bot wasn't the direct DamageEntity
     /// caller (explosions, fall, zombie melee finishing a bot).</summary>
     [HarmonyPatch(typeof(EntityAlive), "OnEntityDeath")]
-    public static class Patch_BotScoring
+    public static class BotDeathPatch
     {
         static void Postfix(EntityAlive __instance)
         {
@@ -130,24 +98,8 @@ namespace BotMod.Patches
                 if (!BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId)) return;
                 // Bot victims were already counted via Died prior to death; just nudge replication.
                 try { BotScoreNet.Refresh(__instance); } catch { }
-            }
-            catch { }
-        }
-    }
-
-    [HarmonyPatch(typeof(EntityAlive), "OnEntityDeath")]
-    public static class BotDeathPatch
-    {
-        static void Postfix(EntityAlive __instance)
-        {
-            try
-            {
-                if (__instance == null) return;
-                if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId))
-                {
-                    BotMod.Core.BotManager.Instance.NotifyBotDeath(__instance.entityId);
-                    if (!ModApi.Config.DropLootOnDeath) try { __instance.lootList = null; } catch { }
-                }
+                BotMod.Core.BotManager.Instance.NotifyBotDeath(__instance.entityId);
+                if (!ModApi.Config.DropLootOnDeath) try { __instance.lootList = null; } catch { }
             }
             catch { }
         }

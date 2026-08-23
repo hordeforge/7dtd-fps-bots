@@ -157,15 +157,11 @@ namespace BotMod.Commands
                 return;
             }
             string target = p[1].ToLowerInvariant();
-            string field = null;
-            switch (target)
+            var cfg = ModApi.Config;
+            if (!cfg.SetVsTarget(target, on, out string field))
             {
-                case "bot": case "bots": ModApi.Config.BotVsBot = on; field = "BotVsBot"; break;
-                case "zombie": case "zombies": ModApi.Config.BotVsZombie = on; field = "BotVsZombie"; break;
-                case "player": case "players": case "human": ModApi.Config.BotVsPlayer = on; field = "BotVsPlayer"; break;
-                default:
-                    SdtdConsole.Instance.Output("Unknown target: " + target + ". Use bot|zombie|player.");
-                    return;
+                SdtdConsole.Instance.Output("Unknown target: " + target + ". Use bot|zombie|player.");
+                return;
             }
             ModApi.PersistConfigField(field, on);
             SdtdConsole.Instance.Output("Bots will now shoot " + target + ": " + (on ? "ON" : "OFF") + (ModApi.Config.BotTeam && target.StartsWith("bot", StringComparison.OrdinalIgnoreCase) ? " (note: squad mode overrides vs bot)" : "") + ".");

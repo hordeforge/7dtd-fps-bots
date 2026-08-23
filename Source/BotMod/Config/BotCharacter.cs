@@ -103,7 +103,11 @@ namespace BotMod.Config
                     if (loaded != null) Characters = loaded;
                 }
                 // Ensure at least defaults for known names
-                foreach (var n in cfg.BotNames) if (!Characters.ContainsKey(n.Split('_')[0])) Characters[n.Split('_')[0]] = BotCharacter.Defaults(n.Split('_')[0]);
+                foreach (var n in cfg.BotNames)
+                {
+                    string key = n.Split('_')[0];
+                    if (!Characters.ContainsKey(key)) Characters[key] = BotCharacter.Defaults(key);
+                }
                 // Apply difficulty lerp if characters have multiple skills (stored as skill 1 vs 5) - here we just scale by cfg.Difficulty
                 float diffSkill = cfg.Difficulty / 4f;
                 foreach (var kv in new List<KeyValuePair<string,BotCharacter>>(Characters))
