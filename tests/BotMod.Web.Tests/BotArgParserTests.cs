@@ -60,6 +60,12 @@ static class BotArgParserTests
         Check("count + coords", ok7 && c7 == 2 && p7 && x7 == 10f && z7 == 20f);
         bool ok8 = Spawn(new[] { "2", "10.25", "-20.75" }, out _, out float x8, out float z8, out bool p8, out _, out _);
         Check("invariant dot-decimal coords", ok8 && p8 && x8 == 10.25f && z8 == -20.75f);
+        // mono's float.TryParse accepts "NaN"/"Infinity" spellings that
+        // desktop .NET rejects; a non-finite coordinate would place a bot at
+        // an unusable position, so the grammar must reject them (found by
+        // BotArgParserFuzzTests).
+        Check("NaN coord rejected", !Spawn(new[] { "NaN", "3" }, out _, out _, out _, out _, out _, out string e8a) && e8a.Contains("'NaN'"));
+        Check("Infinity coord rejected", !Spawn(new[] { "2", "-Infinity" }, out _, out _, out _, out _, out _, out string e8b) && e8b.Contains("'-Infinity'"));
         Spawn(new[] { "gunMGT1AK47" }, out int c9, out _, out _, out _, out string w9, out _);
         Check("weapon only", c9 == 1 && w9 == "gunMGT1AK47");
         Spawn(new[] { "mixed" }, out _, out _, out _, out _, out string w10, out _);

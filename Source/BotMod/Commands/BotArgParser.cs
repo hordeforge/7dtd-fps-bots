@@ -82,7 +82,10 @@ namespace BotMod.Commands
             int end = args.Count;
             if (end > start && LooksLikeWeapon(args[end - 1])) { weapon = args[end - 1]; end--; }
 
-            int mid = end - start;
+            // A start past the end means "no tail tokens" (same as mid == 0),
+            // not a negative span that would fall into the coordinate branch
+            // and index out of range.
+            int mid = Math.Max(0, end - start);
             if (mid == 0) return true;
             if (!allowCoords && mid > 1)
             {
@@ -122,7 +125,11 @@ namespace BotMod.Commands
 
         static bool TryCoord(string token, out float v)
         {
-            return float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out v);
+            // Reject non-finite spellings: mono's TryParse accepts "NaN" and
+            // "Infinity" as floats (desktop .NET does not), and a bot placed
+            // at a non-finite coordinate is unusable downstream.
+            return float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out v)
+                && !float.IsNaN(v) && !float.IsInfinity(v);
         }
 
         static int ClampCount(int c)

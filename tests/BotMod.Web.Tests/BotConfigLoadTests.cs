@@ -64,6 +64,18 @@ static class BotConfigLoadTests
             Check("probability clamped to 0-1", cfg.HeadshotChance == 1f);
         }
 
+        // The difficulty preset raises VisionRange after the relational
+        // clamps run; LoseTargetRange must be re-raised with it or bots lose
+        // targets closer than they can see (found by BotConfigFuzzTests on
+        // the shipped config: difficulty 4, vision preset 120, lose range 85).
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"Difficulty\": 4, \"VisionRange\": 70, \"LoseTargetRange\": 85 }");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("difficulty vision bump keeps lose-range above it",
+                cfg.VisionRange >= 80f && cfg.LoseTargetRange >= cfg.VisionRange);
+        }
+
         // A JSON null TeamAssignments map must be repaired by Normalize: the
         // locked helpers index it directly, so a lingering null would make the
         // first admin assignment throw NullReferenceException on a web thread.

@@ -240,6 +240,11 @@ namespace BotMod.Config
             if (LoadoutPool == null || LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };
             // Apply difficulty preset over tunables that weren't hand-tweaked far from defaults
             ApplyDifficulty();
+            // The preset can raise VisionRange after the relational clamps
+            // above ran (difficulty >= 3 bumps VisionRange), which would
+            // strand LoseTargetRange below vision; re-assert the relations.
+            LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, LoseTargetRange));
+            AttackRange = Math.Max(3f, Math.Min(VisionRange, AttackRange));
         }
         void ApplyDifficulty()
         {

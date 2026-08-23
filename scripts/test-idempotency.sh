@@ -56,6 +56,12 @@ run_suite botargparser \
   "$root/Source/BotMod/Commands/BotArgParser.cs" \
   "$root/tests/BotMod.Web.Tests/BotArgParserTests.cs"
 
+# Randomized token fuzzing of the same grammar: never throws, clamped counts,
+# named usage errors, deterministic re-parse.
+run_suite botargparserfuzz \
+  "$root/Source/BotMod/Commands/BotArgParser.cs" \
+  "$root/tests/BotMod.Web.Tests/BotArgParserFuzzTests.cs"
+
 # Weights-file parser fuzzer: needs the game install's Newtonsoft.Json.dll,
 # copied beside the exe so mono resolves the reference at runtime.
 srv="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
@@ -74,6 +80,17 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
     "$root/tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs" > /dev/null
   # Repo root as argv[1] so the fuzzer can find evolved/best.json.
   mono "$work/neuralfuzz.exe" "$root"
+
+  # Config-file parser fuzzer: mutated botmod.json documents must never throw
+  # and always land inside Normalize's documented ranges (same Newtonsoft
+  # gate as above; compiles only the engine-free Config sources).
+  mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
+    -out:"$work/configfuzz.exe" \
+    "$root/Source/BotMod/Config/BotConfig.cs" \
+    "$root/Source/BotMod/Config/BotText.cs" \
+    "$root/Source/BotMod/Config/AtomicTextFile.cs" \
+    "$root/tests/BotMod.Web.Tests/BotConfigFuzzTests.cs" > /dev/null
+  mono "$work/configfuzz.exe" "$root"
 else
   echo "skip neuralfuzz (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
 fi
