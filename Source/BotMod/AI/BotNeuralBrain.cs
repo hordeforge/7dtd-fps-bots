@@ -94,6 +94,13 @@ namespace BotMod.AI
             {
                 // Pack inputs in canonical order matching docs/research/01 §2.
                 // Keep this order frozen — Python trainer and C# loader share it.
+                // Slot-semantics caveat: slots 4/12 hold lose-timer / enemy-velocity
+                // values here (see Bot.BuildNeuralInputs), but the trainer
+                // (tools/ga/combat_sim.py) fills them with sustained-fire spread and
+                // rounds-left fractions under this same v1 layout. The champion was
+                // evolved against those semantics; aligning requires either a retrain
+                // or live equivalents of the sim's spread/ammo state, so the
+                // divergence is deliberate until then. Never change one side alone.
                 float[] x = _scratchX;
                 x[0] = inp.HpFrac;
                 x[1] = inp.EnemyHpFrac;
