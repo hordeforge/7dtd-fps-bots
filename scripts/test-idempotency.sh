@@ -62,7 +62,7 @@ elif [[ -f "$client/7DaysToDie_Data/Managed/Assembly-CSharp.dll" ]]; then
 fi
 if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstandard.dll" ]]; then
   cp "$managed/Newtonsoft.Json.dll" "$managed/netstandard.dll" "$work/"
-  mcs -warnaserror -langversion:latest -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
+  mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
     -out:"$work/neuralfuzz.exe" \
     "$root/Source/BotMod/AI/BotNeuralBrain.cs" \
     "$root/tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs" > /dev/null
@@ -89,12 +89,12 @@ if $have_all && [[ -n "$harmony" ]]; then
   refs=()
   for dll in "${need_refs[@]}"; do refs+=(-r:"$managed/$dll"); done
   refs+=(-r:"$managed/mscorlib.dll" -r:"$managed/System.dll" -r:"$managed/System.Core.dll" -r:"$harmony")
-  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:latest "${refs[@]}" \
+  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:7.2 "${refs[@]}" \
     -out:"$work/teamshammer.exe" "${sources[@]}" \
     "$root/tests/BotMod.Web.Tests/TeamAssignmentsConcurrencyTests.cs" > /dev/null
   mono "$work/teamshammer.exe"
   # Config load/validation: unknown-key detection, range clamping, .bak recovery.
-  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:latest "${refs[@]}" \
+  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:7.2 "${refs[@]}" \
     -out:"$work/botconfig.exe" "${sources[@]}" \
     "$root/tests/BotMod.Web.Tests/BotConfigLoadTests.cs" > /dev/null
   mono "$work/botconfig.exe"

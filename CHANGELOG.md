@@ -12,6 +12,13 @@ fails on drift between them.
 
 ## [Unreleased]
 
+### Added
+- `make package` (scripts/package.sh) builds the release zip
+  (`dist/BotMod-<version>.zip`) reproducibly: sorted entry order, all
+  timestamps pinned to `SOURCE_DATE_EPOCH` (default: HEAD commit time),
+  uid/gid stripped and permissions normalized, so two builds of the same
+  commit produce identical bytes.
+
 ### Changed
 - **The synthetic-id auth bypass is now opt-in** via the new config key
   `"AllowSyntheticAuthBypass"` (default `false`). In every release up to and

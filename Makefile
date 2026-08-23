@@ -3,7 +3,7 @@ ROOT := $(CURDIR)
 DS ?= $(if $(SEVENDTD_DS_DIR),$(SEVENDTD_DS_DIR),$(HOME)/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test install uninstall clean lint-html lint-webui lint-shell check
+.PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell check
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -12,6 +12,7 @@ Targets:
   make build        compile BotMod.dll + web bundle into dist/BotMod (needs game DLLs or dotnet SDK)
   make build-mcs    same, forcing the mono mcs backend
   make test         run tests/BotMod.Web.Tests via scripts/test-idempotency.sh (needs mcs + mono; not run in CI)
+  make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make check        what CI runs: shellcheck + vnu HTML lint + tsc/oxlint/bundle freshness
   make lint-shell   shellcheck over scripts/*.sh
   make lint-html    Nu HTML checker over shipped/generated HTML (needs java; tools via npx)
@@ -20,8 +21,9 @@ Targets:
   make uninstall    remove Mods/BotMod from the server
   make clean        remove dist/ and C# obj/bin intermediates
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
-SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet. CI only runs `make check`; `make test`
-and `make build` additionally need mono/the game install locally.
+SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip
+timestamps; defaults to the HEAD commit time). CI only runs `make check`;
+`make test` and `make build` additionally need mono/the game install locally.
 endef
 export HELP
 help:
@@ -32,6 +34,8 @@ build-mcs:
 	SEVENDTD_BUILD_BACKEND=mcs bash $(SCRIPTS)/build.sh
 test:
 	bash $(SCRIPTS)/test-idempotency.sh
+package:
+	bash $(SCRIPTS)/package.sh
 lint-html:
 	bash $(SCRIPTS)/lint-html.sh
 lint-webui:

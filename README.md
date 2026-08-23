@@ -116,8 +116,14 @@ reported as a WARN line at load and ignored.
 ```bash
 make test          # C# unit tests (tests/BotMod.Web.Tests, mcs + mono)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod
+make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip
 make check         # exactly what CI runs (shellcheck, vnu HTML lint, tsc/oxlint/bundle freshness)
 ```
+
+`make package` output is byte-stable: entry order is sorted, every archive
+timestamp is `SOURCE_DATE_EPOCH` (default: the HEAD commit time), and uid/gid
+and permissions are normalized. Two packages of the same commit compare equal
+with `sha256sum`, regardless of build machine or directory.
 
 Released versions and upgrade notes are documented in `CHANGELOG.md`.
 
