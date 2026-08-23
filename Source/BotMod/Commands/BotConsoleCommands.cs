@@ -10,22 +10,48 @@ namespace BotMod.Commands
         public override string[] getCommands() => new[] { "bot" };
         public override string getDescription() => "FPS bots: spawn, list, remove, config.";
         public override string getHelp() =>
-            "Usage: bot <help|list|spawn [count] [x z] [weapon] | player <name/id> [count] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | neural <on|off|reload [path]|status> | vs <bot|zombie|player> <on|off> | team <on|off|assign <name> <id>|list|clear> | teams <0-8> | reload | enable | disable | status>\n" +
-            "  bot player <nameOrId> [count] [weapon] - spawn bots near that player (DM-safe, not too close)\n" +
-            "  bot spawn 4                    - spawn 4 mixed bots\n" +
-            "  bot spawn 1 0 0 gunMGT1AK47    - spawn AK bot at x,z\n" +
-            "  bot weapon gunShotgunT1DoubleBarrel - default for next spawns\n" +
-            "  bot skill 3                  - nightmare aim/reaction\n" +
-            "  bot neural status            - neural brain loaded? path, weights\n" +
-            "  bot neural reload            - re-read evolved/best.json (or BotNeuralWeightPath)\n" +
-            "  bot list                     - alive bots (weapon/state/target)\n" +
-            "  bot count 8                  - keep 8 alive\n" +
-            "  bot reload                   - reload Config/botmod.json\n" +
-            "  bot vs bot|zombie|player <on|off> - bots shoot that target class\n" +
-            "  bot team <on|off>            - squad mode: all bots one team, never fight each other\n" +
-            "  bot team assign <name> <id>  - put that bot on team id (0 = free-for-all)\n" +
-            "  bot team list | bot team clear - show / clear team assignments\n" +
-            "  bot teams <0-8>              - number of teams (0 = free-for-all only)";
+            "Usage: bot <subcommand> [args]\n" +
+            "Spawning:\n" +
+            "  bot spawn [count] [x z] [weapon] - spawn bots (default 1); no x z = DM spawnpoints\n" +
+            "  bot player <nameOrId> [count] [weapon] - spawn near that player ('me' = commanding player)\n" +
+            "  bot remove all | bot remove <id> - despawn all / one bot\n" +
+            "  bot list                         - alive bots (weapon/state/target/hp/burst)\n" +
+            "  bot status                       - config summary + alive count\n" +
+            "Config (persisted to Config/botmod.json):\n" +
+            "  bot count <n>                    - keep n alive\n" +
+            "  bot weapon <gunId|mixed>         - default weapon for future spawns\n" +
+            "  bot skill <0-4>                  - 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare\n" +
+            "  bot neural <on|off|reload [path]|status> - GA-evolved brain toggle/reload\n" +
+            "  bot vs <bot|zombie|player> <on|off> - which target classes bots shoot (all on = FFA)\n" +
+            "Teams:\n" +
+            "  bot team <on|off>                - squad mode: all bots allies, never fight each other\n" +
+            "  bot team assign <name> <id>      - put that bot on team id (0 = free-for-all)\n" +
+            "  bot team list | bot team clear   - show / clear team assignments\n" +
+            "  bot teams <0-8>                  - number of teams (0 = free-for-all only)\n" +
+            "Lifecycle:\n" +
+            "  bot reload                       - re-read Config/botmod.json\n" +
+            "  bot enable | bot disable         - master switch (persisted)\n" +
+            "Shortcuts: add=spawn ls=list rm/kick/clear=remove set=count gun=weapon near/at=player shoot=vs squad=team\n" +
+            "Examples:\n" +
+            "  bot spawn 4                      - 4 mixed-loadout bots at DM spawnpoints\n" +
+            "  bot spawn 1 -1200.5 300          - 1 bot near x=-1200.5 z=300 (dot-decimal coords)\n" +
+            "  bot player Kira 3 gunMGT1AK47    - 3 AK bots near Kira (12-30m, out-of-sight preferred)\n" +
+            "  bot vs bot off                   - bots stop shooting each other";
+
+        static readonly string[] Subcommands =
+        {
+            "help", "status", "list", "spawn", "player", "remove", "count", "weapon",
+            "skill", "neural", "vs", "team", "teams", "reload", "enable", "disable"
+        };
+
+        static string Suggest(string sub)
+        {
+            if (sub.Length == 0) return "";
+            foreach (var name in Subcommands)
+                if (name.StartsWith(sub, StringComparison.OrdinalIgnoreCase))
+                    return " Did you mean '" + name + "'?";
+            return "";
+        }
 
         public override void Execute(List<string> _params, CommandSenderInfo _senderInfo)
         {
@@ -50,7 +76,7 @@ namespace BotMod.Commands
                     case "vs": case "shoot": DoVs(_params); break;
                     case "team": case "squad": DoTeam(_params); break;
                     case "teams": DoTeams(_params); break;
-                    default: SdtdConsole.Instance.Output("Unknown bot subcommand: " + sub + ". Try: bot help"); break;
+                    default: SdtdConsole.Instance.Output("Unknown bot subcommand: '" + sub + "'." + Suggest(sub) + " Try: bot help"); break;
                 }
             }
             catch (Exception ex) { SdtdConsole.Instance.Output("bot command failed: " + ex.Message); ModApi.Error("bot cmd failed: " + ex); }
@@ -70,23 +96,9 @@ namespace BotMod.Commands
         }
         void DoSpawn(List<string> p)
         {
-            int count = 1; Vector3? pos = null; string weapon = null;
-            if (p.Count >= 2 && int.TryParse(p[1], out int c)) count = Math.Max(1, Math.Min(16, c));
-            // parse trailing gun id if present (non-numeric last token that looks like a gun)
-            if (p.Count >= 2)
-            {
-                string last = p[p.Count - 1];
-                if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last;
-            }
-            // parse x z if two floats near end (before optional weapon)
-            int scanEnd = weapon != null ? p.Count - 1 : p.Count;
-            // Coordinates are typed dot-decimal (the game's convention) regardless of
-            // the host locale; parse invariantly or "bot spawn 1 1200.5 -1300.7"
-            // silently loses its position on comma-decimal systems.
-            if (scanEnd >= 4
-                && float.TryParse(p[scanEnd - 2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
-                && float.TryParse(p[scanEnd - 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float z))
-                pos = new Vector3(x, 60f, z);
+            if (!BotArgParser.TryParseSpawn(p, 1, out int count, out float x, out float z, out bool hasPos, out string weapon, out string error))
+            { SdtdConsole.Instance.Output(error); return; }
+            Vector3? pos = hasPos ? new Vector3(x, 60f, z) : (Vector3?)null;
             int spawned = 0;
             for (int i = 0; i < count; i++) if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots" + (weapon != null ? $" weapon={weapon}" : "") + "." + (spawned < count ? " (max or spawn failed)" : ""));
@@ -104,12 +116,10 @@ namespace BotMod.Commands
         }
         void DoPlayer(List<string> p, CommandSenderInfo sender)
         {
-            if (p.Count < 2) { SdtdConsole.Instance.Output("Usage: bot player <nameOrId> [count] [weapon]\n  e.g. bot player Kira / bot player 171 3 gunShotgunT1DoubleBarrel"); return; }
+            if (p.Count < 2) { SdtdConsole.Instance.Output("Usage: bot player <nameOrId> [count] [weapon]\n  e.g. bot player Kira / bot player 171 3 gunShotgunT1DoubleBarrel / bot player me"); return; }
             string ident = p[1];
-            int count = 1; string weapon = null;
-            // parse: bot player <ident> [count] [weapon]
-            if (p.Count >= 3 && int.TryParse(p[2], out int c)) { count = Math.Max(1, Math.Min(16, c)); if (p.Count >= 4) { string last = p[p.Count - 1]; if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last; } }
-            else if (p.Count >= 3) { string last = p[p.Count - 1]; if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last; }
+            if (!BotArgParser.TryParsePlayer(p, 2, out int count, out string weapon, out string error))
+            { SdtdConsole.Instance.Output(error); return; }
             var world = GameManager.Instance?.World;
             if (world == null) { SdtdConsole.Instance.Output("No world."); return; }
             // "me"/"self" resolves to the commanding player FIRST: the name

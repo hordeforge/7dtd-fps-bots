@@ -46,6 +46,12 @@ fails on drift between them.
   than overwritten by the shipped default.
 - Server log lines use WARN for degraded-but-running problems and ERR for
   broken functionality; each web API mutation logs one audit line.
+- `bot spawn <x> <z>` now spawns one bot at those coordinates. Previously the
+  first coordinate was misread as a bot count (so `bot spawn 163 818` spawned
+  up to 16 bots at a random position) and a trailing token that was neither
+  count, coordinate pair nor gun id was silently ignored (`bot spawn 2 abc`,
+  `bot player Kira xyz`); every leftover argument is now rejected with a
+  usage error naming the offending token.
 
 ### Added
 - Unknown keys in `Config/botmod.json` are reported as a WARN naming the key

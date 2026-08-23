@@ -50,6 +50,12 @@ run_suite bottext \
   "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/BotTextTests.cs"
 
+# Positional grammar of `bot spawn` / `bot player`: strict parse, named
+# errors for leftover tokens (see Source/BotMod/Commands/BotArgParser.cs).
+run_suite botargparser \
+  "$root/Source/BotMod/Commands/BotArgParser.cs" \
+  "$root/tests/BotMod.Web.Tests/BotArgParserTests.cs"
+
 # Weights-file parser fuzzer: needs the game install's Newtonsoft.Json.dll,
 # copied beside the exe so mono resolves the reference at runtime.
 srv="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
