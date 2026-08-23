@@ -361,7 +361,7 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
     html = """<!doctype html><html><head><meta charset="utf-8">
 <title>@TITLE@</title>
 <style>
- body{font-family:ui-sans,system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e2e8f0;margin:0}
+ body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e2e8f0;margin:0}
  .wrap{max-width:980px;margin:20px auto;padding:0 16px}
  h1{font-size:20px}
  .sum{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0}
@@ -369,8 +369,8 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
  .sum b{color:#38bdf8}
  canvas{background:#0f172a;border:1px solid #334155;border-radius:8px;width:100%}
  .ctl{display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap}
- button{background:#2563eb;color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
- button:hover{background:#1d4ed8}
+ button{background:#0369a1;color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
+ button:hover{background:#075985}
  input[type=range]{flex:1;min-width:180px}
  .legend{display:flex;gap:16px;font-size:12px;margin:8px 0}
  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}

@@ -28,8 +28,10 @@ except ImportError:
     HAS_MPL = False
     np = None  # type: ignore[assignment]
 
-CAB = "#2563eb"  # blue
-ACCENT = "#0ea5e9"
+# One accent hue (sky) for the whole GA tooling family; stops per role:
+# CAB sky-700 main series, ACCENT sky-600 secondary, best line stays near-black.
+CAB = "#0369a1"
+ACCENT = "#0284c7"
 
 # Charts are flat-color line/bar/heatmap figures: an adaptive-palette PNG runs
 # ~3-4x smaller than matplotlib's default RGBA at identical visual quality, and
@@ -200,7 +202,7 @@ def build(runs: list[Path], out: Path):
     html = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bot Evolution Report</title>
 <style>
- body{{font-family: ui-sans, system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 980px; margin: 28px auto; padding: 0 18px; color:#0f172a}}
+ body{{font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 980px; margin: 28px auto; padding: 0 18px; color:#0f172a}}
  h1{{font-size:22px; margin: 6px 0}}
  h2{{font-size:15px; color:#0f172a}}
  code{{background:#f1f5f9; padding:1px 5px; border-radius:6px; font-size:12px}}

@@ -67,7 +67,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
         # pad centering
         off = (max_n - n) * 0.04
         ys = np.linspace(0.08 + off, 0.92 - off, n)
-        color = ["#0ea5e9", "#2563eb", "#0f172a"][li]
+        color = ["#0ea5e9", "#0369a1", "#0f172a"][li]
         ax.scatter([x] * n, ys, s=68, c=color, alpha=0.92, edgecolors="white", linewidths=1.0, zorder=3)
         labels = [INPUT_LABELS, [f"h{i}" for i in range(hidden)], OUT_LABELS][li]
         for y, lab in zip(ys, labels):
@@ -102,7 +102,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
                 # W1 is hidden×inputs: r=hidden, c=inputs; W2 is outputs×hidden: r=out, c=hidden
                 y0 = yss[li][c]
                 y1 = yss[li + 1][r]
-                col = "#ef4444" if W[r, c] < 0 else "#2563eb"
+                col = "#ef4444" if W[r, c] < 0 else "#0369a1"
                 ax.plot([x0, x1], [y0, y1], color=col, alpha=float(np.clip(abs(W[r, c]) * 0.95, 0.12, 0.92)), lw=float(np.clip(abs(W[r,c])*2.1, 0.45, 2.8)), zorder=1)
     ax.set_xlim(-0.12, 2.28); ax.set_ylim(0, 1)
     ax.set_xticks([]); ax.set_yticks([])

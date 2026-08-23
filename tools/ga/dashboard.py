@@ -176,9 +176,9 @@ def build(runs, out: Path, replays):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bot Evolution Dashboard</title>
 <style>
- body{font-family:ui-sans, system-ui, Segoe UI, Roboto, Arial;background:#0b1220;color:#e2e8f0;margin:0}
+ body{font-family:ui-sans-serif, system-ui, Segoe UI, Roboto, Arial;background:#0b1220;color:#e2e8f0;margin:0}
  .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
- h1{font-size:22px} h2{font-size:16px;margin-top:34px;color:#93c5fd}
+ h1{font-size:22px} h2{font-size:16px;margin-top:34px;color:#38bdf8}
  .chip{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;margin:2px}
  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
  .card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px}
@@ -186,7 +186,7 @@ def build(runs, out: Path, replays):
  iframe{border:0;background:#0f172a}
  table{width:100%;border-collapse:collapse;font-size:12px}
  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #1f2937}
- th{color:#93c5fd}
+ th{color:#38bdf8}
  .b{color:#38bdf8;font-weight:700}
 </style></head><body><div class="wrap">
 <h1>Bot Evolution Dashboard</h1>
@@ -224,7 +224,7 @@ def build(runs, out: Path, replays):
         chunks.append('<div class="grid">')
         encoded = {label: base64.b64encode(html.encode()).decode() for label, html in replays.items()}
         for label in replays:
-            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#93c5fd">{label}</div><iframe id="f{abs(hash(label))%9999}" style="width:100%" height="430"></iframe></div>')
+            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{label}</div><iframe id="f{abs(hash(label))%9999}" style="width:100%" height="430"></iframe></div>')
         chunks.append('</div>')
         # Set srcdoc via JS so large embedded HTML/payloads don't need escaping in attributes.
         chunks.append("<script>")
