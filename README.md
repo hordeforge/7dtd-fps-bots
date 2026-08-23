@@ -1,6 +1,8 @@
-# 7DTD Bot - Dedicated FPS Bots (like Quake 3)
+# 🤖 Clanker (7DTD FPS Bots Mod)
 
-Server-side mod that spawns real FPS bots. Names are prefixed `[Bot] Grunt_42` so they are instantly distinguishable in the player list and HUD. Bots spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Bots obey the same physics/collision/move caps as a normal player (no godmode, no no-clip, same weight/drag/capsule bounds) — only spawn loadout differs. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
+> **Part of [HordeForge](https://github.com/hordeforge)** — High-Performance Systems Engineering for 7 Days to Die.
+
+Server-side mod that spawns real FPS bots in 7 Days to Die dedicated servers. Names are prefixed `[Bot] Grunt_42` so they are instantly distinguishable in the player list and HUD. Bots spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
 
 ## What it does
 
@@ -29,7 +31,7 @@ Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`). 
 `make build` also compiles the TypeScript panel (`Source/BotMod/WebMod/bundle.ts`)
 into `Mods/BotMod/WebMod/`, which the stock web dashboard serves as a **Bot**
 sidebar entry (admin login required; hidden while logged out, same pattern as
-7dtd-apm-bridge):
+7dtd-server-apm-bridge):
 
 - Enable / disable bots (persists to the config, applies live)
 - Spawn N bots / remove all
