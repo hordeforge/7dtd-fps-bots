@@ -24,7 +24,7 @@ Each phase produces one `runs/<ts>/report.md` + `fitness.csv` plot. No phase sta
 | No trait ΔCharacter tail | `W` only, traits fixed | Whether personality nudge matters or the net already learns it |
 | Single arena vs all 3 | DM only vs 1v1+FFA+Horde | Three arenas prevent single-mode overfit |
 
-Run each as `evolve --ablate stuck --runs 1` against the same seed so only the knob changes.
+Run each ablation as one knob overridden per run against the same seed so only the knob changes — in practice a dedicated sweep script that pins `harness.py` constants (`tools/ga/fitness_sweep.py` for fitness mixes, `tools/ga/sweep.py --hidden/--activations` for topology); `evolve.py` itself has no `--ablate` flag.
 
 ## 3. Metrics (what we watch while training)
 

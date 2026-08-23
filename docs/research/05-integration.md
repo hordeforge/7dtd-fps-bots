@@ -102,8 +102,8 @@ No exception propagates to `Bot.Tick`.
 
 ## 7. Testing
 
-- `tools/tests/BotNeuralBrainTests.cs` (planned, **not yet present** — the repo has no C# test project): loads a canned `best.json`, feeds all-zeros obs, asserts outputs are finite and in clamp, runs 10k random ticks and asserts no alloc spike (GC count).
-- Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay `match_*.jsonl` — the traces must differ only via net decisions, not physics.
+- `tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs` (**shipped**): compiles `BotNeuralBrain.cs` against a `ModApi.ModPath` stub and fuzzes `TryLoad` (byte-level + structure-aware JSON mutants of the golden `best.json`) plus `TryEval` (sane/extreme observations must stay finite, bounded, internally consistent; non-14 input counts rejected). Run via `bash scripts/test-idempotency.sh` (`make test`; skipped when the game's Newtonsoft.Json.dll is absent).
+- Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay traces — they must differ only via net decisions, not physics.
 
 ## 8. Migration path
 

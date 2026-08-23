@@ -110,7 +110,7 @@ Each `best.json` is validated before it can be promoted:
 
 - Promote `runs/<ts>/best.json` → `evolved/best.json` + `best.meta.json`.
 - Commit and push (`7dtd-clanker` repo). Operators `git pull` or download the asset.
-- The mod's `ModApi` loads `evolved/best.json` on `OnGameStartDone` (or `bot reload`) via `BotNeuralBrain.Load`. If the file is absent or `configHash` mismatches, the mod falls back to the heuristic silently and logs `BotNeuralBrain: no model, using heuristic`.
+- The mod's `ModApi` loads `evolved/best.json` on `OnGameStartDone` (or on config reload via `bot reload` / `bot neural reload`) through `BotNeuralBrain.TryLoad`. If the file is absent or malformed (`version`/`inputs`/weight-count mismatch), the mod falls back to the heuristic and logs `BotNeuralBrain: not loaded (<reason>), using heuristic`.
 
 No Python ships, no extra DLL, no native module — just JSON.
 

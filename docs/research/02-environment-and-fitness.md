@@ -14,6 +14,14 @@ Additional raw that stays *fitness-only* (never fed to the net, only scored):
 
 The fitness landscape is meaningless without a fixed test suite. Three arena types, composed into a single scalar.
 
+> Status (2026-08-21, R9/R11): the shipped mix is 9 fixed arena configs per
+> seed-stream (`tools/ga/harness.py`) — duels vs static `(2,1,0)` ×3 + one
+> evolved-vs-evolved duel `(2,2,0)`, FFA `(6,6,0)` ×3, horde `(4,4,6)` ×2 —
+> every match weighted equally into the scalar mean, not the 40/40/20 split
+> below. Opponents are the static no-brain policy (`_OPP_STATIC`, all-zero
+> weights) with skill cycling 1..4 across matches, not named bot characters;
+> duels pin a 50-unit spawn gap, open env and equal AKs (R11 rework).
+
 ### 2.1 1v1 duels (40% of fitness)
 
 - Bot vs a *fixed opponent pool* (not vs itself): `VanillaBot(Diff2)`, `HardBot(Diff4)`, `CampBot(Stripe)`, `RushBot(Visor)`.
@@ -37,7 +45,7 @@ The fitness landscape is meaningless without a fixed test suite. Three arena typ
 
 ## 3. Fitness function
 
-We use a scalarized multi-objective so GA selection stays simple. Weights are configurable; defaults below are from paper-parity tuning (Q3 bot skill calibration) and kept explicit in `tools/ga/harness.py` (`FIT_ELO/FIT_ECON/FIT_SURV/FIT_STUCK/FIT_CAMP`, threaded through `evolve.py --fit-*`); the canon 0.55/0.25/0.15/0.05 was confirmed Pareto by the R7 sweep.
+We use a scalarized multi-objective so GA selection stays simple. Weights are configurable; defaults below are from paper-parity tuning (Q3 bot skill calibration) and kept explicit in `tools/ga/harness.py` (`FIT_ELO/FIT_ECON/FIT_SURV/FIT_STUCK/FIT_CAMP`); the R7 sweep (`tools/ga/fitness_sweep.py`) overrides them programmatically per mix, and the canon 0.55/0.25/0.15/0.05 was confirmed Pareto.
 
 ```
 elo = kills - deaths * 1.0                // raw K/D
