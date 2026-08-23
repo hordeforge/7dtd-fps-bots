@@ -33,18 +33,7 @@ def one_mix(mix):
         if g==GENS-1: break
         ranked=np.empty(len(fit),dtype=float)
         ranked[order]=np.arange(len(fit))/max(1,len(fit)-1)
-        elites=[pop_w[int(i)].copy() for i in order[-2:][::-1]]
-        children=[]
-        while len(children)<POP-2:
-            if rng.random()<0.6:
-                a=ga.tournament(pop_w, ranked.tolist(), k=3)
-                b=ga.tournament(pop_w, ranked.tolist(), k=3)
-                child=ga.crossover(a,b,rng)
-            else:
-                child=ga.tournament(pop_w, ranked.tolist(), k=3).copy()
-            child=ga.mutate(child, rng, sigma=0.05, rank_norm=0.5, generation=g, total_gens=GENS)
-            children.append(child)
-        pop_w=elites+children
+        pop_w=ga.next_generation(pop_w, ranked, order, rng, generation=g, total_gens=GENS)
     # held scoring always on canonical weights (apples-to-apples)
     harness.FIT_ELO=0.55; harness.FIT_ECON=0.25; harness.FIT_SURV=0.15; harness.FIT_STUCK=0.05
     scores=[harness.evaluate(best_w, 999, m, HOLD_SEED) for m in range(60)]
@@ -60,8 +49,12 @@ if __name__=="__main__":
         print(f"  {tag:22s} train {bf:+.3f}  held60(canon) {held:+.3f} +- {std:.3f}")
     rows.sort(key=lambda r: r[2], reverse=True)
     print(f"\nwinner (held60 canon): {rows[0][0]}  held {rows[0][2]:+.3f}  train {rows[0][1]:+.3f}")
-    Path("/tmp/fitness_sweep_R7.json").write_text(json.dumps([{"tag":t,"train":bf,"held":h,"held_std":s,"mix":m} for t,bf,h,s,m in rows], indent=2), encoding="utf-8")
-    print("json -> /tmp/fitness_sweep_R7.json")
+    # Artifacts land beside the other sweep outputs (evolved/runs/, same
+    # convention as sweep.py), not a fixed /tmp path: /tmp is RAM-backed and
+    # wiped on reboot, and the name is not run-parameterized.
+    out_dir = Path("evolved/runs"); out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "fitness_sweep_R7.json").write_text(json.dumps([{"tag":t,"train":bf,"held":h,"held_std":s,"mix":m} for t,bf,h,s,m in rows], indent=2), encoding="utf-8")
+    print(f"json -> {out_dir}/fitness_sweep_R7.json")
     # plot
     try:
         import matplotlib
@@ -74,5 +67,5 @@ if __name__=="__main__":
         ax.set_ylabel("held60 (canon)"); ax.set_title("Fitness mix sweep — held60 on canonical (train on mix) pop24×22 seed42")
         ax.grid(True, axis="y", alpha=0.15)
         for i,v in enumerate(helds): ax.text(i, v+0.02, f"{v:.2f}", ha="center", fontsize=6)
-        fig.tight_layout(); fig.savefig("/tmp/fitness_sweep_R7.png", dpi=150); plt.close(fig); print("plot -> /tmp/fitness_sweep_R7.png")
+        fig.tight_layout(); fig.savefig(out_dir / "fitness_sweep_R7.png", dpi=150); plt.close(fig); print(f"plot -> {out_dir}/fitness_sweep_R7.png")
     except Exception as ex: print(f"plot skipped: {ex}")

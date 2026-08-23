@@ -385,8 +385,8 @@ namespace BotMod.Web
                         foreach (var p in plist)
                         {
                             if (p == null || p.IsDead() || !p.IsSpawned()) continue;
-                            float d = Vector3.Distance(ent.position, p.position);
-                            if (d < best) { best = d; nearName = p.EntityName; }
+                        float d = Vector3.Distance(ent.position, p.position);
+                        if (d < best) { best = d; nearName = p.EntityName ?? p.PlayerDisplayName ?? ("#" + p.entityId); }
                         }
                         if (best < float.MaxValue) nearDist = best;
                     }

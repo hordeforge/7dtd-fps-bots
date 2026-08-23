@@ -197,6 +197,10 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
     `relu` picks the hidden activation: False = tanh (canonical, what ships),
     True = relu (activation sweeps; harness.ACTIVATION selects the wrapper).
     """
+    # Per-bot state arrays below are fixed at 16 slots; a caller passing more
+    # bodies must fail loudly here instead of corrupting memory in njit.
+    assert n_bots <= 16
+    assert n_zombies <= 16
     # state arrays (stack allocated)
     bx = np.empty(16, dtype=numba.float32)
     by = np.empty(16, dtype=numba.float32)

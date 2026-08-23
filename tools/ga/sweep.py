@@ -68,20 +68,9 @@ def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
             order = np.argsort(fitness)
             ranked = np.empty(len(fitness), dtype=float)
             ranked[order] = np.arange(len(fitness)) / max(1, len(fitness) - 1)
-            elite_k = 2
-            elites = [pop_w[int(i)].copy() for i in order[-elite_k:][::-1]]
-            children = []
-            pc = 0.6
-            while len(children) < pop - elite_k:
-                if rng.random() < pc:
-                    a = ga.tournament(pop_w, ranked.tolist(), k=3)
-                    b = ga.tournament(pop_w, ranked.tolist(), k=3)
-                    child = ga.crossover(a, b, rng)
-                else:
-                    child = ga.tournament(pop_w, ranked.tolist(), k=3).copy()
-                child = ga.mutate(child, rng, sigma=0.05, rank_norm=0.5)
-                children.append(child)
-            pop_w = elites + children
+            # Defaults keep the historical short-sweep behavior: constant sigma
+            # (generation=0 -> no anneal), no stagnant burst.
+            pop_w = ga.next_generation(pop_w, ranked, order, rng)
         return curve
     finally:
         harness.ACTIVATION = orig_act

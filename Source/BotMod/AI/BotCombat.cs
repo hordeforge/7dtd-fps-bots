@@ -41,17 +41,10 @@ namespace BotMod.AI
 
                         // Score mirrors EntityAlive.AwardKill -> AddScore via GameStats 28/29/30.
                         // Do the AddScore path directly so scores track even on zombie-entity killers.
-                        try
-                        {
-                            int z = victimCountsAsZombie ? 1 : 0;
-                            int p = victimCountsAsZombie ? 0 : 1;
-                            // Team isn't replicated on bots; use 0 (no team) to avoid bogus friendly-fire checks.
-                            try { GameManager.Instance?.AddScoreServer(killer.entityId, z, p, 0, 0); }
-                            catch
-                            {
-                                try { killer.Score++; } catch { }
-                            }
-                        }
+                        int z = victimCountsAsZombie ? 1 : 0;
+                        int p = victimCountsAsZombie ? 0 : 1;
+                        // Team isn't replicated on bots; use 0 (no team) to avoid bogus friendly-fire checks.
+                        try { GameManager.Instance?.AddScoreServer(killer.entityId, z, p, 0, 0); }
                         catch { try { killer.Score++; } catch { } }
 
                         // Shout it so players see bot frags alongside player frags in chat.

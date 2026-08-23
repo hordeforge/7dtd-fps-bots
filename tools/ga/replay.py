@@ -503,7 +503,6 @@ def main():
     print(f"replay -> {out}  ({len(frames)} frames, kills={summary['kills']}, shots={summary['shots']})")
     if args.verify:
         import harness
-        from combat_sim import simulate_match as ns
         harness.ACTIVATION = 0
         fit = harness.evaluate(w, 999, args.seed % 1000, args.seed)  # scalar check
         print(f"numba harness fitness on seed {args.seed}: {fit:.3f} (replay mirror summary above)")

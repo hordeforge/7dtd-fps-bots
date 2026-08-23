@@ -20,7 +20,10 @@ import numpy as np
 
 import ga
 
-INPUT_LABELS = ["hp", "eHp", "dist", "see", "lose", "wpRg", "pel", "acc", "skill", "aggr", "selfP", "camp", "vel", "stuck"]
+# Obs semantics follow combat_sim._simulate (docs/research/01 §2): slot 4 is
+# the sustained-fire spread (the old lose-timer placeholder) and slot 12 is the
+# rounds-left fraction (the old velocity placeholder).
+INPUT_LABELS = ["hp", "eHp", "dist", "see", "sprd", "wpRg", "pel", "acc", "skill", "aggr", "selfP", "camp", "ammo", "stuck"]
 OUT_LABELS = ["camp", "retreat", "aim", "fire", "strafe"]
 
 try:

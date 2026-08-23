@@ -82,41 +82,25 @@ def _load_resume(resume: str, seed: int, pop: int):
     return start_gen, pop_w, top3[0].copy(), best_f
 
 
-def _next_generation(pop_w, ranked, order, rng, generation, total_gens, stagnant):
-    """Elitism-2 reproduction: keep the top-2 genomes, fill the rest with
-    crossover+mutate children (or plain tournament copies) per docs/research/03 §3."""
-    ranked = ranked.tolist()
-    elite_k = 2
-    elites = [pop_w[int(i)].copy() for i in order[-elite_k:][::-1]]
-    children = []
-    pc = 0.6
-    while len(children) < len(pop_w) - elite_k:
-        if rng.random() < pc and len(pop_w) - elite_k >= 2:
-            a = ga.tournament(pop_w, ranked, k=3)
-            b = ga.tournament(pop_w, ranked, k=3)
-            child = ga.crossover(a, b, rng)
-        else:
-            child = ga.tournament(pop_w, ranked, k=3).copy()
-        children.append(ga.mutate(child, rng, sigma=0.05, rank_norm=0.5,
-                                  generation=generation, total_gens=total_gens,
-                                  stagnant=stagnant))
-    return elites + children
-
-
 def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
     """Held-out score on HELD_SEED under canonical tanh + DEFAULT_FITNESS
-    scalarization (the promotion measuring stick). Harness globals are restored
-    afterwards; any failure scores -inf so the run can never promote — and says
-    why on stderr, so a broken probe is visible instead of silently gating or
-    silently waving every candidate through (-inf >= -inf)."""
+    scalarization + the F=18 gate (docs/research/03: "eval gate pins F=18").
+    Training knobs (activation, curriculum phase, draw regularization) must
+    not leak into the promotion measuring stick. Harness globals are restored
+    afterwards; any failure scores -inf so the run can never promote — and
+    says why on stderr, so a broken probe is visible instead of silently
+    gating or silently waving every candidate through (-inf >= -inf)."""
     saved = (harness.ACTIVATION, harness.FIT_ELO, harness.FIT_ECON,
-             harness.FIT_SURV, harness.FIT_STUCK)
+             harness.FIT_SURV, harness.FIT_STUCK, harness.CURRICULUM,
+             harness.DRAWS_PER_CONFIG)
     try:
         harness.ACTIVATION = 0
         harness.FIT_ELO = DEFAULT_FITNESS["elo"]
         harness.FIT_ECON = DEFAULT_FITNESS["econ"]
         harness.FIT_SURV = DEFAULT_FITNESS["survival"]
         harness.FIT_STUCK = DEFAULT_FITNESS["stuck"]
+        harness.CURRICULUM = "mixed"
+        harness.DRAWS_PER_CONFIG = 1
         return float(np.mean([harness.evaluate(weights, HELD_SEED, m, HELD_SEED)
                               for m in range(matches)]))
     except Exception as ex:
@@ -125,7 +109,8 @@ def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
         return float("-inf")
     finally:
         (harness.ACTIVATION, harness.FIT_ELO, harness.FIT_ECON,
-         harness.FIT_SURV, harness.FIT_STUCK) = saved
+         harness.FIT_SURV, harness.FIT_STUCK, harness.CURRICULUM,
+         harness.DRAWS_PER_CONFIG) = saved
 
 
 def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed"):
@@ -255,7 +240,9 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
 
             # selection + reproduction per island (elitism 2 each)
             if islands == 1:
-                pop_w = _next_generation(all_pops_flat, ranked, order, rng, g, gens, stagnant)
+                pop_w = ga.next_generation(all_pops_flat, ranked, order, rng,
+                                           generation=g, total_gens=gens,
+                                           stagnant=stagnant)
                 island_pops[0] = pop_w
             else:
                 new_islands: list[list] = []
@@ -264,7 +251,9 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     ord2 = np.argsort(fit)
                     rk2 = np.empty(len(fit), dtype=float)
                     rk2[ord2] = np.arange(len(fit)) / max(1, len(fit) - 1)
-                    new_islands.append(_next_generation(ip, rk2, ord2, rng, g, gens, stagnant))
+                    new_islands.append(ga.next_generation(ip, rk2, ord2, rng,
+                                                          generation=g, total_gens=gens,
+                                                          stagnant=stagnant))
                 island_pops = new_islands
                 # ring-migrate every 10 gens
                 if g % 10 == 9 and islands > 1:

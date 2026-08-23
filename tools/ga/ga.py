@@ -124,6 +124,30 @@ def mutate(w: np.ndarray, rng: np.random.Generator, sigma: float = 0.05, rank_no
     return w
 
 
+def next_generation(pop_w: List[np.ndarray], ranked, order, rng: np.random.Generator,
+                    elite_k: int = 2, pc: float = 0.6,
+                    sigma: float = 0.05, rank_norm: float = 0.5,
+                    generation: int = 0, total_gens: int = 80,
+                    stagnant: bool = False) -> List[np.ndarray]:
+    """Elitism-N reproduction shared by evolve/sweep/fitness_sweep: keep the
+    top-elite_k genomes, fill the rest with crossover+mutate children (or
+    plain tournament copies) per docs/research/03 §3."""
+    ranks = ranked.tolist()
+    elites = [pop_w[int(i)].copy() for i in order[-elite_k:][::-1]]
+    children: List[np.ndarray] = []
+    while len(children) < len(pop_w) - elite_k:
+        if rng.random() < pc and len(pop_w) - elite_k >= 2:
+            a = tournament(pop_w, ranks, k=3)
+            b = tournament(pop_w, ranks, k=3)
+            child = crossover(a, b, rng)
+        else:
+            child = tournament(pop_w, ranks, k=3).copy()
+        children.append(mutate(child, rng, sigma=sigma, rank_norm=rank_norm,
+                               generation=generation, total_gens=total_gens,
+                               stagnant=stagnant))
+    return elites + children
+
+
 def island_mix(islands: list[list[np.ndarray]], rng: np.random.Generator, migrants: int = 2) -> None:
     """Ring-migrate `migrants` random genomes between neighboring islands in place."""
     if len(islands) < 2:
