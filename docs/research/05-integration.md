@@ -8,21 +8,21 @@
 
 ```
 Bot.Tick(dt, world)
-  ├─ target scan  ──► BotBrain.FindTarget          (still heuristic; net can nudge score later)
-  ├─ decision      ──► BotNeuralBrain.Decide(...)  ← NEW, wraps WantsToCamp/Retreat/DecideGoal
-  │                   ├─ no model? → heuristic fallback (no throw)
-  │                   └─ returns { wantCamp, wantRetreat, aimBias, fireGate, strafeDir }
-  ├─ move intent  ──► BotBrain.MoveTo/Strafe/Backpedal  (unchanged, clamp inside)
-  └─ shoot gate   ──► BotNeuralBrain.ShouldFire(...)    ← NEW, inside TryShootBurst
-                      └─ still ANDed with _reactionUntil, _burstLeft, _burstPauseUntil, LOS, range
+  ├─ target scan   ──► BotBrain.FindTarget            (still heuristic)
+  ├─ retreat gate  ──► TryEval → wantRetreat          (RetreatToCover; hp/trait check is the fallback)
+  ├─ aim bias      ──► TryEval → aimBiasYaw           (AttackInRange; scales the per-engagement window)
+  ├─ fire gate     ──► TryEval → shouldFire           (inside TryShootBurst;
+  │                    still ANDed with _reactionUntil, _burstLeft, _burstPauseUntil, LOS, range)
+  ├─ move intent   ──► TryEval → retreat/strafe logits compose a 2D velocity via BotBrain.MoveDir
+  │                    (Q3-style MoveTo/Strafe/Backpedal is the fallback; clamps inside)
+  └─ idle camp     ──► WantsToCamp / WantsIdleCamp    (stays heuristic on purpose: zombies must
+                       pull idle bots out of cover, so no neural gate sits on this branch)
 ```
 
-Only two injection points, both guarded by `try/catch` so a thrown `NullRef` / `IndexOutOfRange` from a malformed `best.json` never crashes the tick — it logs once and falls back.
-
-R10 added a third injection point: **policy-driven movement** — the net
-composes forward/lateral velocity from its retreat/strafe outputs via
-`BotBrain.MoveDir` (`MoveWithFallback` keeps the Q3-style heuristic movement as
-fallback; see REPORT-2026-08-21-R10).
+Every site funnels through one cached forward pass per tick (`Bot.TryNeuralOnce`
+wrapping `BotNeuralBrain.TryEval`; no model → heuristic fallback, no throw), so
+a thrown `NullRef` / `IndexOutOfRange` from a malformed `best.json` never
+crashes the tick — it logs once and falls back.
 
 ## 3. File and API
 
@@ -85,8 +85,8 @@ If `TryLoad` fails (missing file, short array, weight count or NaN/Inf, unknown
 `version`) the mod does:
 
 ```csharp
-ModApi.Log("BotNeuralBrain: no valid model (" + reason + "), using heuristic.");
-_active = false; // tick sees Loaded==false
+ModApi.Warn("BotNeuralBrain not loaded (" + reason + "), using heuristic.");
+_loaded = false; // tick sees Loaded==false
 ```
 
 No exception propagates to `Bot.Tick`.

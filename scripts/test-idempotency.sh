@@ -4,7 +4,8 @@
 # game DLL references are needed. The BotNeuralBrain weights-file fuzzer also
 # parses JSON, so it additionally needs Newtonsoft.Json.dll from the game
 # install (probed like scripts/build.sh) and is skipped when that is absent.
-# Not part of `make check` (CI runners have no mono); run locally:
+# Not a `make check` target; CI installs mono and runs this script directly
+# after `make check`. Run locally:
 #
 #   bash scripts/test-idempotency.sh
 set -euo pipefail

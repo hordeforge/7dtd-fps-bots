@@ -192,7 +192,7 @@ namespace BotMod.AI
             try
             {
                 // Hitscan leading: move aim ahead by (dist / bulletSpeed) * velocity. Bullet is hitscan so speed is virtual.
-                // Use 90 m/s virtual + distance factor; strafe prediction scales with difficulty.
+                // Use a 55 m/s virtual bullet + distance factor; strafe prediction scales with difficulty.
                 float dist = Vector3.Distance(from, targetPos);
                 float leadScale = 0.25f + cfg.Difficulty * 0.18f + (wp.Range > 40f ? 0.15f : 0f);
                 Vector3 vel = targetVel;
@@ -309,7 +309,8 @@ namespace BotMod.AI
         }
         public static Vector3 FindCover(EntityAlive me, EntityAlive threat, World world)
         {
-            // Doom3 idAASFindCover port: sample 6 directions + up, check PVS-ish via LOS blocked from threat
+            // Doom3 idAASFindCover port: sample the 8 compass directions and
+            // keep candidates a threat's LOS cannot reach
             Vector3 best = Vector3.zero; float bestScore = -1f;
             Vector3 myPos = me.position;
             for (int i = 0; i < 8; i++)

@@ -61,8 +61,9 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 
 API: authenticated `GET /api/bot` (status + online `players` list +
 scoreboard), `POST /api/bot` with
-`{"action":"enable|disable|spawn|spawnNear|remove|removeOne|neural|team|vs|setTeam|teamCount|clearTeams", ...}`
-(permission level 0). `removeOne` takes
+`{"action":"enable|disable|spawn|spawnNear|remove|removeOne|skill|neural|team|vs|setTeam|teamCount|clearTeams", ...}`
+(permission level 0; `skill` takes `{"action":"skill","level":0-4}`, same as
+`bot skill`). `removeOne` takes
 `{"action":"removeOne","entityId":N}` and removes that single bot.
 `spawnNear` takes
 `{"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}`
