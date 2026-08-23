@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace BotMod.Config
@@ -56,9 +57,19 @@ namespace BotMod.Config
                 if (!System.IO.File.Exists(path)) path = "config/characters.json";
                 if (System.IO.File.Exists(path))
                 {
-                    var json = System.IO.File.ReadAllText(path);
+                    // Explicit UTF-8: characters.json is our own artifact and is
+                    // written UTF-8; never depend on the platform default codepage.
+                    var json = System.IO.File.ReadAllText(path, Encoding.UTF8);
                     var loaded = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
-                    if (loaded != null) Characters = loaded;
+                    if (loaded != null)
+                    {
+                        // Canonical NFC keys: file keys are operator-authored text
+                        // (possibly NFD), lookups go through BotText.BaseName which
+                        // yields NFC; keep one form on both sides of the lookup.
+                        var canon = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var kv in loaded) canon[BotText.Canon(kv.Key)] = kv.Value;
+                        Characters = canon;
+                    }
                 }
                 else
                 {
@@ -70,10 +81,11 @@ namespace BotMod.Config
                     // toward their clamps.
                     Characters = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
                 }
-                // Ensure at least defaults for known names
+                // Ensure at least defaults for known names (BaseName is NFC, same
+                // canonical form as the keys above).
                 foreach (var n in cfg.BotNames)
                 {
-                    string key = n.Split('_')[0];
+                    string key = BotText.BaseName(n);
                     if (!Characters.ContainsKey(key)) Characters[key] = BotCharacter.Defaults(key);
                 }
                 // Apply difficulty lerp if characters have multiple skills (stored as skill 1 vs 5) - here we just scale by cfg.Difficulty
@@ -102,13 +114,12 @@ namespace BotMod.Config
             return BotCharacter.Defaults(key);
         }
         /// <summary>Base key for a bot name: strip the "[Bot] " tag, drop the _NN
-        /// suffix. Local copy of BotManager.BaseName because Core already
-        /// references Config (the reverse would be a dependency cycle).</summary>
+        /// suffix. Shared canonicalization in BotText.BaseName (Core references
+        /// Config, not the other way, so the helper lives here).</summary>
         static string BaseKey(string name)
         {
-            if (string.IsNullOrEmpty(name)) return "Grunt";
-            if (name.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) name = name.Substring(6);
-            return name.Split('_')[0];
+            string key = BotText.BaseName(name);
+            return key.Length == 0 ? "Grunt" : key;
         }
     }
 }

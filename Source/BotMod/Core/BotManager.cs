@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace BotMod.Core
@@ -31,12 +32,9 @@ namespace BotMod.Core
 
         // Teams are keyed by base bot name ([Bot] Grunt_42 -> Grunt, same split
         // as BotCharacterDB) so an assignment survives death and respawn.
-        public static string BaseName(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return "";
-            if (name.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) name = name.Substring(6);
-            return name.Split('_')[0];
-        }
+        // Canonicalization lives in BotMod.Config.BotText (shared with
+        // BotCharacterDB; Core already references Config).
+        public static string BaseName(string name) => Config.BotText.BaseName(name);
         /// <summary>Resolve a player by entity id, client id, or (partial) name.
         /// Shared by the `bot player` console command and the web API's spawnNear
         /// so both surfaces accept the same identifiers.</summary>
@@ -44,7 +42,9 @@ namespace BotMod.Core
         {
             if (world == null || string.IsNullOrEmpty(ident)) return null;
             // by entityId
-            if (int.TryParse(ident, out int eid)) {
+            // Invariant parse: entity ids are protocol tokens, not locale text
+            // (same convention as coordinate parsing in ConsoleCmdBot.DoSpawn).
+            if (int.TryParse(ident, NumberStyles.Integer, CultureInfo.InvariantCulture, out int eid)) {
                 var e = world.GetEntity(eid) as EntityPlayer;
                 if (e != null) return e;
                 // also try ClientInfo entityId lookup
@@ -54,11 +54,14 @@ namespace BotMod.Core
                     if (ci != null) { var ep = world.GetEntity(ci.entityId) as EntityPlayer; if (ep != null) return ep; }
                 }
             }
-            string low = ident.ToLowerInvariant();
+            // Name match: BotText.NameMatches canonicalizes both sides to NFC
+            // and folds case ordinally, so an NFD spelling typed over telnet
+            // finds the NFC name the server holds, without host-locale traps
+            // (a tr-TR ToLower would turn "Kira" into "kıra" and miss).
             if (world.Players != null && world.Players.list != null) {
                 foreach (var p in world.Players.list) if (p != null) {
                     string name = p.EntityName ?? p.PlayerDisplayName ?? "";
-                    if (name.ToLowerInvariant() == low || name.ToLowerInvariant().Contains(low)) return p;
+                    if (Config.BotText.NameMatches(name, ident)) return p;
                 }
                 // exact entityId string already tried; try prefix match
                 foreach (var p in world.Players.list) if (p != null) {

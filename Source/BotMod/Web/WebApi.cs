@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Utf8Json;
@@ -325,11 +326,12 @@ namespace BotMod.Web
             return v != null && v.ToLowerInvariant() == "true";
         }
 
-        /// <summary>Integer field of the POST body; fallback when absent or unparseable.</summary>
+        /// <summary>Integer field of the POST body; fallback when absent or unparseable.
+        /// Invariant parse: JSON numbers are protocol tokens, not host-locale text.</summary>
         static int GetInt(IDictionary<string, object> body, string key, int fallback)
         {
             string v = GetString(body, key);
-            return v != null && int.TryParse(v, out int n) ? n : fallback;
+            return v != null && int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : fallback;
         }
 
         /// <summary>Serialize the success payload. The caller sends it and, for

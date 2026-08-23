@@ -165,7 +165,8 @@ namespace BotMod
                     try
                     {
                         if (!File.Exists(path)) continue;
-                        var root = JObject.Parse(File.ReadAllText(path));
+                        // Explicit UTF-8: matches AtomicTextFile.Write's Encoding.UTF8.
+                        var root = JObject.Parse(File.ReadAllText(path, System.Text.Encoding.UTF8));
                         root[key] = JToken.FromObject(value);
                         AtomicTextFile.Write(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
                     }

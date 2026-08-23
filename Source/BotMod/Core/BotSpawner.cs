@@ -25,7 +25,9 @@ namespace BotMod.Core
             string raw;
             if (cfg.BotNames == null || cfg.BotNames.Length == 0) raw = "Bot_" + RngInt(1000, 9999);
             else raw = cfg.BotNames[RngPick(cfg.BotNames.Length)] + "_" + RngInt(10, 99);
-            if (raw.StartsWith("[Bot] ")) return raw;
+            // OrdinalIgnoreCase: matches how BaseName strips the tag, so an
+            // operator-configured "[bot] x" name is not double-tagged.
+            if (raw.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) return raw;
             return "[Bot] " + raw;
         }
         public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride = null)

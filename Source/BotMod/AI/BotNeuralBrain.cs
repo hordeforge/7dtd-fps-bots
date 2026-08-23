@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using Newtonsoft.Json.Linq;
 
 namespace BotMod.AI
@@ -181,7 +182,8 @@ namespace BotMod.AI
                     if (resolved == null) { reason = "file not found: " + path; _lastReason = reason; return false; }
                 }
                 if (!File.Exists(resolved)) { reason = "file not found: " + resolved; _lastReason = reason; return false; }
-                string json = File.ReadAllText(resolved);
+                // Explicit UTF-8: weights files are our own UTF-8 JSON artifacts.
+                string json = File.ReadAllText(resolved, Encoding.UTF8);
                 var obj = Newtonsoft.Json.Linq.JObject.Parse(json);
                 int version = obj.Value<int?>("version") ?? 1;
                 if (version != kVersion)

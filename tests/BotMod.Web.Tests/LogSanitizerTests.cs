@@ -77,7 +77,19 @@ static class LogSanitizerTests
             Check("boundary code points handled", v == " ??\u00a0");
         }
 
-        // 8. Whole-range invariant: output never contains scrubbable chars.
+        // 8. Invisible formatting characters are scrubbed: bidi overrides and
+        // zero-width characters must not reach the audit trail from
+        // request-supplied fields (they reorder or hide text when the log is
+        // read in a terminal).
+        {
+            string v = LogSanitizer.Clean("admin\u202ename\u200b ok\u2060end\ufeff");
+            Check("bidi/zero-width chars replaced", v == "admin?name? ok?end?");
+            Check("sweep preserves length after invisible scrub", v.Length == "admin\u202ename\u200b ok\u2060end\ufeff".Length);
+        }
+        // Legit non-ASCII spacing/printables adjacent to that range survive.
+        Check("em dash and nbsp survive", LogSanitizer.Clean("a\u2014b\u00a0c") == "a\u2014b\u00a0c");
+
+        // 9. Whole-range invariant: output never contains scrubbable chars.
         {
             var raw = new StringBuilder();
             for (int i = 0; i < 0x2000; i++) raw.Append((char)i);

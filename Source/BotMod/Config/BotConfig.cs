@@ -63,14 +63,18 @@ namespace BotMod.Config
         // locked helpers below; never touch the property directly at runtime.
         internal readonly object TeamGate = new object();
 
-        /// <summary>Set (team > 0) or clear (team <= 0) a base-name assignment.</summary>
+        /// <summary>Set (team > 0) or clear (team <= 0) a base-name assignment.
+        /// The key is canonicalized to NFC so every surface (web JSON, console,
+        /// hand-edited config) lands on one stored form.</summary>
         public void SetTeamAssignment(string baseName, int team)
         {
             if (string.IsNullOrEmpty(baseName)) return;
+            string key = BotText.Canon(baseName);
+            if (key.Length == 0) return;
             lock (TeamGate)
             {
-                if (team <= 0) TeamAssignments.Remove(baseName);
-                else TeamAssignments[baseName] = team;
+                if (team <= 0) TeamAssignments.Remove(key);
+                else TeamAssignments[key] = team;
             }
         }
 
@@ -211,9 +215,19 @@ namespace BotMod.Config
             lock (TeamGate)
             {
                 if (TeamAssignments == null) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                // Drop assignments outside the current team range back to free-for-all.
-                foreach (string k in new List<string>(TeamAssignments.Keys))
-                    if (TeamAssignments[k] < 0 || TeamAssignments[k] > BotTeamCount) TeamAssignments[k] = 0;
+                // Canonical NFC keys at ingestion: hand-edited configs may hold
+                // NFD spellings (macOS editors split accented names into base +
+                // combining mark) while runtime lookups derive NFC keys from bot
+                // names; OrdinalIgnoreCase alone cannot bridge the two forms.
+                var canonical = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, int> kv in TeamAssignments)
+                {
+                    string key = BotText.Canon(kv.Key);
+                    if (key.Length == 0) continue;
+                    int team = kv.Value < 0 || kv.Value > BotTeamCount ? 0 : kv.Value;
+                    canonical[key] = team;
+                }
+                TeamAssignments = canonical;
             }
             if (BotNames == null || BotNames.Length == 0) BotNames = new[] { "Bot" };
             if (LoadoutPool == null || LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };

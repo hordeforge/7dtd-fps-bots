@@ -5,7 +5,9 @@
 //   - valid keys never false-positive (binding is case-insensitive),
 //   - out-of-range values are clamped by Normalize,
 //   - an unreadable primary with a good .bak recovers the .bak (with
-//     AtomicTextFile), and a missing file yields defaults.
+//     AtomicTextFile), and a missing file yields defaults,
+//   - TeamAssignments keys are canonicalized to NFC at load and at
+//     SetTeamAssignment so NFD hand-edited spellings match NFC lookups.
 // BotConfig pulls ModApi -> engine types, so this compiles the FULL mod
 // source against the game DLLs; scripts/test-idempotency.sh gates it on a
 // game install being present.
@@ -77,13 +79,31 @@ static class BotConfigLoadTests
         // stale hand-edited config cannot put bots on nonexistent teams.
         {
             string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
-            File.WriteAllText(path,
+            AtomicTextFile.Write(path,
                 "{ \"BotTeamCount\": 2, \"TeamAssignments\": { \"Grunt\": 9, \"Ranger\": 2 } }");
             BotConfig cfg = BotConfig.Load(path);
             Check("out-of-range assignment dropped to free-for-all",
                 cfg.GetTeamAssignment("Grunt") == 0);
             Check("in-range assignment survives load", cfg.GetTeamAssignment("Ranger") == 2);
         }
+
+        // Unicode identity: an NFD spelling in a hand-edited config (macOS
+        // editors emit base letter + combining mark) must land on the same
+        // stored key as the NFC form derived from spawned bot names, or the
+        // assignment silently never applies.
+        {
+            string nfdKira = "Ki\u0301ra", nfcKira = "K\u00edra";
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            string json = "{ \"BotTeamCount\": 2, \"TeamAssignments\": { \"" + nfdKira + "\": 1 } }";
+            File.WriteAllText(path, json, System.Text.Encoding.UTF8);
+            BotConfig cfg = BotConfig.Load(path);
+            Check("NFD config key found via NFC lookup", cfg.GetTeamAssignment(nfcKira) == 1);
+
+            // Runtime assignment path canonicalizes too.
+            cfg.SetTeamAssignment("[Bot] " + nfdKira + "_42", 2);
+            Check("SetTeamAssignment stores NFC key", cfg.GetTeamAssignment(nfcKira) == 2);
+        }
+
 
         // Recovery: torn primary + good .bak restores the last-known-good
         // values instead of silently resetting to defaults.

@@ -44,6 +44,12 @@ run_suite logsanitize \
   "$root/Source/BotMod/Web/LogSanitizer.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
 
+# Unicode identity contract: NFC canonicalization and ordinal case folding
+# for bot/player name lookups and team-assignment keys.
+run_suite bottext \
+  "$root/Source/BotMod/Config/BotText.cs" \
+  "$root/tests/BotMod.Web.Tests/BotTextTests.cs"
+
 # Weights-file parser fuzzer: needs the game install's Newtonsoft.Json.dll,
 # copied beside the exe so mono resolves the reference at runtime.
 srv="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"

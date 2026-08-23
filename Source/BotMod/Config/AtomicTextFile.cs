@@ -69,7 +69,9 @@ namespace BotMod.Config
             foreach (string candidate in new[] { path, BackupPath(path) })
             {
                 if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
-                try { contents = File.ReadAllText(candidate); return true; }
+                // Explicit UTF-8: Write() stages Encoding.UTF8 bytes, so reads
+                // must not depend on the platform default codepage to round-trip.
+                try { contents = File.ReadAllText(candidate, Encoding.UTF8); return true; }
                 catch (Exception) { }
             }
             return false;
