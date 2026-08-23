@@ -63,13 +63,16 @@ namespace BotMod.Config
         // locked helpers below; never touch the property directly at runtime.
         internal readonly object TeamGate = new object();
 
-        /// <summary>Set (team > 0) or clear (team <= 0) a base-name assignment.
-        /// The key is canonicalized to NFC so every surface (web JSON, console,
-        /// hand-edited config) lands on one stored form.</summary>
+        /// <summary>Set (team > 0) or clear (team <= 0) an assignment keyed by
+        /// base bot name. Accepts a bare base name or a full spawned name
+        /// ("[Bot] Kíra_42"): the key derives through BotText.BaseName, the
+        /// same split live-bot lookups use (Bot.TeamKey), so every surface
+        /// (web JSON, console, a pasted scoreboard name) lands on one stored
+        /// NFC form instead of a near-miss key that silently never matches.</summary>
         public void SetTeamAssignment(string baseName, int team)
         {
             if (string.IsNullOrEmpty(baseName)) return;
-            string key = BotText.Canon(baseName);
+            string key = BotText.BaseName(baseName);
             if (key.Length == 0) return;
             lock (TeamGate)
             {
@@ -83,14 +86,16 @@ namespace BotMod.Config
             lock (TeamGate) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         }
 
-        /// <summary>Locked lookup for hot paths (per-damage-event ally checks).</summary>
+        /// <summary>Locked lookup for hot paths (per-damage-event ally checks).
+        /// NFC on the lookup side mirrors SetTeamAssignment, so an NFD caller
+        /// spelling cannot miss an entry stored under its NFC form.</summary>
         public int GetTeamAssignment(string baseName)
         {
             if (string.IsNullOrEmpty(baseName)) return 0;
             lock (TeamGate)
             {
                 int t;
-                return TeamAssignments.TryGetValue(baseName, out t) ? Math.Max(0, t) : 0;
+                return TeamAssignments.TryGetValue(BotText.Canon(baseName), out t) ? Math.Max(0, t) : 0;
             }
         }
 
