@@ -99,7 +99,7 @@ fi
 # compiles the FULL mod source against the game DLLs (same reference set as
 # scripts/build.sh) and is skipped without a game install. Harmony lives in
 # the server's (or client's) Mods dir, where build.sh finds it too.
-need_refs=(netstandard.dll System.Runtime.dll UnityEngine.CoreModule.dll UnityEngine.PhysicsModule.dll UnityEngine.AIModule.dll Assembly-CSharp.dll Newtonsoft.Json.dll Utf8Json.dll System.Xml.dll LogLibrary.dll)
+need_refs=(netstandard.dll System.Runtime.dll UnityEngine.CoreModule.dll UnityEngine.PhysicsModule.dll Assembly-CSharp.dll Newtonsoft.Json.dll Utf8Json.dll System.Xml.dll LogLibrary.dll)
 have_all=true
 for dll in "${need_refs[@]}"; do [[ -f "$managed/$dll" ]] || have_all=false; done
 harmony=""

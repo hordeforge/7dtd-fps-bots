@@ -95,7 +95,6 @@ refs=(
   -r:"$MANAGED/Assembly-CSharp.dll"
   -r:"$MANAGED/UnityEngine.CoreModule.dll"
   -r:"$MANAGED/UnityEngine.PhysicsModule.dll"
-  -r:"$MANAGED/UnityEngine.AIModule.dll"
   -r:"$HARMONY"
   -r:"$MANAGED/Newtonsoft.Json.dll"
   -r:"$MANAGED/Utf8Json.dll"

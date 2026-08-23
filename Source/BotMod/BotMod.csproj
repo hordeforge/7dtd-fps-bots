@@ -31,10 +31,6 @@
       <HintPath>$(GameManagedDir)/UnityEngine.PhysicsModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="UnityEngine.AIModule">
-      <HintPath>$(GameManagedDir)/UnityEngine.AIModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
     <Reference Include="0Harmony">
       <HintPath>$(HarmonyPath)</HintPath>
       <Private>false</Private>
