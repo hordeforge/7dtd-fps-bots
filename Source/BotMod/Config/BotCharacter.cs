@@ -102,6 +102,7 @@ namespace BotMod.Config
                     var loaded = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
                     if (loaded != null) Characters = loaded;
                 }
+                else ModApi.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
                 // Ensure at least defaults for known names
                 foreach (var n in cfg.BotNames)
                 {

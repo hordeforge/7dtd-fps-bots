@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace BotMod.Config
 {
@@ -135,13 +136,22 @@ namespace BotMod.Config
             return WeaponProfile.ForGun(gunId ?? BotWeapon, this);
         }
 
+        /// <summary>Warning sink for config problems. Wired to ModApi.Warn by
+        /// ModApi.InitMod so this file stays free of engine/game type
+        /// dependencies (headless unit tests can exercise Load); the default
+        /// writes to stdout.</summary>
+        internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
+
         public static BotConfig Load(string path)
         {
             if (string.IsNullOrEmpty(path)) return new BotConfig();
             // Primary first; if it is missing or unparseable (torn write from an
             // older non-atomic persist, manual edit gone wrong) recover the last
             // known-good .bak instead of silently resetting every persisted
-            // setting to defaults.
+            // setting to defaults. Only when neither file exists (fresh install)
+            // or both are unreadable do the C# property initializers below take
+            // over as last-resort fallback; config/botmod.json shipped by the
+            // build is the operator-facing default otherwise.
             foreach (string candidate in new[] { path, AtomicTextFile.BackupPath(path) })
             {
                 string json;
@@ -150,13 +160,32 @@ namespace BotMod.Config
                 {
                     var loaded = JsonConvert.DeserializeObject<BotConfig>(json);
                     if (loaded == null) continue;
+                    // Json.NET silently ignores keys that bind no property, so a
+                    // typo ("TagetBotCount") keeps the built-in default with no
+                    // signal at all. Surface every unknown key instead.
+                    foreach (string key in UnknownKeys(json))
+                        Warn("Unknown config key '" + key + "' in " + candidate + " (typo? key ignored, built-in default applies)");
                     loaded.Normalize();
-                    if (candidate != path) ModApi.Warn("BotConfig restored from backup " + candidate + " (" + path + " was unreadable)");
+                    if (candidate != path) Warn("BotConfig restored from backup " + candidate + " (" + path + " was unreadable)");
                     return loaded;
                 }
-                catch (Exception ex) { ModApi.Warn("BotConfig parse failed (" + candidate + "): " + ex.Message); }
+                catch (Exception ex) { Warn("BotConfig parse failed (" + candidate + "): " + ex.Message); }
             }
             return new BotConfig();
+        }
+
+        /// <summary>Top-level JSON keys in <paramref name="json"/> that bind no
+        /// BotConfig property. Comparison mirrors how JsonConvert binds members
+        /// (exact first, then case-insensitive), so valid keys never false-positive.</summary>
+        internal static List<string> UnknownKeys(string json)
+        {
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (PropertyInfo p in typeof(BotConfig).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                known.Add(p.Name);
+            var unknown = new List<string>();
+            foreach (JProperty p in JObject.Parse(json).Properties())
+                if (!known.Contains(p.Name)) unknown.Add(p.Name);
+            return unknown;
         }
         public void Normalize()
         {

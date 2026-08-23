@@ -141,6 +141,7 @@ namespace BotMod.Web
                         {
                             bool on = GetBool(_jsonInput, "on");
                             ModApi.Config.UseNeuralBrain = on;
+                            ModApi.PersistConfigField("UseNeuralBrain", on);
                             string why = "";
                             if (on)
                             {
@@ -168,6 +169,7 @@ namespace BotMod.Web
                             int level = Math.Max(0, Math.Min(4, GetInt(_jsonInput, "level", ModApi.Config.Difficulty)));
                             ModApi.Config.Difficulty = level;
                             ModApi.Config.Normalize();
+                            ModApi.PersistConfigField("Difficulty", level);
                             respBody = RespondJson("difficulty", level);
                         }
                         break;

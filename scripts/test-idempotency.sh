@@ -75,6 +75,11 @@ if $have_all && [[ -n "$harmony" ]]; then
     -out:"$work/teamshammer.exe" "${sources[@]}" \
     "$root/tests/BotMod.Web.Tests/TeamAssignmentsConcurrencyTests.cs" > /dev/null
   mono "$work/teamshammer.exe"
+  # Config load/validation: unknown-key detection, range clamping, .bak recovery.
+  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:latest "${refs[@]}" \
+    -out:"$work/botconfig.exe" "${sources[@]}" \
+    "$root/tests/BotMod.Web.Tests/BotConfigLoadTests.cs" > /dev/null
+  mono "$work/botconfig.exe"
 else
   echo "skip teamshammer (game DLLs or 0_TFP_Harmony not found; set SEVENDTD_DS_DIR to a dedicated-server install)"
 fi

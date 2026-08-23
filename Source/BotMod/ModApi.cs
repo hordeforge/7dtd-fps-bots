@@ -21,12 +21,14 @@ namespace BotMod
         {
             try
             {
+                // Config-layer warnings route through the same WARN log line.
+                BotConfig.BotConfig.LogWarn = Warn;
                 ModPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
                 Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
                 Config.Normalize();
                 try { BotCharacterDB.Load(Config); }
                 catch (Exception ex) { Warn("characters.json load failed, using defaults: " + ex); }
-                Log($"BotMod v{BotModVersion.Number} loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly}");
+                Log($"BotMod v{BotModVersion.Number} loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly} AuthBypass={Config.AllowSyntheticAuthBypass}");
 
                 if (!Config.Enabled)
                     Log("Disabled by config (enabled=false). Use 'bot enable' or edit Config/botmod.json then 'bot reload'.");

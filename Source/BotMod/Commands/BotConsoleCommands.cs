@@ -95,7 +95,7 @@ namespace BotMod.Commands
         void DoCount(List<string> p)
         {
             if (p.Count < 2 || !int.TryParse(p[1], out int n)) { SdtdConsole.Instance.Output("Usage: bot count <n>  (0..16)"); return; }
-            n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n; SdtdConsole.Instance.Output($"Target bot count set to {n}. Will converge within a few seconds.");
+            n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n; ModApi.PersistConfigField("TargetBotCount", n); SdtdConsole.Instance.Output($"Target bot count set to {n} (persisted). Will converge within a few seconds.");
         }
         void DoPlayer(List<string> p, CommandSenderInfo sender)
         {
@@ -142,12 +142,12 @@ namespace BotMod.Commands
         void DoWeapon(List<string> p)
         {
             if (p.Count < 2) { SdtdConsole.Instance.Output("Usage: bot weapon <gunId|mixed>  e.g. bot weapon gunMGT1AK47  (also: bot spawn 2 gunShotgunT1DoubleBarrel)"); return; }
-            ModApi.Config.BotWeapon = p[1]; SdtdConsole.Instance.Output($"Default weapon set to {p[1]}. Next spawns use it; existing bots keep theirs.");
+            ModApi.Config.BotWeapon = p[1]; ModApi.PersistConfigField("BotWeapon", p[1]); SdtdConsole.Instance.Output($"Default weapon set to {p[1]} (persisted). Next spawns use it; existing bots keep theirs.");
         }
         void DoSkill(List<string> p)
         {
             if (p.Count < 2 || !int.TryParse(p[1], out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
-            d = Math.Max(0, Math.Min(4, d)); ModApi.Config.Difficulty = d; ModApi.Config.Normalize(); SdtdConsole.Instance.Output($"Skill set to {d}. Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
+            d = Math.Max(0, Math.Min(4, d)); ModApi.Config.Difficulty = d; ModApi.Config.Normalize(); ModApi.PersistConfigField("Difficulty", d); SdtdConsole.Instance.Output($"Skill set to {d} (persisted). Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
         }
         void DoVs(List<string> p)
         {
@@ -249,6 +249,7 @@ namespace BotMod.Commands
                     break;
                 case "on": case "enable": case "true": case "1":
                     ModApi.Config.UseNeuralBrain = true;
+                    ModApi.PersistConfigField("UseNeuralBrain", true);
                     {
                         string why2; bool ok = BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why2);
                         ModApi.Log("BotNeuralBrain: " + (ok ? "loaded " + why2 : "not loaded (" + why2 + ")"));
@@ -257,7 +258,8 @@ namespace BotMod.Commands
                     break;
                 case "off": case "disable": case "false": case "0":
                     ModApi.Config.UseNeuralBrain = false;
-                    SdtdConsole.Instance.Output("Neural OFF — using heuristic. (weights stay cached; `bot neural on` re-enables)");
+                    ModApi.PersistConfigField("UseNeuralBrain", false);
+                    SdtdConsole.Instance.Output("Neural OFF (persisted) — using heuristic. (weights stay cached; `bot neural on` re-enables)");
                     break;
                 case "reload": case "load":
                     {

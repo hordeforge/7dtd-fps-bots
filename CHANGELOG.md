@@ -23,6 +23,13 @@ fails on drift between them.
   range is predictable.
 - `bot enable|disable` persists `Enabled` back to `Config/botmod.json`
   (previously a restart reverted the toggle).
+- All admin mutations now persist, closing the same revert-on-restart gap for
+  the rest of the surface: `bot count`, `bot skill`, `bot weapon`,
+  `bot neural on/off`, plus web API actions `skill` and `neural` write
+  `TargetBotCount`, `Difficulty`, `BotWeapon` and `UseNeuralBrain` back to
+  `Config/botmod.json`.
+- The startup log line names the `AllowSyntheticAuthBypass` state
+  (`AuthBypass=True|False`) so an insecure config is visible in the log.
 - Config writes are atomic (temp file + rename) so a crash mid-persist cannot
   tear `botmod.json`; if the primary file is unreadable at load, the mod
   restores the `.bak` last-known-good copy and logs a WARN instead of silently
@@ -34,6 +41,11 @@ fails on drift between them.
   broken functionality; each web API mutation logs one audit line.
 
 ### Added
+- Unknown keys in `Config/botmod.json` are reported as a WARN naming the key
+  at load instead of being silently ignored (a misspelled key used to keep
+  the built-in default with no signal).
+- A missing `characters.json` logs a WARN instead of silently falling back to
+  built-in bot characteristics.
 - Optional idempotency key for `POST /api/bot`: send `"requestId":"<unique>"`.
   Retries reusing the key replay the recorded response within the ledger
   retention window instead of executing twice; a concurrent duplicate gets
@@ -42,9 +54,10 @@ fails on drift between them.
 - Fuzz suites in `tests/BotMod.Web.Tests`, run by `scripts/test-idempotency.sh`
   (`make test`): a differential model fuzzer hammering the idempotency ledger
   with adversarial `requestId` shapes, clock jitter and capacity/retention
-  pressure, and a mutation fuzzer for the `evolved/best.json` weights-file
-  parser (the latter needs the game install's Newtonsoft.Json.dll and is
-  skipped when it is absent).
+  pressure, a mutation fuzzer for the `evolved/best.json` weights-file parser,
+  and `BotConfigLoadTests` pinning unknown-key detection, range clamping and
+  `.bak` recovery (the latter two need the game install's Newtonsoft.Json.dll
+  and are skipped when it is absent).
 
 ### Performance
 - Neural/LOS evaluations memoized per tick and O(1) bot lookup in

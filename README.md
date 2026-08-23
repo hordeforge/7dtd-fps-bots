@@ -91,6 +91,8 @@ bot reload | bot enable | bot disable
 ## Tuning (`config/botmod.json`)
 
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
+- Combat feel: `FireRateSec/DamagePerShot/HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.
+- Announcements/loot: `AnnounceSpawns`, `BotAnnounceKillsInChat` (bot frags to chat), `DropLootOnDeath`.
 - `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
 - `BotVsBot/BotVsZombie/BotVsPlayer` (which classes bots shoot; `bot vs <t> <on|off>`), `BotTeam` (squad mode; `bot team <on|off>`).
 - `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight.
@@ -99,6 +101,13 @@ bot reload | bot enable | bot disable
 - `TargetBotCount=6 MaxBots=16`.
 
 Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).
+
+Admin mutations persist: `bot enable|disable`, `bot count`, `bot skill`,
+`bot weapon`, `bot neural on/off`, `bot vs ...`, `bot team ...`, `bot teams`
+and the web API equivalents write the changed key back to
+`Config/botmod.json` (atomic write, `.bak` last-known-good), so a restart or
+`bot reload` keeps them. Unknown keys in `botmod.json` (e.g. typos) are
+reported as a WARN line at load and ignored.
 
 ## Development
 
@@ -128,8 +137,8 @@ atomic with a `.bak` last-known-good).
 make build && make install
 ./7DaysToDieServer.x86_64 -logfile /tmp/bot.log -quit -batchmode -nographics -dedicated -configfile /tmp/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.4.0 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True
-# [BotMod] BotManager ready. TargetBots=6 diff=2 weapon=mixed
+# [BotMod] BotMod v0.4.0 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True AuthBypass=False
+# [BotMod] BotManager ready. TargetBots=6 diff=4 weapon=mixed
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
 # [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) (1/6)
 # [BotMod] Bots alive: 6/6

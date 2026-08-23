@@ -62,6 +62,7 @@
   "RespawnDelaySec": 3,
   "SpawnProtectionSec": 1.2,
   "AnnounceSpawns": true,
+  "BotAnnounceKillsInChat": true,
   "DropLootOnDeath": false,
   "StrafeChance": 0.9,
   "DodgeOnHitChance": 0.75,
