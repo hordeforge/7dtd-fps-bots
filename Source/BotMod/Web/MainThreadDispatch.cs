@@ -20,9 +20,9 @@ namespace BotMod.Web
         /// exception. Throws TimeoutException when the work does not complete
         /// in time (<paramref name="op"/> names it in the message); the
         /// enqueued work still runs later.</summary>
-        public static T Execute<T>(Func<T> work, Action<Action> enqueue, T fallback, TimeSpan timeout, string op)
+        public static T Execute<T>(Func<T> work, Action<Action> enqueue, TimeSpan timeout, string op)
         {
-            T result = fallback;
+            T result = default(T);
             Exception error = null;
             var done = new System.Threading.ManualResetEventSlim(false);
             try

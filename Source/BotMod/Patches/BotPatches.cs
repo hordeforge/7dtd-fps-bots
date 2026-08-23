@@ -65,28 +65,10 @@ namespace BotMod.Patches
 
     // team stamping removed: Entity.TeamNumber is not reliably on base Entity in this build; scoring uses explicit team=0 anyway.
 
-    /// <summary>Every death re-fires the same scoreboard packet the XUi player list reads. Vanilla <c>AwardKill</c> only fires
-    /// for <c>EntityPlayer</c> killers, so a bot's frag would never surface in the HUD. We push a best-effort stat refresh for a
-    /// bot that just died so the HUD score column tracks. Clients ignore the packet for a zombie-typed id today, but this lays
-    /// the deduplicated wiring for when the Tab source is patched to interleave bots.</summary>
-    public static class BotScoreNet
-    {
-        /// <summary>Best effort: bump the stat's Changed flag so the normal 0.5s
-        /// TickWait push (waitTicks=5) ships the updated stats to clients.</summary>
-        public static void Refresh(EntityAlive who)
-        {
-            if (who == null) return;
-            try { who.Stats?.Health?.SetChangedFlag(who.Health, who.Health - 1); } catch { }
-        }
-    }
-
-    /// <summary>Deaths where a bot is killer or victim were previously invisible in the HUD score column because the
-    /// vanilla score lane only fires for <c>EntityPlayer</c> killers. This postfix credits the right side directly on the shared
-    /// <c>EntityAlive</c> counters (<c>KilledPlayers</c>/<c>KilledZombies</c>/<c>Died</c>/<c>Score</c>), and then nudges a stat
-    /// refresh toward the scoreboard.
-    /// NOTE: scoring for bot shooters is already handled in <see cref="BotCombat.OnKilled"/> which runs from <c>Bot.TryShootBurst</c>
-    /// on the killing blow. This patch only handles the victim side and the rarer paths where the bot wasn't the direct DamageEntity
-    /// caller (explosions, fall, zombie melee finishing a bot).</summary>
+    /// <summary>Bot-victim death side effects: nudge a stat refresh so the HUD score
+    /// column tracks (the vanilla lane only fires for <c>EntityPlayer</c> killers;
+    /// bot-shooter scoring is handled in <see cref="BotCombat.OnKilled"/>), mark the
+    /// manager's bookkeeping dead, and drop loot unless configured otherwise.</summary>
     [HarmonyPatch(typeof(EntityAlive), "OnEntityDeath")]
     public static class BotDeathPatch
     {
@@ -96,8 +78,9 @@ namespace BotMod.Patches
             {
                 if (__instance == null) return;
                 if (!BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId)) return;
-                // Bot victims were already counted via Died prior to death; just nudge replication.
-                try { BotScoreNet.Refresh(__instance); } catch { }
+                // Bot victims were already counted via Died prior to death; just nudge replication
+                // (bump the stat's Changed flag so the 0.5s TickWait push ships it to clients).
+                try { __instance.Stats?.Health?.SetChangedFlag(__instance.Health, __instance.Health - 1); } catch { }
                 BotMod.Core.BotManager.Instance.NotifyBotDeath(__instance.entityId);
                 if (!ModApi.Config.DropLootOnDeath) try { __instance.lootList = null; } catch { }
             }

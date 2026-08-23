@@ -24,7 +24,7 @@ static class MainThreadDispatchTests
     {
         // 1. Success path: enqueued work runs, its result comes back, no throw.
         {
-            int r = MainThreadDispatch.Execute(() => 42, task => task(), -1,
+            int r = MainThreadDispatch.Execute(() => 42, task => task(),
                 TimeSpan.FromSeconds(5), "success");
             Check("work result is returned", r == 42);
         }
@@ -37,7 +37,7 @@ static class MainThreadDispatchTests
             {
                 MainThreadDispatch.Execute<int>(
                     () => { throw new InvalidOperationException("boom"); },
-                    task => task(), -1, TimeSpan.FromSeconds(5), "error");
+                    task => task(), TimeSpan.FromSeconds(5), "error");
             }
             catch (Exception ex) { caught = ex; }
             Check("work exception propagates to caller",
@@ -55,7 +55,7 @@ static class MainThreadDispatchTests
             try
             {
                 MainThreadDispatch.Execute<string>(() => "late", task => { abandoned = task; },
-                    "fallback", TimeSpan.FromMilliseconds(200), "spawn");
+                    TimeSpan.FromMilliseconds(200), "spawn");
             }
             catch (TimeoutException ex) { timeoutEx = ex; }
             Check("timed-out dispatch throws TimeoutException", timeoutEx != null);
@@ -82,7 +82,7 @@ static class MainThreadDispatchTests
             {
                 MainThreadDispatch.Execute<int>(() => 1,
                     task => { throw new ApplicationException("queue down"); },
-                    -1, TimeSpan.FromSeconds(30), "enqueue-fail");
+                    TimeSpan.FromSeconds(30), "enqueue-fail");
             }
             catch (ApplicationException ex) { caught = ex; }
             Check("enqueue failure surfaces immediately",
@@ -97,7 +97,7 @@ static class MainThreadDispatchTests
                 {
                     var t = new Thread(() => { Thread.Sleep(50); task(); });
                     t.Start();
-                }, -1, TimeSpan.FromSeconds(5), "cross-thread");
+                }, TimeSpan.FromSeconds(5), "cross-thread");
             Check("cross-thread completion returns work result", r == 7);
         }
 

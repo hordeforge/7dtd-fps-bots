@@ -303,12 +303,6 @@ namespace BotMod.Core
         // class via the entityclasses patch is the path to true player models, pending
         // the negative-id wall being solved.
         static readonly string[] _botClassPool = new[] { "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier" };
-        public static string PickBotClass(BotConfig cfg)
-        {
-            if (cfg.BotEntityClass == null) return "zombieSoldier";
-            if (cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
-            return cfg.BotEntityClass;
-        }
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)
         {
             try

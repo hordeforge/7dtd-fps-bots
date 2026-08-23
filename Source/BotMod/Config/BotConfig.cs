@@ -37,7 +37,6 @@ namespace BotMod.Config
         public float AttackRange { get; set; } = 45f;
         // Per-weapon spread is in WeaponProfile; this is base fallback
         public float AimJitterDegrees { get; set; } = 2.0f;
-        public float FireRateSec { get; set; } = 0.18f;
         public int DamagePerShot { get; set; } = 16;
         public float HeadshotChance { get; set; } = 0.08f;
         public float HeadshotMultiplier { get; set; } = 2.0f;
@@ -104,7 +103,6 @@ namespace BotMod.Config
         public float SpawnRadius { get; set; } = 25f;
         public float SpawnNearPlayerChance { get; set; } = 0.35f; // DM wants far spawns, not stacking on players
         public bool UseSpawnpoints { get; set; } = true; // read world's spawnpoints.xml
-        public float RespawnDelaySec { get; set; } = 3f; // Q3-like 3s
         public float SpawnProtectionSec { get; set; } = 1.2f;
         public bool AnnounceSpawns { get; set; } = true;
         public bool BotAnnounceKillsInChat { get; set; } = true; // broadcast bot frags to player chat
@@ -198,8 +196,6 @@ namespace BotMod.Config
             LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, LoseTargetRange));
             AttackRange = Math.Max(3f, Math.Min(VisionRange, AttackRange));
             AimJitterDegrees = Math.Max(0f, Math.Min(30f, AimJitterDegrees));
-            FireRateSec = Math.Max(0.04f, Math.Min(2f, FireRateSec));
-            DamagePerShot = Math.Max(1, Math.Min(500, DamagePerShot));
             HeadshotChance = Math.Max(0f, Math.Min(1f, HeadshotChance));
             BurstMin = Math.Max(1, Math.Min(20, BurstMin));
             BurstMax = Math.Max(BurstMin, Math.Min(30, BurstMax));
@@ -207,7 +203,6 @@ namespace BotMod.Config
             ReactionTimeSec = Math.Max(0f, Math.Min(1.5f, ReactionTimeSec));
             PathRecalcIntervalSec = Math.Max(0.08f, Math.Min(5f, PathRecalcIntervalSec));
             StuckTimeoutSec = Math.Max(0.5f, Math.Min(20f, StuckTimeoutSec));
-            RespawnDelaySec = Math.Max(0f, Math.Min(600f, RespawnDelaySec));
             SpawnRadius = Math.Max(2f, Math.Min(500f, SpawnRadius));
             SpawnNearPlayerChance = Math.Max(0f, Math.Min(1f, SpawnNearPlayerChance));
             StrafeChance = Math.Max(0f, Math.Min(1f, StrafeChance));
@@ -257,7 +252,6 @@ namespace BotMod.Config
         public int Damage;
         public float Range; // effective
         public int Pellets; // shotgun
-        public float ProjectileSpeed; // hitscan=0
         public int MagSize; // rounds per magazine (zdtd_bot ammo pacing parity)
         public float ReloadSec; // reload pause on empty (zdtd_bot parity)
         static uint _pickCtr = 0x5A17B243u;

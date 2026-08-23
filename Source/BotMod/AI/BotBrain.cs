@@ -105,15 +105,6 @@ namespace BotMod.AI
             if (ch.EasyFragger > 0.5f && ((me.entityId * 1103515245u) % 100 < (uint)(ch.EasyFragger*25))) return GoalType.Kill; // quick frag
             return GoalType.Kill;
         }
-        public static bool ShouldChase(EntityAlive me, EntityAlive enemy, BotConfig cfg, BotCharacter ch)
-        {
-            float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);
-            float dist = UnityEngine.Vector3.Distance(me.position, enemy.position);
-            // Low health + high selfpreservation => don't chase far
-            if (hp < 0.3f && ch.SelfPreservation > 0.6f && dist > 26f) return false;
-            if (ch.Aggression < 0.35f && dist > 34f) return false;
-            return true;
-        }
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {
             bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
@@ -291,62 +282,6 @@ namespace BotMod.AI
                 MoveWithFallback(me, dir, dist);
             }
             catch { }
-        }
-        public static Vector3 GroundSplashTarget(EntityAlive me, EntityAlive target, World world)
-        {
-            try
-            {
-                Vector3 origin = target.position;
-                Ray ray = new Ray(origin, Vector3.down);
-                if (Physics.Raycast(ray, out RaycastHit hit, 70f, -1))
-                {
-                    Vector3 ground = hit.point + Vector3.up * 4f;
-                    // trace from eye to ground
-                    Vector3 eye = me.position + Vector3.up * 1.45f;
-                    Vector3 dir = ground - eye; float dist = dir.magnitude; dir /= Mathf.Max(0.01f, dist);
-                    Ray ray2 = new Ray(eye, dir);
-                    if (Physics.Raycast(ray2, out RaycastHit hit2, dist, -1))
-                    {
-                        if (Vector3.Distance(hit2.point, ground) < 60f) return ground;
-                    }
-                    else if (VoxelLineClear(eye, ground, world)) return ground;
-                }
-                // fallback voxel down trace
-                for (int i = 1; i < 16; i++)
-                {
-                    Vector3 probe = origin + Vector3.down * (i * 4f);
-                    var bv = world.GetBlock(new Vector3i(Mathf.FloorToInt(probe.x), Mathf.FloorToInt(probe.y), Mathf.FloorToInt(probe.z)));
-                    if (bv.type != 0) { var block = Block.list[bv.type]; if (block != null && block.IsCollideMovement) return probe + Vector3.up * 7f; }
-                }
-            } catch {}
-            return Vector3.zero;
-        }
-        public static bool TraceClear(EntityAlive me, Vector3 aim, World world, EntityAlive intended)
-        {
-            try
-            {
-                Vector3 eye = me.position + Vector3.up * 1.45f;
-                Vector3 dir = aim - eye; float dist = dir.magnitude; if (dist < 0.1f) return true; dir /= dist;
-                Ray ray = new Ray(eye, dir);
-                if (Physics.Raycast(ray, out RaycastHit hit, dist, -1))
-                {
-                    if (Vector3.Distance(hit.point, aim) < 0.9f) return true;
-                    var hitEnt = hit.collider != null ? hit.collider.GetComponentInParent<Entity>() : null;
-                    if (hitEnt != null)
-                    {
-                        // teammate abort like Q3
-                        if (hitEnt is EntityPlayer || BotMod.Core.BotManager.Instance.IsBotEntity(hitEnt.entityId))
-                        {
-                            if (intended != null && hitEnt.entityId == intended.entityId) return true;
-                            // hit someone else - if friendly per config, fail
-                            // For now, only block if intended was hittable and we hit another bot/player on same team
-                        }
-                        return true;
-                    }
-                    return false;
-                }
-                return VoxelLineClear(eye, aim, world);
-            } catch { return true; }
         }
         public static Vector3 FindCover(EntityAlive me, EntityAlive threat, World world)
         {

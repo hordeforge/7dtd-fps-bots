@@ -91,13 +91,13 @@ bot reload | bot enable | bot disable
 ## Tuning (`config/botmod.json`)
 
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
-- Combat feel: `FireRateSec/DamagePerShot/HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.
+- Combat feel: `HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.
 - Announcements/loot: `AnnounceSpawns`, `BotAnnounceKillsInChat` (bot frags to chat), `DropLootOnDeath`.
 - `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
 - `BotVsBot/BotVsZombie/BotVsPlayer` (which classes bots shoot; `bot vs <t> <on|off>`), `BotTeam` (squad mode; `bot team <on|off>`).
 - `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight.
 - `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
-- `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `RespawnDelaySec=3/SpawnProtectionSec`.
+- `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `SpawnProtectionSec`.
 - `TargetBotCount=6 MaxBots=16`.
 
 Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).

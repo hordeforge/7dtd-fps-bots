@@ -33,7 +33,7 @@ namespace BotMod.Web
         public override void HandleRestGet(RequestContext context)
         {
             PrepareEnvelopedResult(out JsonWriter writer);
-            writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "{}", "status")));
+            writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "status")));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
 
@@ -100,7 +100,7 @@ namespace BotMod.Web
                                 for (int i = 0; i < count; i++)
                                     if (BotManager.Instance.TrySpawnOne()) n++;
                                 return n;
-                            }, 0, "spawn");
+                            }, "spawn");
                             respBody = RespondJson("spawned", spawned);
                         }
                         break;
@@ -131,14 +131,14 @@ namespace BotMod.Web
                                     if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) n++;
                                 }
                                 return new { spawned = n, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
-                            }, new { spawned = 0, found = false, name = ident }, "spawnNear");
+                            }, "spawnNear");
                             respBody = RespondJson("spawned", r.spawned, "found", r.found, "player", r.name);
                         }
                         break;
                     case "remove":
                     case "clear":
                         {
-                            int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), 0, "removeAll");
+                            int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), "removeAll");
                             respBody = RespondJson("removed", removed);
                         }
                         break;
@@ -152,7 +152,7 @@ namespace BotMod.Web
                             {
                                 bool ok = RunOnMain(
                                     () => BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why),
-                                    false, "neuralLoad");
+                                    "neuralLoad");
                                 // Load failure stays visible in the response body
                                 // ("loaded":false,"reason":"...") and in this line.
                                 if (!ok) ModApi.Warn("web api neural on: weights load failed: " + why);
@@ -164,7 +164,7 @@ namespace BotMod.Web
                         {
                             // {"action":"removeOne","entityId":N} - remove a single bot.
                             int entityId = GetInt(_jsonInput, "entityId", 0);
-                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), false, "removeOne");
+                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), "removeOne");
                             respBody = RespondJson("removed", removed, "entityId", entityId);
                         }
                         break;
@@ -274,12 +274,12 @@ namespace BotMod.Web
         /// Unity/world state must not be touched from there). <paramref name="op"/>
         /// names the operation so a dispatch timeout is attributable in the log.
         /// The wait-handle lifecycle lives in MainThreadDispatch (unit-tested).</summary>
-        static T RunOnMain<T>(Func<T> fn, T fallback, string op)
+        static T RunOnMain<T>(Func<T> fn, string op)
         {
             if (ThreadManager.IsMainThread()) return fn();
             return MainThreadDispatch.Execute(fn,
                 task => ThreadManager.AddSingleTaskMainThread("bot-web-api", task),
-                fallback, TimeSpan.FromSeconds(15), op);
+                TimeSpan.FromSeconds(15), op);
         }
 
         static void PersistEnabled(bool enabled) => ModApi.PersistConfigField("Enabled", enabled);
