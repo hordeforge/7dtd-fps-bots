@@ -471,7 +471,10 @@ def main():
     ap.add_argument("--out", default="docs/ga-replay.html")
     ap.add_argument("--verify", action="store_true", help="compare summary to numba eval on same seed")
     args = ap.parse_args()
-    w = np.array(json.loads(Path(args.best).read_text())["weights"], dtype=float)
+    best_path = Path(args.best)
+    if not best_path.is_file():
+        raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
+    w = np.array(json.loads(best_path.read_text())["weights"], dtype=float)
     summary, frames = record_match(w, args.seed, args.n_bots, args.n_zombies, args.max_ticks,
                                    args.skill, args.weapon, args.env)
     walls = WALLS[args.env if args.env is not None else args.seed % 5]

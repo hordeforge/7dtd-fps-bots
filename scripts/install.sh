@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DS="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
 SRC="$ROOT/dist/BotMod"
 DST="$DS/Mods/BotMod"
-if [[ ! -f "$SRC/BotMod.dll" ]]; then echo "Run scripts/build.sh first"; exit 1; fi
+if [[ ! -f "$SRC/BotMod.dll" ]]; then echo "Run scripts/build.sh first" >&2; exit 1; fi
 if [[ ! -f "$DS/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" ]]; then
   echo "ERROR: '$DS' does not look like a 7 Days to Die Dedicated Server install" >&2
   echo "(missing 7DaysToDieServer_Data/Managed/Assembly-CSharp.dll)." >&2

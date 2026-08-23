@@ -241,6 +241,12 @@ def main():
         runs = sorted(RUNS_DIR.glob("runs/*"))
     else:
         runs = [RUNS_DIR / r for r in args.runs]
+    missing = [str(r) for r in runs if not r.is_dir()]
+    if missing:
+        raise SystemExit(f"--runs dir not found: {missing[0]} (paths are relative to {RUNS_DIR}, e.g. runs/<ts>)")
+    for req in ("best.json", "best.meta.json"):
+        if not (RUNS_DIR / req).is_file():
+            raise SystemExit(f"{RUNS_DIR / req} not found (run tools/ga/evolve.py first)")
 
     w = np.array(json.loads((RUNS_DIR / "best.json").read_text())["weights"], dtype=float)
     replays = {}

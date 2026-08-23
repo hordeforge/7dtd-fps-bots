@@ -83,8 +83,8 @@ if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && [[ -n
   ls -la "$OUT"
   exit 0
 fi
-if [[ "$BUILD_BACKEND" == "dotnet" ]]; then echo "ERROR: dotnet backend requested but no SDK"; exit 1; fi
-command -v mcs >/dev/null 2>&1 || { echo "ERROR: mcs not found"; exit 1; }
+if [[ "$BUILD_BACKEND" == "dotnet" ]]; then echo "ERROR: dotnet backend requested but no SDK" >&2; exit 1; fi
+command -v mcs >/dev/null 2>&1 || { echo "ERROR: mcs not found" >&2; exit 1; }
 echo "Building with mcs against: $MANAGED"
 refs=(
   -r:"$MANAGED/mscorlib.dll"

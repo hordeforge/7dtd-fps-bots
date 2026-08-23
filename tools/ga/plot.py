@@ -20,6 +20,8 @@ def main():
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
     p = Path(args.csv)
+    if not p.is_file():
+        raise SystemExit(f"fitness.csv not found: {p} (usage: plot.py evolved/runs/<ts>/fitness.csv)")
     gens, best, mean = [], [], []
     with open(p) as f:
         r = csv.DictReader(f)

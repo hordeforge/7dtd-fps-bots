@@ -177,7 +177,10 @@ if __name__ == "__main__":
         out = Path(args.out)
         draw(w, hidden, inputs, title=meta_title, out=out)
     elif args.best:
-        w, hidden, inputs, obj = load_best(Path(args.best))
+        best_path = Path(args.best)
+        if not best_path.is_file():
+            raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
+        w, hidden, inputs, obj = load_best(best_path)
         meta_title = f"best.json  gen {obj.get('generation','?')}  fit {obj.get('fitness',0):+.3f}"
         draw(w, hidden, inputs, title=meta_title, out=Path(args.out))
     else:

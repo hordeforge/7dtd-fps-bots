@@ -22,7 +22,7 @@ namespace BotMod
             try
             {
                 // Config-layer warnings route through the same WARN log line.
-                BotConfig.BotConfig.LogWarn = Warn;
+                BotConfig.Warn = Warn;
                 ModPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
                 Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
                 Config.Normalize();

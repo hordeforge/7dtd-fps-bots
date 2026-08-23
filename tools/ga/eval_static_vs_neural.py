@@ -51,7 +51,10 @@ def main():
     ap.add_argument("--best", default=str(REPO / "evolved/best.json"))
     args = ap.parse_args()
 
-    w_champ = np.array(json.loads(Path(args.best).read_text())["weights"], dtype=float)
+    best_path = Path(args.best)
+    if not best_path.is_file():
+        raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
+    w_champ = np.array(json.loads(best_path.read_text())["weights"], dtype=float)
     w_static = np.zeros(w_champ.shape[0], dtype=np.float32)
 
     rows = []

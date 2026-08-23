@@ -10,7 +10,7 @@ namespace BotMod.Commands
         public override string[] getCommands() => new[] { "bot" };
         public override string getDescription() => "FPS bots: spawn, list, remove, config.";
         public override string getHelp() =>
-            "Usage: bot <help|list|spawn [count] [x z] [weapon] | player <name/id> [count] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | neural <on|off|reload|status> | reload | enable | disable | status>\n" +
+            "Usage: bot <help|list|spawn [count] [x z] [weapon] | player <name/id> [count] [weapon] | add <n> | remove [all|<id>] | count <n> | weapon <gunId|mixed> | skill <0-4> | neural <on|off|reload [path]|status> | vs <bot|zombie|player> <on|off> | team <on|off|assign <name> <id>|list|clear> | teams <0-8> | reload | enable | disable | status>\n" +
             "  bot player <nameOrId> [count] [weapon] - spawn bots near that player (DM-safe, not too close)\n" +
             "  bot spawn 4                    - spawn 4 mixed bots\n" +
             "  bot spawn 1 0 0 gunMGT1AK47    - spawn AK bot at x,z\n" +

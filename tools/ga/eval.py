@@ -26,7 +26,10 @@ def main():
     ap.add_argument("--matches", type=int, default=30)
     args = ap.parse_args()
 
-    w, meta = load_best(Path(args.best))
+    best_path = Path(args.best)
+    if not best_path.is_file():
+        raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
+    w, meta = load_best(best_path)
     if w.size != ga.W:
         raise SystemExit(f"weights size {w.size} != want {ga.W}")
 
