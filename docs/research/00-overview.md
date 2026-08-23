@@ -1,6 +1,6 @@
 # Self-Improving 7DTD Bots via Neuroevolution — Overview
 
-*Status: research brainstorm, 2026-08-18 — lives in `7dtd-clanker/docs/research/` so it travels with the bot mod, not the clean-room server.*
+*Status: research brainstorm, 2026-08-18 — lives in `7dtd-fps-bots/docs/research/` so it travels with the bot mod, not the clean-room server.*
 
 ## 1. Goal
 

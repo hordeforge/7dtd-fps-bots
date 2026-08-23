@@ -1,6 +1,6 @@
 # Final R2 Report — Crazy-Good Net From Scratch, Holds at 500 (2026-08-19)
 
-*Goal: GA from scratch that is crazy good at PvP and vs zombies for 7dtd-clanker.*
+*Goal: GA from scratch that is crazy good at PvP and vs zombies for 7dtd-fps-bots.*
 *Ship: 14→16(tanh)→5, W=325, 608 FLOPs/bot — trained in `tools/ga/combat_sim.py`
 (numba walls/LOS/burst/zombie) and running on the real dedicated (Navezgane,
 BotManager 6/6, BotNeuralBrain 325w, diff 4 mixed loadout).*

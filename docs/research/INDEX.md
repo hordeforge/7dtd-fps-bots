@@ -1,6 +1,6 @@
 # docs/research — Index
 
-The neuroevolution and bot-AI research for the 7dtd-clanker bot mod. Two layers:
+The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers:
 
 - **Design docs `00..06`** — the architecture, environment/fitness, GA, training
   pipeline, integration, and roadmap as originally planned.

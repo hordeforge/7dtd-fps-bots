@@ -40,7 +40,7 @@ These are the references for `BotCharacter`, `WeaponProfile`, `Bot.AimModel`,
 
 ## Cross-pollinated with zdtd_bot (the sibling Zig Wasm server)
 
-Improvements travel both ways with `../zdtd`'s `mods/zdtd_bot` Wasm brain
+Improvements travel both ways with `../zdtd-server`'s `mods/zdtd_bot` Wasm brain
 (`docs/q3-inspiration-notes.md` there). Everything stays deterministic via the
 per-bot LCG (`Bot.RngNext/Rng01/RngSym`, seeded from entity id).
 

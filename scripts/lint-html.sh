@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # vnu (Nu HTML Checker) over the HTML this repo ships (GA dashboards, evolved
-# reports). Same convention as zdtd and 7dtd-apm: vnu runs through npx pinned
+# reports). Same convention as zdtd and 7dtd-server-apm: vnu runs through npx pinned
 # by VNU_VERSION; java is required. vnu-filter.txt drops deliberate deviations;
 # warnings do not fail, errors do.
 set -euo pipefail

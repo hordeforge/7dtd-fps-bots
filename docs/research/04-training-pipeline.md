@@ -35,7 +35,7 @@ Either way the *protocol* between trainer and harness is the same: send `bot <ve
 
 ## 3. Disk layout
 
-Everything in `7dtd-clanker/evolved/` (git-ignored except `best.json` when promoted):
+Everything in `7dtd-fps-bots/evolved/` (git-ignored except `best.json` when promoted):
 
 ```
 evolved/
@@ -108,7 +108,7 @@ Each `best.json` is validated before it can be promoted:
 ## 9. Shipping to the mod
 
 - Promote `runs/<ts>/best.json` → `evolved/best.json` + `best.meta.json`.
-- Commit and push (`7dtd-clanker` repo). Operators `git pull` or download the asset.
+- Commit and push (`7dtd-fps-bots` repo). Operators `git pull` or download the asset.
 - The mod's `ModApi` loads `evolved/best.json` on `OnGameStartDone` (or on config reload via `bot reload` / `bot neural reload`) through `BotNeuralBrain.TryLoad`. If the file is absent or malformed (`version`/`inputs`/weight-count mismatch), the mod falls back to the heuristic and logs `BotNeuralBrain: not loaded (<reason>), using heuristic`.
 
 No Python ships, no extra DLL, no native module — just JSON.
@@ -131,4 +131,4 @@ No Python ships, no extra DLL, no native module — just JSON.
 | `tools/ga/eval` | Re-evaluates a single `best.json` on the validation pool, prints report |
 | `tools/ga/plot` | Plots `fitness.csv` + Pareto fronts (Python) |
 
-All live under `7dtd-clanker/tools/` so they ship with the mod's research and do not pollute the clean-room `zdtd` tree.
+All live under `7dtd-fps-bots/tools/` so they ship with the mod's research and do not pollute the clean-room `zdtd` tree.

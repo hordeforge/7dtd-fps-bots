@@ -1,6 +1,6 @@
 # Final R1 Report — Crazy-Good Net From Scratch (2026-08-19)
 
-*Goal: use GA to create a crazy good 7DTD PvP+zombie net from scratch for 7dtd-clanker.*
+*Goal: use GA to create a crazy good 7DTD PvP+zombie net from scratch for 7dtd-fps-bots.*
 *Result: 14→16(tanh)→5 champion (W=325, 608 FLOPs/bot) trained in a numba
 combat tick loop — walls, LOS, burst, trait jitter, zombie horde pressure.*
 
