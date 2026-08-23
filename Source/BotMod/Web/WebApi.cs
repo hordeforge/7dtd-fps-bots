@@ -23,7 +23,10 @@ namespace BotMod.Web
     /// retention window replay the recorded response instead of executing
     /// again (a retried spawn does not spawn twice); a concurrent duplicate
     /// with the same key gets 409 REQUEST_IN_PROGRESS; failures are not
-    /// cached, so a retry may run again. Without a key, execution is
+    /// cached, so a retry may run again. The one ambiguous outcome is a
+    /// main-thread dispatch timeout: the queued work still runs afterwards,
+    /// so that key stays claimed (retries get 409 until the entry ages out)
+    /// rather than risking a second execution. Without a key, execution is
     /// unchanged and repeated calls repeat the effect.
     /// </summary>
     public sealed class Bot : AbsRestApi
@@ -261,7 +264,16 @@ namespace BotMod.Web
             }
             catch (Exception ex)
             {
-                if (keyed) IdempotencyLedger.Fail(requestId); // retryable: nothing cached
+                // A dispatch timeout is not a clean failure: MainThreadDispatch
+                // leaves the enqueued world-touching work queued, so it still
+                // runs later and the action may yet take effect after this 500
+                // ("lost response after the server acted"). Keep that key's
+                // ledger claim InProgress so a same-key retry is rejected with
+                // 409 instead of executing twice; the entry ages out via
+                // Retention. Any other exception means nothing ran or the work
+                // threw before producing a response: release the claim so a
+                // retry can resubmit.
+                if (keyed && !(ex is TimeoutException)) IdempotencyLedger.Fail(requestId);
                 ModApi.Error("web api action=" + logAction + " req=" + logTag + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
                 // Full exception detail goes to the server log above only; the
                 // webserver envelope would otherwise embed the exception type,

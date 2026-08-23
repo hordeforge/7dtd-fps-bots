@@ -48,19 +48,26 @@ static class MainThreadDispatchTests
         //    Execute throws TimeoutException naming the operation. The
         //    abandoned task then still runs later (the engine drains its
         //    queue) and signals an already-disposed event: that late Set must
-        //    not throw into the main-thread loop.
+        //    not throw into the main-thread loop. The work itself DOES run on
+        //    that late invocation — the caller has already seen TimeoutException,
+        //    so from the retry-safety side the outcome is ambiguous, and
+        //    WebApi.HandleRestPost must keep the idempotency key claimed for
+        //    exactly this case instead of releasing it for a re-run.
         {
             Action abandoned = null;
             Exception timeoutEx = null;
+            bool lateWorkRan = false;
             try
             {
-                MainThreadDispatch.Execute<string>(() => "late", task => { abandoned = task; },
+                MainThreadDispatch.Execute<string>(() => { lateWorkRan = true; return "late"; },
+                    task => { abandoned = task; },
                     TimeSpan.FromMilliseconds(200), "spawn");
             }
             catch (TimeoutException ex) { timeoutEx = ex; }
             Check("timed-out dispatch throws TimeoutException", timeoutEx != null);
             Check("timeout names the operation",
                 timeoutEx != null && timeoutEx.Message.Contains("spawn"));
+            Check("work did not run before the timeout fired", !lateWorkRan);
             try
             {
                 abandoned?.Invoke();
@@ -71,6 +78,7 @@ static class MainThreadDispatchTests
                 Console.WriteLine("     late Set threw: " + ex.GetType().Name + ": " + ex.Message);
                 Check("abandoned task signals disposed event safely", false);
             }
+            Check("abandoned task still executes its work after the timeout", lateWorkRan);
         }
 
         // 4. Enqueue failure surfaces immediately (nothing waits out the full
