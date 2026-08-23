@@ -48,20 +48,25 @@ namespace BotMod.Web
             // One audit line per executed/replayed/rejected mutation; GET stays
             // unlogged because the dashboard polls it continuously.
             string reqTag = keyed ? requestId : "-";
+            // Log-safe copies: requestId/action are request-supplied and must
+            // not carry control characters into the audit trail (see
+            // LogSanitizer). The raw values still drive routing and the ledger.
+            string logAction = LogSanitizer.Clean(action);
+            string logTag = LogSanitizer.Clean(reqTag);
             if (keyed)
             {
                 string cached;
                 IdempotencyLedger.BeginResult begin = IdempotencyLedger.TryBegin(requestId, out cached);
                 if (begin == IdempotencyLedger.BeginResult.Replay)
                 {
-                    ModApi.Log("web api action=" + action + " req=" + reqTag + " replay (cached response resent)");
+                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " replay (cached response resent)");
                     writer.WriteRaw(Encoding.UTF8.GetBytes(cached));
                     SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
                     return;
                 }
                 if (begin == IdempotencyLedger.BeginResult.InProgress)
                 {
-                    ModApi.Log("web api action=" + action + " req=" + reqTag + " rejected REQUEST_IN_PROGRESS");
+                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected REQUEST_IN_PROGRESS");
                     SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_IN_PROGRESS", null);
                     return;
                 }
@@ -242,19 +247,22 @@ namespace BotMod.Web
             catch (Exception ex)
             {
                 if (keyed) IdempotencyLedger.Fail(requestId); // retryable: nothing cached
-                ModApi.Error("web api action=" + action + " req=" + reqTag + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
-                SendEmptyResponse(context, HttpStatusCode.InternalServerError, null, "ERROR", ex);
+                ModApi.Error("web api action=" + logAction + " req=" + logTag + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
+                // Full exception detail goes to the server log above only; the
+                // webserver envelope would otherwise embed the exception type,
+                // message and stack trace in the response body.
+                SendEmptyResponse(context, HttpStatusCode.InternalServerError, null, "ERROR", null);
                 return;
             }
             if (errorCode != null)
             {
                 if (keyed) IdempotencyLedger.Fail(requestId); // client error: retry may resubmit
-                ModApi.Log("web api action=" + action + " req=" + reqTag + " rejected " + errorCode);
+                ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected " + errorCode);
                 SendEmptyResponse(context, HttpStatusCode.BadRequest, null, errorCode, null);
                 return;
             }
             if (keyed) IdempotencyLedger.Complete(requestId, respBody);
-            ModApi.Log("web api action=" + action + " req=" + reqTag + " ok in " + sw.ElapsedMilliseconds + "ms " + respBody);
+            ModApi.Log("web api action=" + logAction + " req=" + logTag + " ok in " + sw.ElapsedMilliseconds + "ms " + respBody);
             writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }

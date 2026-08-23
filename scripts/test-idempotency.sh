@@ -38,6 +38,12 @@ run_suite mainthreaddispatch \
   "$root/Source/BotMod/Web/MainThreadDispatch.cs" \
   "$root/tests/BotMod.Web.Tests/MainThreadDispatchTests.cs"
 
+# Log-injection guard: request-supplied requestId/action must reach server log
+# lines with control characters (CRLF, ANSI escapes) scrubbed.
+run_suite logsanitize \
+  "$root/Source/BotMod/Web/LogSanitizer.cs" \
+  "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
+
 # Weights-file parser fuzzer: needs the game install's Newtonsoft.Json.dll,
 # copied beside the exe so mono resolves the reference at runtime.
 srv="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
