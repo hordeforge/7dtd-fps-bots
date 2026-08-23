@@ -104,6 +104,20 @@ if $have_all && [[ -n "$harmony" ]]; then
     -out:"$work/botconfig.exe" "${sources[@]}" \
     "$root/tests/BotMod.Web.Tests/BotConfigLoadTests.cs" > /dev/null
   mono "$work/botconfig.exe"
+  # Authorization matrix (deny side): the web API must declare permission
+  # level 0 for every request-method slot and the console command must keep
+  # its default level 0. Handlers cannot be constructed outside a running
+  # server (the ctor registers with the live AdminTools singleton), so the
+  # suite asserts the constant-returning declarations on ctor-less instances.
+  # The exe references the game's enum/handler types; Assembly-CSharp plus
+  # UnityEngine.CoreModule (base-class field types) and Unity.Burst (custom
+  # attributes mono resolves while JIT-ing game methods) are copied beside it
+  # for mono's runtime probe (same pattern as above).
+  cp "$managed/Assembly-CSharp.dll" "$managed/UnityEngine.CoreModule.dll" "$managed/Unity.Burst.dll" "$work/"
+  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:7.2 "${refs[@]}" \
+    -out:"$work/webapiauthz.exe" "${sources[@]}" \
+    "$root/tests/BotMod.Web.Tests/WebApiAuthzTests.cs" > /dev/null
+  mono "$work/webapiauthz.exe"
 else
   echo "skip teamshammer (game DLLs or 0_TFP_Harmony not found; set SEVENDTD_DS_DIR to a dedicated-server install)"
 fi

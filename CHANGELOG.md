@@ -13,6 +13,12 @@ fails on drift between them.
 ## [Unreleased]
 
 ### Added
+- `make test` now also pins the deny side of the authorization matrix
+  (`tests/BotMod.Web.Tests/WebApiAuthzTests.cs`): `GET/POST /api/bot` must
+  keep declaring permission level 0 for every request-method slot, and the
+  `bot` console command must keep its default level 0. A change that widens
+  either declaration fails the suite instead of silently handing bot control
+  to lower-privileged callers.
 - `make package` (scripts/package.sh) builds the release zip
   (`dist/BotMod-<version>.zip`) reproducibly: sorted entry order, all
   timestamps pinned to `SOURCE_DATE_EPOCH` (default: HEAD commit time),

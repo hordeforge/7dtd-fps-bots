@@ -181,6 +181,7 @@ world player names echoed into responses/logs (G3).
 | Control | Covers | Reference |
 |---|---|---|
 | Webserver authn + permission level 0 declaration | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:298` |
+| Deny-side matrix tests: web API method levels and console default level pinned to 0 | TB2 gate regression (widened declaration fails `make test`) | `tests/BotMod.Web.Tests/WebApiAuthzTests.cs` |
 | Bypass flag default-off + startup visibility | TB1 spoofing blast radius (G2) | `BotConfig.cs:17`, `ModApi.cs:31` |
 | Per-join bypass logging | TB1 attribution | `BotPatches.cs:27` |
 | Sanitized audit fields, generic 500s | TB6 forgery, TB2 disclosure | `WebApi.cs:73-74,279-283`, `LogSanitizer.cs` |
