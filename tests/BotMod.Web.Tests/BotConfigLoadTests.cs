@@ -62,6 +62,29 @@ static class BotConfigLoadTests
             Check("probability clamped to 0-1", cfg.HeadshotChance == 1f);
         }
 
+        // A JSON null TeamAssignments map must be repaired by Normalize: the
+        // locked helpers index it directly, so a lingering null would make the
+        // first admin assignment throw NullReferenceException on a web thread.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"TeamAssignments\": null }");
+            BotConfig cfg = BotConfig.Load(path);
+            cfg.SetTeamAssignment("Grunt", 2);
+            Check("null TeamAssignments repaired at load", cfg.GetTeamAssignment("Grunt") == 2);
+        }
+
+        // Assignments outside the loaded team range drop to free-for-all, so a
+        // stale hand-edited config cannot put bots on nonexistent teams.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path,
+                "{ \"BotTeamCount\": 2, \"TeamAssignments\": { \"Grunt\": 9, \"Ranger\": 2 } }");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("out-of-range assignment dropped to free-for-all",
+                cfg.GetTeamAssignment("Grunt") == 0);
+            Check("in-range assignment survives load", cfg.GetTeamAssignment("Ranger") == 2);
+        }
+
         // Recovery: torn primary + good .bak restores the last-known-good
         // values instead of silently resetting to defaults.
         {

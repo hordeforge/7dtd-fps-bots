@@ -126,7 +126,11 @@ static class AtomicTextFileTests
                     finally { if (System.Threading.Interlocked.Decrement(ref remaining) == 0) done.Set(); }
                 });
             }
-            done.WaitOne(30000);
+            // A hang here means the WriteGate serialization broke (the exact
+            // regression this suite pins), so a timeout must fail the run,
+            // not sail through to assertions on whatever reached the disk.
+            bool finished = done.WaitOne(30000);
+            Check("concurrent writers finished within timeout", finished);
             Check("concurrent writes complete without errors", errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);
             string s;

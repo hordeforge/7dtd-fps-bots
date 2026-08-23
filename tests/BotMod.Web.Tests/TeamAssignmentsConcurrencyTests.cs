@@ -84,7 +84,11 @@ static class TeamAssignmentsConcurrencyTests
                 finally { if (Interlocked.Decrement(ref remaining) == 0) done.Set(); }
             });
         }
-        done.WaitOne(60000);
+        // A hang here means the TeamGate lock broke (the exact regression this
+        // suite pins), so a timeout must fail the run, not limp through the
+        // post-storm checks while threads are still stuck.
+        bool finished = done.WaitOne(60000);
+        Check("hammer finished within timeout", finished);
 
         Check("set/clear/lookup/snapshot hammer clean (" + reads + " reads)", errors.Count == 0);
         foreach (string e in errors) Console.WriteLine("     " + e);

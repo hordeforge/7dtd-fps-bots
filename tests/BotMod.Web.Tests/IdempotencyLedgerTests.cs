@@ -67,12 +67,16 @@ static class IdempotencyLedgerTests
             Check("retry after failure executes again", Try(k) == IdempotencyLedger.BeginResult.Fresh);
         }
 
-        // 4. Key validation.
+        // 4. Key validation, including the exact boundary: max length is the
+        //    last accepted length, one past it is rejected.
         {
+            string maxKey = new string('k', IdempotencyLedger.MaxKeyLength);
             string longKey = new string('k', IdempotencyLedger.MaxKeyLength + 1);
-            Check("empty/null/oversized keys rejected",
-                !IdempotencyLedger.IsValidKey(null) && !IdempotencyLedger.IsValidKey("")
-                && !IdempotencyLedger.IsValidKey(longKey) && IdempotencyLedger.IsValidKey("ok"));
+            Check("empty/null keys rejected",
+                !IdempotencyLedger.IsValidKey(null) && !IdempotencyLedger.IsValidKey(""));
+            Check("key at exactly MaxKeyLength accepted", IdempotencyLedger.IsValidKey(maxKey));
+            Check("key one past MaxKeyLength rejected", !IdempotencyLedger.IsValidKey(longKey));
+            Check("ordinary key accepted", IdempotencyLedger.IsValidKey("ok"));
         }
 
         // 5. Bounded state: capacity cap holds under more keys than Capacity.
