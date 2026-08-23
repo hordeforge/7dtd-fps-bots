@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace BotMod.Web
+namespace BotMod.Config
 {
     /// <summary>
     /// Makes untrusted request fields safe for single-line server log entries.

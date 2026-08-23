@@ -6,8 +6,8 @@ namespace BotMod.AI
         {
             try
             {
-                bool killerIsBot = killer != null && BotMod.Core.BotManager.Instance.IsBotEntity(killer.entityId);
-                bool victimIsBot = victim != null && BotMod.Core.BotManager.Instance.IsBotEntity(victim.entityId);
+                bool killerIsBot = killer != null && BotRegistry.IsBotEntity(killer.entityId);
+                bool victimIsBot = victim != null && BotRegistry.IsBotEntity(victim.entityId);
                 bool killerIsPlayer = killer is EntityPlayer;
                 bool victimIsPlayer = victim is EntityPlayer;
                 if (!killerIsBot && !victimIsBot && !killerIsPlayer && !victimIsPlayer) return;
@@ -18,8 +18,8 @@ namespace BotMod.AI
                 // zero-width characters would otherwise forge log lines or
                 // reorder visible chat text (same contract as the web API's
                 // sanitized audit fields).
-                string k = BotMod.Web.LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString()) : "?");
-                string v = BotMod.Web.LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString()) : "?");
+                string k = BotMod.Config.LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString()) : "?");
+                string v = BotMod.Config.LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString()) : "?");
                 ModApi.Log($"Kill: {k} killed {v}");
 
                 // Keep vanilla score paths for player->anything. For bot killers we must credit manually

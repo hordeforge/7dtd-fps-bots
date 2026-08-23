@@ -42,7 +42,7 @@ run_suite mainthreaddispatch \
 # Log-injection guard: request-supplied requestId/action must reach server log
 # lines with control characters (CRLF, ANSI escapes) scrubbed.
 run_suite logsanitize \
-  "$root/Source/BotMod/Web/LogSanitizer.cs" \
+  "$root/Source/BotMod/Config/LogSanitizer.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
 
 # Unicode identity contract: NFC canonicalization and ordinal case folding

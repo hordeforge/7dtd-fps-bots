@@ -1,6 +1,5 @@
 using System;
 using BotMod.Config;
-using BotMod.Core;
 using UnityEngine;
 
 namespace BotMod.AI
@@ -43,7 +42,7 @@ namespace BotMod.AI
                         if (!HasLineOfSight(myPos + Vector3.up * 1.45f, alive.position + Vector3.up * 1.05f, world)) continue;
                         float score = dist;
                         if (alive is EntityPlayer) score *= 0.82f;
-                        if (BotManager.Instance.IsBotEntity(alive.entityId)) score *= 0.9f;
+                        if (BotRegistry.IsBotEntity(alive.entityId)) score *= 0.9f;
                         // FPS priority: strongly prefer finishing wounded targets (low HP -> low
                         // score -> chosen). A ~10% HP foe beats a full-HP one by ~5.4 on the
                         // distance scale, matching finish-the-kill.
@@ -131,11 +130,11 @@ namespace BotMod.AI
         }
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {
-            bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
+            bool otherIsBot = BotRegistry.IsBotEntity(other.entityId);
             // Squad mode, vsBot-off, and same-team all make bots allies; otherwise
             // bots are fair game. Bot bodies are zombieSoldier (EntityZombie) - the
             // friendly checks below must not exempt them from the vsBot gate.
-            if (otherIsBot) return BotManager.Instance.AreAllies(me.entityId, other.entityId);
+            if (otherIsBot) return BotRegistry.AreAllies(me.entityId, other.entityId);
             if (other is EntityPlayer && !cfg.BotVsPlayer) return true;
             if (other is EntityZombie && !cfg.BotVsZombie) return true;
             if (other is EntityTrader) return true;
