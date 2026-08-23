@@ -21,6 +21,7 @@ import base64
 import csv
 import io
 import json
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -207,9 +208,15 @@ def build(runs, out: Path, replays):
         cd = curves_b64(runs, best_run_name)
         hs = held_strip_b64(runs)
         net = best_net_b64()
-        chunks.append(f"""<h2>1 · Evolution curves</h2>{chart_card(cd, 'evolution curves')}""")
-        chunks.append(f"""<h2>2 · Held-out stability</h2>{chart_card(hs, 'held-out stability strip')}""")
-        chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'champion controller network')}""")
+        # Each chart degrades independently: held_strip_b64 returns "" when no
+        # run recorded held-out scores, and feeding "" through chart_card would
+        # crash the whole dashboard on the PNG header parse.
+        if cd:
+            chunks.append(f"""<h2>1 · Evolution curves</h2>{chart_card(cd, 'evolution curves')}""")
+        if hs:
+            chunks.append(f"""<h2>2 · Held-out stability</h2>{chart_card(hs, 'held-out stability strip')}""")
+        if net:
+            chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'champion controller network')}""")
 
     # Arena replays
     if replays:
@@ -272,17 +279,20 @@ def main():
     replays = {}
     import replay as _rp
     if args.replays:
-        for label, (seed, nb, nz, envf) in {
-            "seed 1 · cross": (1, 4, 3, 1),
-            "seed 777 · maze": (777, 5, 2, 4),
-            "seed 1234 · maze": (1234, 4, 3, 4),
-            "seed 42 · corridor": (42, 4, 3, 3),
-        }.items():
-            summary, frames = record_match(w, seed, nb, nz, 1200, 3, 0, envf)
-            walls = _rp.WALLS[envf]
-            html_path = Path(f"/tmp/_dash_replay_{seed}.html")
-            render_html(summary, frames, walls, html_path, label)
-            replays[label] = html_path.read_text()
+        # Scratch replay HTML lives only long enough to be read back into the
+        # dashboard string; the temp dir is removed on success and on failure.
+        with tempfile.TemporaryDirectory(prefix="ga-dashboard-replay-") as tmp:
+            for label, (seed, nb, nz, envf) in {
+                "seed 1 · cross": (1, 4, 3, 1),
+                "seed 777 · maze": (777, 5, 2, 4),
+                "seed 1234 · maze": (1234, 4, 3, 4),
+                "seed 42 · corridor": (42, 4, 3, 3),
+            }.items():
+                summary, frames = record_match(w, seed, nb, nz, 1200, 3, 0, envf)
+                walls = _rp.WALLS[envf]
+                html_path = Path(tmp) / f"replay_seed{seed}.html"
+                render_html(summary, frames, walls, html_path, label)
+                replays[label] = html_path.read_text()
 
     out = build(runs, Path(args.out), replays)
     print(f"dashboard -> {out}  ({len(runs)} runs, {len(replays)} replays)")

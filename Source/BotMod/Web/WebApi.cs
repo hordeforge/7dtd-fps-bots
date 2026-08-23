@@ -33,7 +33,22 @@ namespace BotMod.Web
         public override void HandleRestGet(RequestContext context)
         {
             PrepareEnvelopedResult(out JsonWriter writer);
-            writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "status")));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "status")));
+            }
+            catch (Exception ex)
+            {
+                // Same contract as the POST handler below: full detail to the
+                // server log, generic 500 envelope to the client. Without this
+                // a timed-out or failing status build escapes HandleRestGet
+                // unhandled (dispatch timeouts are expected here: RunOnMain
+                // throws TimeoutException when the main thread is stuck).
+                ModApi.Error("web api status failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
+                SendEmptyResponse(context, HttpStatusCode.InternalServerError, null, "ERROR", null);
+                return;
+            }
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
 

@@ -142,7 +142,14 @@ namespace BotMod.AI
                 outs.StrafeLogit = strafe;
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                // Fallback to heuristic stands (advisory brain), but the failure
+                // must not be silent: record it so `bot neural status` and the
+                // web dashboard's reason field show why evals are falling back.
+                _lastReason = "eval failed: " + ex.GetType().Name + ": " + ex.Message;
+                return false;
+            }
         }
 
         static readonly float[] _scratchX = new float[32];

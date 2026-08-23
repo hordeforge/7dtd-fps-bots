@@ -16,6 +16,7 @@ import csv
 import json
 import os
 import random
+import sys
 import time
 from pathlib import Path
 
@@ -94,7 +95,9 @@ def _next_generation(pop_w, ranked, order, rng, generation, total_gens, stagnant
 def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
     """Held-out score on HELD_SEED under canonical tanh + DEFAULT_FITNESS
     scalarization (the promotion measuring stick). Harness globals are restored
-    afterwards; any failure scores -inf so the run can never promote."""
+    afterwards; any failure scores -inf so the run can never promote — and says
+    why on stderr, so a broken probe is visible instead of silently gating or
+    silently waving every candidate through (-inf >= -inf)."""
     saved = (harness.ACTIVATION, harness.FIT_ELO, harness.FIT_ECON,
              harness.FIT_SURV, harness.FIT_STUCK)
     try:
@@ -105,7 +108,9 @@ def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
         harness.FIT_STUCK = DEFAULT_FITNESS["stuck"]
         return float(np.mean([harness.evaluate(weights, HELD_SEED, m, HELD_SEED)
                               for m in range(matches)]))
-    except Exception:
+    except Exception as ex:
+        print(f"held probe failed ({ex.__class__.__name__}: {ex}); scored -inf",
+              file=sys.stderr)
         return float("-inf")
     finally:
         (harness.ACTIVATION, harness.FIT_ELO, harness.FIT_ECON,
@@ -276,7 +281,10 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             try:
                 current = json.loads(best_path.read_text())
                 current_held = _held_probe(np.array(current["weights"], dtype=float))
-            except Exception:
+            except Exception as ex:
+                print(f"current champion (evolved/best.json) unreadable or unevaluable "
+                      f"({ex.__class__.__name__}: {ex}); promotion gate treats it as unmatched",
+                      file=sys.stderr)
                 current_held = float("-inf")
         if candidate_held >= current_held or current_held == float("-inf"):
             ga.save_best(best_path, best_w, generation=gens - 1, fitness=best_f, config=config)
