@@ -254,14 +254,11 @@ namespace BotMod.Core
         void RetreatToCover(EntityAlive me, World world, BotConfig cfg, BotCharacter ch)
         {
             bool doRetreat;
-            bool neuralDecided = false;
             if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
             {
-                neuralDecided = true;
                 doRetreat = _neuralOuts.WantRetreat;
             }
-            else doRetreat = false;
-            if (!neuralDecided)
+            else
             {
                 float hpFrac = me.Health / System.Math.Max(1f, cfg.BotHealth);
                 doRetreat = hpFrac < 0.35f && ch.SelfPreservation > 0.55f && ch.Aggression < 0.75f;

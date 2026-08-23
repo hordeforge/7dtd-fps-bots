@@ -65,33 +65,19 @@ def _lcg01(s: int):
 
 
 @numba.njit
-def forward_numba(w, x, y):
-    # canonical tanh — what ships (BotNeuralBrain.cs). Sweep relu uses forward_numba_relu.
+def _forward(w, x, y, relu):
+    # Hidden activation per call: tanh is what ships (BotNeuralBrain.cs); relu is
+    # the sweep alternative (harness.ACTIVATION=1 -> simulate_match_relu).
     h = np.empty(HIDDEN, dtype=numba.float32)
     for hi in range(HIDDEN):
         s = w[W1_LEN + hi]
         base = hi * INPUTS
         for i in range(INPUTS):
             s += w[base + i] * x[i]
-        h[hi] = math.tanh(s)
-    base2 = W1_LEN + B1_LEN
-    for o in range(OUTPUTS):
-        s = w[base2 + W2_LEN + o]
-        row = base2 + o * HIDDEN
-        for hi in range(HIDDEN):
-            s += w[row + hi] * h[hi]
-        y[o] = s
-
-
-@numba.njit
-def forward_numba_relu(w, x, y):
-    h = np.empty(HIDDEN, dtype=numba.float32)
-    for hi in range(HIDDEN):
-        s = w[W1_LEN + hi]
-        base = hi * INPUTS
-        for i in range(INPUTS):
-            s += w[base + i] * x[i]
-        h[hi] = s if s > 0 else 0.0
+        if relu:
+            h[hi] = s if s > 0 else 0.0
+        else:
+            h[hi] = math.tanh(s)
     base2 = W1_LEN + B1_LEN
     for o in range(OUTPUTS):
         s = w[base2 + W2_LEN + o]
@@ -201,220 +187,14 @@ def trait_jitter(net_id):
 
 
 @numba.njit
-def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
-    # relu variant of the full tick loop (9792 bytes duplicated to keep njit simple)
-    bx = np.empty(16, dtype=numba.float32)
-    by = np.empty(16, dtype=numba.float32)
-    bhp = np.empty(16, dtype=numba.float32)
-    bweapon = np.empty(16, dtype=numba.int64)
-    bskill = np.empty(16, dtype=numba.float32)
-    balive = np.empty(16, dtype=numba.boolean)
-    zx = np.empty(16, dtype=numba.float32)
-    zy = np.empty(16, dtype=numba.float32)
-    zhp = np.empty(16, dtype=numba.float32)
-    zalive = np.empty(16, dtype=numba.boolean)
-    rng = seed & 0xFFFFFFFF
-    for i in range(n_bots):
-        if spawn_gap > 0.0:
-            # duel arena: fixed separation on a line through the center (deterministic)
-            bx[i] = 40.0 + (spawn_gap * 0.5) * (1.0 if i % 2 == 0 else -1.0)
-            by[i] = 40.0
-        else:
-            v, rng = _lcg01(rng)
-            ang = v * 6.283185307179586
-            v2, rng = _lcg01(rng)
-            rad = 8.0 + v2 * 18.0
-            bx[i] = 40.0 + math.cos(ang) * rad
-            by[i] = 40.0 + math.sin(ang) * rad
-        bhp[i] = 100.0; bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6); bskill[i] = float(bot_skill); balive[i] = True
-    for i in range(n_zombies):
-        v, rng = _lcg01(rng)
-        ang = v * 6.283185307179586
-        v2, rng = _lcg01(rng)
-        rad = 12.0 + v2 * 14.0
-        zx[i] = 40.0 + math.cos(ang) * rad
-        zy[i] = 40.0 + math.sin(ang) * rad
-        zhp[i] = 80.0; zalive[i] = True
-    kills = 0; deaths = 0; damage_dealt = 0.0; damage_taken = 0.0; shots = 0; hits = 0; stuck_ticks = 0; camp_ticks = 0; total_ticks = 0
-    burst_left = np.empty(16, dtype=numba.int64); burst_cd = np.empty(16, dtype=numba.float32); reaction_cd = np.empty(16, dtype=numba.float32); strafe_dir = np.empty(16, dtype=numba.int64)
-    ammo = np.empty(16, dtype=numba.int64); reload_cd = np.empty(16, dtype=numba.float32)
-    reserve = np.empty(16, dtype=numba.int64)  # finite per-match rounds; reload drains it (spams run dry)
-    spread = np.empty(16, dtype=numba.float32)
-    for i in range(n_bots):
-        burst_left[i] = WEAPON_BURST_MIN[bweapon[i]]; burst_cd[i] = 0.0; reaction_cd[i] = 0.0
-        v, rng = _lcg01(rng); strafe_dir[i] = 1 if v > 0.5 else -1
-        ammo[i] = WEAPON_MAG[bweapon[i]]; reserve[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT; spread[i] = 0.0; reload_cd[i] = 0.0
-    last_x = np.empty(16, dtype=numba.float32); last_y = np.empty(16, dtype=numba.float32)
-    for i in range(n_bots):
-        last_x[i] = bx[i]; last_y[i] = by[i]
-    stuck = np.zeros(16, dtype=numba.int64)
-    dt = 0.05
-    env = env_pin if env_pin >= 0 else (seed % 5)
-    y_raw = np.empty(5, dtype=numba.float32); x_obs = np.empty(INPUTS, dtype=numba.float32)
-    use_opp = w_opp is not None
-    if use_opp and n_evolved < 0:
-        n_evolved = n_bots
-    kills_ev = 0; deaths_ev = 0; damage_dealt_ev = 0.0; damage_taken_ev = 0.0; shots_ev = 0; hits_ev = 0
-    for tick in range(max_ticks):
-        alive_bots = 0
-        for i in range(n_bots):
-            if balive[i]: alive_bots += 1
-        # keep going for FFAs; stop when bots dead
-        if alive_bots == 0: break
-        total_ticks += 1
-        for bi in range(n_bots):
-            if not balive[bi]: continue
-            best = -1; best_kind = 0; best_d2 = 1e9; best_d2_true = 1e9; bx0 = bx[bi]; by0 = by[bi]
-            for j in range(n_bots):
-                if j == bi or not balive[j]: continue
-                d2 = (bx[j] - bx0) ** 2 + (by[j] - by0) ** 2
-                if d2 < best_d2: best_d2 = d2; best_d2_true = d2; best = j; best_kind = 0
-            for j in range(n_zombies):
-                if not zalive[j]: continue
-                d2 = (zx[j] - bx0) ** 2 + (zy[j] - by0) ** 2
-                # d2_eff only biases target *selection* toward bots; hit chance,
-                # range gating and obs must see the true distance (sqrt(1.05)
-                # inflation here made zombies ~2.5% farther than they are).
-                d2_eff = d2 * 1.05
-                if d2_eff < best_d2: best_d2 = d2_eff; best_d2_true = d2; best = j; best_kind = 1
-            if best < 0:
-                v, rng = _lcg01(rng); ang = v * 6.283185307179586
-                bx[bi] += math.cos(ang) * 0.4; by[bi] += math.sin(ang) * 0.4
-                continue
-            if best_kind == 0: tx = bx[best]; ty = by[best]; thp = bhp[best]
-            else: tx = zx[best]; ty = zy[best]; thp = zhp[best]
-            dist = math.sqrt(best_d2_true)
-            if env == 0: can_see = los_clear(bx0, by0, tx, ty, WALLS, 3)
-            elif env == 1: can_see = los_clear(bx0, by0, tx, ty, WALLS_CROSS, 4)
-            elif env == 2: can_see = True
-            elif env == 3: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
-            else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
-            x_obs[0] = bhp[bi] / 100.0; x_obs[1] = thp / 100.0; x_obs[2] = min(1.0, dist / 70.0); x_obs[3] = 1.0 if can_see else 0.0; x_obs[4] = spread[bi]; x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0; x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0; x_obs[7] = 0.55 + bskill[bi] * 0.10; x_obs[8] = 0.55 + bskill[bi] * 0.10; x_obs[9] = 0.6; x_obs[10] = 0.5; x_obs[11] = 0.2; x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT))); x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
-            # forward
-            if use_opp and bi >= n_evolved:
-                forward_numba_relu(w_opp, x_obs, y_raw)
-            else:
-                forward_numba_relu(w, x_obs, y_raw)
-            camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4])
-            # movement — policy-driven (deeper sim rework): net controls a 2D
-            # velocity via retreat (forward), strafe_sig (lateral), camp (hold)
-            fwd = 1.2 * (1.0 - 2.0 * retreat)
-            lat = (strafe_sig - 0.5) * 2.4
-            if camp > 0.5 and bhp[bi] > 55 and dist > 18:
-                camp_ticks += 1
-                fwd *= 0.15
-            dx = tx - bx0; dy = ty - by0; d = max(0.001, math.sqrt(dx*dx + dy*dy)); px = -dy / d; py = dx / d
-            vx = fwd * (dx / d) + lat * px; vy = fwd * (dy / d) + lat * py
-            vmag = math.sqrt(vx*vx + vy*vy)
-            if vmag > 1.3:
-                vx *= 1.3 / vmag; vy *= 1.3 / vmag
-            bx[bi] += vx; by[bi] += vy
-            strafe_dir[bi] = 1 if strafe_sig > 0.5 else -1
-            if bx[bi] < 2: bx[bi] = 2
-            if bx[bi] > 78: bx[bi] = 78
-            if by[bi] < 2: by[bi] = 2
-            if by[bi] > 78: by[bi] = 78
-            if abs(bx[bi] - last_x[bi]) < 0.18 and abs(by[bi] - last_y[bi]) < 0.18:
-                stuck[bi] += 1
-                if stuck[bi] > 0: stuck_ticks += 1
-            else: stuck[bi] = 0; last_x[bi] = bx[bi]; last_y[bi] = by[bi]
-            if spread[bi] > 0.0: spread[bi] = max(0.0, spread[bi] - SPREAD_DECAY_PER_SEC * dt)
-            if reaction_cd[bi] > 0: reaction_cd[bi] -= dt
-            if burst_cd[bi] > 0: burst_cd[bi] -= dt
-            if reload_cd[bi] > 0: reload_cd[bi] -= dt
-            if reload_cd[bi] > 0: continue
-            if ammo[bi] <= 0:
-                if reserve[bi] > 0:
-                    reserve[bi] -= WEAPON_MAG[bweapon[bi]]
-                    ammo[bi] = WEAPON_MAG[bweapon[bi]]; reload_cd[bi] = WEAPON_RELOAD[bweapon[bi]]
-                continue  # reserve dry: out of rounds for the rest of the match
-            if not can_see: continue
-            if dist > WEAPON_RANGE[bweapon[bi]] + 2.0: continue
-            # R11: no fire suppression while retreating (policy kites and shoots)
-            if fire_gate < 0.5: continue
-            if reaction_cd[bi] > 0 or burst_cd[bi] > 0: continue
-            shots += 1
-            if not use_opp or bi < n_evolved: shots_ev += 1
-            ammo[bi] -= 1; spread[bi] = min(1.0, spread[bi] + SPREAD_ADD_PER_SHOT); tj = trait_jitter(1000 + bi); hc = skill_hit_chance(bskill[bi], dist, tj); aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15); hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
-            v, rng = _lcg01(rng)
-            if v > hc2:
-                if burst_left[bi] > 0:
-                    burst_left[bi] -= 1
-                    if burst_left[bi] <= 0: burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
-                else: reaction_cd[bi] = 0.28
-                continue
-            hits += 1
-            if not use_opp or bi < n_evolved: hits_ev += 1
-            is_head = False
-            if WEAPON_PELLETS[bweapon[bi]] == 1:
-                v2, rng = _lcg01(rng)
-                if v2 < (0.04 + bskill[bi] * 0.02): is_head = True
-            dmg = WEAPON_DAMAGE[bweapon[bi]]
-            if is_head: dmg = dmg * 2.0
-            damage_dealt += dmg
-            if not use_opp or bi < n_evolved:
-                damage_dealt_ev += dmg
-            if best_kind == 0:
-                bhp[best] -= dmg
-                if not use_opp or best < n_evolved:
-                    damage_taken_ev += dmg
-                if bhp[best] <= 0:
-                    balive[best] = False; deaths += 1; kills += 1
-                    if not use_opp or bi < n_evolved:
-                        kills_ev += 1
-                    if not use_opp or best < n_evolved:
-                        deaths_ev += 1
-            else:
-                zhp[best] -= dmg
-                if zhp[best] <= 0:
-                    zalive[best] = False; kills += 1
-                    if not use_opp or bi < n_evolved:
-                        kills_ev += 1
-            if burst_left[bi] > 0:
-                burst_left[bi] -= 1
-                if burst_left[bi] <= 0: burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
-            else: reaction_cd[bi] = 0.28
-        for zi in range(n_zombies):
-            if not zalive[zi]: continue
-            best_b = -1; best_d2 = 1e9
-            for bi in range(n_bots):
-                if not balive[bi]: continue
-                d2 = (bx[bi] - zx[zi]) ** 2 + (by[bi] - zy[zi]) ** 2
-                if d2 < best_d2: best_d2 = d2; best_b = bi
-            if best_b < 0: continue
-            dx = bx[best_b] - zx[zi]; dy = by[best_b] - zy[zi]; d = math.sqrt(best_d2)
-            if d > 0.01: zx[zi] += dx / d * 0.42; zy[zi] += dy / d * 0.42
-            if d < 2.0:
-                bhp[best_b] -= 10 * dt * 8; damage_taken += 10 * dt * 8
-                if not use_opp or best_b < n_evolved:
-                    damage_taken_ev += 10 * dt * 8
-                if bhp[best_b] <= 0:
-                    balive[best_b] = False; deaths += 1
-                    if not use_opp or best_b < n_evolved:
-                        deaths_ev += 1
-            if zx[zi] < 2: zx[zi] = 2
-            if zx[zi] > 78: zx[zi] = 78
-            if zy[zi] < 2: zy[zi] = 2
-            if zy[zi] > 78: zy[zi] = 78
-        # second pass for zombie melee kills (kept inline above got folded; do proper)
-        # (rely on already decremented bhp)
-    elo = float(kills) - float(deaths)
-    econ = 0.0
-    if damage_taken > 1e-6: econ = damage_dealt / damage_taken
-    else: econ = damage_dealt / 10.0
-    if shots > 0: econ -= 0.05 * shots / (hits + 1)
-    survival = float(total_ticks) / float(max_ticks)
-    stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
-    camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
-    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits, kills_ev, deaths_ev, damage_dealt_ev, damage_taken_ev, shots_ev, hits_ev
-
-
-@numba.njit
-def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
+def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp, n_evolved,
+              spawn_gap, env_pin, wep_pin, relu):
     """One headless match. Returns a struct of stats for fitness.
     w is flat. We simulate n_bots evolved bots vs each other + zombies.
     For PvP zombie tests the harness calls this with different (n_bots, n_zombies)
     compositions; fitness aggregates across arenas in harness.py.
+    `relu` picks the hidden activation: False = tanh (canonical, what ships),
+    True = relu (activation sweeps; harness.ACTIVATION selects the wrapper).
     """
     # state arrays (stack allocated)
     bx = np.empty(16, dtype=numba.float32)
@@ -470,20 +250,20 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
     burst_cd = np.empty(16, dtype=numba.float32)
     reaction_cd = np.empty(16, dtype=numba.float32)
     strafe_dir = np.empty(16, dtype=numba.int64)
-    ammo2 = np.empty(16, dtype=numba.int64)
-    reload_cd2 = np.empty(16, dtype=numba.float32)
-    reserve2 = np.empty(16, dtype=numba.int64)
-    spread2 = np.empty(16, dtype=numba.float32)
+    ammo = np.empty(16, dtype=numba.int64)
+    reload_cd = np.empty(16, dtype=numba.float32)
+    reserve = np.empty(16, dtype=numba.int64)
+    spread = np.empty(16, dtype=numba.float32)
     for i in range(n_bots):
         burst_left[i] = WEAPON_BURST_MIN[bweapon[i]]
         burst_cd[i] = 0.0
         reaction_cd[i] = 0.0
         v, rng = _lcg01(rng)
         strafe_dir[i] = 1 if v > 0.5 else -1
-        ammo2[i] = WEAPON_MAG[bweapon[i]]
-        reserve2[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT
-        spread2[i] = 0.0
-        reload_cd2[i] = 0.0
+        ammo[i] = WEAPON_MAG[bweapon[i]]
+        reserve[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT
+        spread[i] = 0.0
+        reload_cd[i] = 0.0
     last_x = np.empty(16, dtype=numba.float32)
     last_y = np.empty(16, dtype=numba.float32)
     for i in range(n_bots):
@@ -560,7 +340,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             x_obs[1] = thp / 100.0
             x_obs[2] = min(1.0, dist / 70.0)
             x_obs[3] = 1.0 if can_see else 0.0
-            x_obs[4] = spread2[bi]  # fire spread 0..1 (was loseTimer placeholder)
+            x_obs[4] = spread[bi]  # fire spread 0..1 (was loseTimer placeholder)
             x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0
             x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0
             # aim acc/skill derived from weapon + skill
@@ -569,14 +349,14 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             x_obs[9] = 0.6   # aggr
             x_obs[10] = 0.5  # selfPres
             x_obs[11] = 0.2  # camper
-            x_obs[12] = min(1.0, (ammo2[bi] + reserve2[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (was vel placeholder)
+            x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (was vel placeholder)
             x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
 
             # forward
             if use_opp and bi >= n_evolved:
-                forward_numba(w_opp, x_obs, y_raw)
+                _forward(w_opp, x_obs, y_raw, relu)
             else:
-                forward_numba(w, x_obs, y_raw)
+                _forward(w, x_obs, y_raw, relu)
             camp = sigmoid(y_raw[0])
             retreat = sigmoid(y_raw[1])
             aim_raw = math.tanh(y_raw[2])
@@ -617,21 +397,21 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
                 last_x[bi] = bx[bi]; last_y[bi] = by[bi]
 
             # shooting
-            if spread2[bi] > 0.0:
-                spread2[bi] = max(0.0, spread2[bi] - SPREAD_DECAY_PER_SEC * dt)
+            if spread[bi] > 0.0:
+                spread[bi] = max(0.0, spread[bi] - SPREAD_DECAY_PER_SEC * dt)
             if reaction_cd[bi] > 0:
                 reaction_cd[bi] -= dt
             if burst_cd[bi] > 0:
                 burst_cd[bi] -= dt
-            if reload_cd2[bi] > 0:
-                reload_cd2[bi] -= dt
-            if reload_cd2[bi] > 0:
+            if reload_cd[bi] > 0:
+                reload_cd[bi] -= dt
+            if reload_cd[bi] > 0:
                 continue
-            if ammo2[bi] <= 0:
-                if reserve2[bi] > 0:
-                    reserve2[bi] -= WEAPON_MAG[bweapon[bi]]
-                    ammo2[bi] = WEAPON_MAG[bweapon[bi]]
-                    reload_cd2[bi] = WEAPON_RELOAD[bweapon[bi]]
+            if ammo[bi] <= 0:
+                if reserve[bi] > 0:
+                    reserve[bi] -= WEAPON_MAG[bweapon[bi]]
+                    ammo[bi] = WEAPON_MAG[bweapon[bi]]
+                    reload_cd[bi] = WEAPON_RELOAD[bweapon[bi]]
                 continue  # reserve dry: out of rounds for the rest of the match
             if not can_see:
                 continue
@@ -647,8 +427,8 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             shots += 1
             if not use_opp or bi < n_evolved:
                 shots_ev += 1
-            ammo2[bi] -= 1
-            spread2[bi] = min(1.0, spread2[bi] + SPREAD_ADD_PER_SHOT)
+            ammo[bi] -= 1
+            spread[bi] = min(1.0, spread[bi] + SPREAD_ADD_PER_SHOT)
             # aim bias: small skill-scaled miss rotates hit chance
             # trait jitter per bot id
             tj = trait_jitter(1000 + bi)
@@ -657,7 +437,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             # crazy good nets learn to keep |aim_raw| tiny under fire
             aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15)
             # sniper gets little penalty, shotgun more forgiving
-            hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread2[bi] * SPREAD_HIT_PENALTY)
+            hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
             v, rng = _lcg01(rng)
             if v > hc2:
                 # miss — still burns burst
@@ -763,3 +543,17 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
     stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
     camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
     return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits, kills_ev, deaths_ev, damage_dealt_ev, damage_taken_ev, shots_ev, hits_ev
+
+
+def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+                   w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
+    """Canonical tanh sim (what ships). See _simulate."""
+    return _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+                     w_opp, n_evolved, spawn_gap, env_pin, wep_pin, False)
+
+
+def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+                        w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
+    """Relu-hidden variant for activation sweeps. See _simulate."""
+    return _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+                     w_opp, n_evolved, spawn_gap, env_pin, wep_pin, True)

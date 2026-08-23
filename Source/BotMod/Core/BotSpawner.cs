@@ -33,7 +33,7 @@ namespace BotMod.Core
         public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride = null)
         {
             string pick = gunOverride ?? cfg.BotWeapon;
-            if (pick != null && pick != "mixed" && !string.IsNullOrEmpty(pick))
+            if (!string.IsNullOrEmpty(pick) && pick != "mixed")
                 return WeaponProfile.ForGun(pick, cfg);
             string gun = cfg.LoadoutPool[RngPick(cfg.LoadoutPool.Length)];
             return WeaponProfile.ForGun(gun, cfg);
