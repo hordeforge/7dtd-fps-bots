@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot fitness.csv + Pareto scatter."""
+"""Plot fitness.csv (best/mean fitness per generation)."""
 
 from __future__ import annotations
 

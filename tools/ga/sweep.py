@@ -31,7 +31,7 @@ def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
     """One evolution with `hidden` and `activation` ('tanh' or 'relu').
 
     Note: combat_sim is the real fitness — ga.forward is NOT used by the
-    numba harness. We must flip combat_sim._ACTIVATION (and keep HIDDEN==16
+    numba harness. We must flip harness.ACTIVATION (and keep HIDDEN==16
     for now — non-16 sweeps still require a recompile; we score them via
     placeholder until that lands).
     """

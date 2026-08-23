@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Offline neuroevolution loop — phase R0/R1.
+"""Offline neuroevolution loop (docs/research/03-genetic-algorithm.md,
+04-training-pipeline.md).
 
 Usage:
   python tools/ga/evolve.py --pop 32 --gens 40 --seed 42

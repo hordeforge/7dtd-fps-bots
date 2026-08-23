@@ -35,7 +35,7 @@ namespace BotMod.Commands
             "Examples:\n" +
             "  bot spawn 4                      - 4 mixed-loadout bots at DM spawnpoints\n" +
             "  bot spawn 1 -1200.5 300          - 1 bot near x=-1200.5 z=300 (dot-decimal coords)\n" +
-            "  bot player Kira 3 gunMGT1AK47    - 3 AK bots near Kira (12-30m, out-of-sight preferred)\n" +
+            "  bot player Kira 3 gunMGT1AK47    - 3 AK bots near Kira (out-of-sight preferred, ~22m ideal)\n" +
             "  bot vs bot off                   - bots stop shooting each other";
 
         static readonly string[] Subcommands =

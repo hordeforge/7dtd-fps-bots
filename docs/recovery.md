@@ -9,17 +9,20 @@ back. Everything here is derived from code and scripts in this repo
 
 | State | Lives where | Mutable at runtime? | Survives |
 |---|---|---|---|
-| Operator config | `<dedi>/Mods/BotMod/Config/botmod.json` (+ `.bak`) | yes: dashboard actions and console persists write it live (`ModApi.PersistConfigField`: `Enabled`, `BotVsBot/Zombie/Player`, `BotTeam`, `BotTeamCount`, `TeamAssignments`) | reinstalls (install.sh preserves it), torn/corrupt writes (.bak fallback in `BotConfig.Load`). Does NOT survive instance/disk loss or `make uninstall`. |
+| Operator config | `<dedi>/Mods/BotMod/Config/botmod.json` (+ `.bak`) | yes: dashboard actions and console persists write it live (`ModApi.PersistConfigField`: `Enabled`, `TargetBotCount`, `Difficulty`, `BotWeapon`, `UseNeuralBrain`, `BotVsBot/Zombie/Player`, `BotTeam`, `BotTeamCount`, `TeamAssignments`) | reinstalls (install.sh preserves it), torn/corrupt writes (.bak fallback in `BotConfig.Load`). Does NOT survive instance/disk loss or `make uninstall`. |
 | Champion weights | `evolved/best.json` + `best.meta.json` | no (mod reads only; promotion is a git commit per `evolved/README.md`) | anything short of losing git remote + all clones |
 | Default config template | repo `config/botmod.json`, shipped fresh on every build/install | no | git |
 | Training-run artifacts | `evolved/runs/<ts>/` | written by tools/ga during training | nothing (git-ignored by design); reproducible only by re-running training (seeds are in the dir names; runs cost up to days, see docs/research REPORTs). Mitigate by promoting champions to git. |
 | Scoreboard, idempotency ledger | process memory | yes | nothing (by design: restart resets scores; ledger only dedups retries inside a 10 min window) |
 | Game world / player saves | dedicated server data dirs | yes | out of scope here: owned by the 7DTD dedicated server itself, not this mod |
 
-Session-only knobs are acknowledged but deliberately not persisted and reset on
-restart: `bot count`, `bot weapon`, and `skill` (console and web API set
-Difficulty in memory only). Re-apply after restart or edit `botmod.json`
-directly and `bot reload`.
+Every admin mutation persists: `bot count`, `bot skill`, `bot weapon`,
+`bot enable|disable`, `bot neural on/off`, `bot vs ...`, `bot team ...`,
+`bot teams`, and the web API equivalents each write their key back to
+`Config/botmod.json`. Deliberately not persisted: the live bots themselves
+(respawned to `TargetBotCount` on start) and a one-off
+`bot neural reload <path>` argument (only the configured
+`BotNeuralWeightPath` reloads automatically).
 
 ## Disasters and what they cost
 

@@ -32,7 +32,7 @@ Source/BotMod/AI/BotNeuralBrain.cs
 
 | Symbol | Purpose |
 |---|---|
-| `static bool TryLoad(string path, out string reason)` | Reads `evolved/best.json` + `best.meta.json`, validates shape, populates `Weights` + `ConfigHash`. Called on `OnGameStartDone` and `bot reload`. |
+| `static bool TryLoad(string path, out string reason)` | Reads one weights JSON (`evolved/best.json` by default; `best.meta.json` is trainer-side bookkeeping the mod never reads), validates version/inputs/shape/finite weights, keeps `LoadedHash` from the file's own `configHash`. Runs on world start when `UseNeuralBrain=true`, plus `bot neural on|reload [path]` and the web `neural` action. |
 | `static bool Loaded` | Whether a valid model is in memory |
 | `static bool TryEval(in NeuralInputs obs, out NeuralOutputs outs)` | 325-float forward pass, handwritten loops, no allocs on tick; returns false (caller falls back) when not loaded or on any internal error |
 | `struct NeuralInputs` | 14 floats matching `01` §2, normalized already |

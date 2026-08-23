@@ -6,7 +6,7 @@ using Newtonsoft.Json.Linq;
 namespace BotMod.AI
 {
     /// <summary>
-    /// Advisory neural brain for phase R0..R4 of the neuroevolution research
+    /// Advisory neural brain for the neuroevolution research
     /// (docs/research/00..06). Pure math only — no RNG, no allocs on tick,
     /// no framework. Handwritten forward pass with Tanh hidden and mixed
     /// output heads. When no model is loaded or the flag is off, callers fall

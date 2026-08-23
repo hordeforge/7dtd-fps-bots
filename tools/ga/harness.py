@@ -57,11 +57,12 @@ def _skill_for_match(m: int) -> int:
 
 
 def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42) -> float:
-    """One genome, 9 deterministic matches across 3 arenas.
+    """One genome over the deterministic arena set: 9 configs x two seed
+    streams x DRAWS_PER_CONFIG draws each (36 sims at the defaults).
     Returns scalarized fitness (higher is better).
 
     R1: dual-seed averaging (run_seed and run_seed ^ GOLDEN) to punish
-    single-seed overfit; mean over 18 sims but still cheap (numba).
+    single-seed overfit.
     Curriculum gates the mix: pvp_first emphasizes duels early, horde_first
     emphasizes horde (set by evolve.py per gen, default mixed).
     """

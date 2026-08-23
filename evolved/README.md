@@ -15,7 +15,9 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 
 - Weights order is canonical: `W1 row-maj(16×14) | b1(16) | W2 row-maj(5×16) | b2(5)` — see `docs/research/01` §4 and `Source/BotMod/AI/BotNeuralBrain.cs`.
 - JSON version field must match the loader's `kVersion`; mismatch → fallback to heuristic.
-- The mod never writes here at runtime; only `bot neural reload` re-reads `best.json` if `UseNeuralBrain=true`.
+- The mod never writes here at runtime. It reads `best.json` when
+  `UseNeuralBrain=true`: at world start (`ModApi.OnGameStartDone`) and on
+  demand via `bot neural on|reload [path]` or the web API's `neural` action.
 
 ## How to promote a new champion
 

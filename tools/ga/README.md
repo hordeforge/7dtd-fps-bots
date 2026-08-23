@@ -25,7 +25,7 @@ tools/ga/
                          traces -> cloned net)
   sweep.py               net-layout sweeps (writes tools/ga/sweeps/)
   fitness_sweep.py       scalarization-weight sweep over harness.FIT_*
-  plot.py                fitness.csv -> plot.png + Pareto scatter
+  plot.py                fitness.csv -> plot.png (best/mean per generation)
   replay.py              match recorder + HTML renderer
   viz.py                 network diagram rendering
   report.py              per-run report.html generator

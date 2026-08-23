@@ -36,9 +36,10 @@ SPREAD_ADD_PER_SHOT = 0.25           # spread added per shot fired
 SPREAD_DECAY_PER_SEC = 1.0           # spread recovered per second of pause
 SPREAD_HIT_PENALTY = 0.75            # hit-chance loss at full spread (1.0)
 
-# Flat params — HIDDEN is the canonical clanker size (16). For sweeps we keep
-# these as *runtime* values via _HIDDEN/_W1_LEN etc, but the default layout
-# that ships in BotNeuralBrain.cs is still 14->16->5 (W=325).
+# Canonical layout — baked into the njit kernels below as compile-time
+# literals, so sizes are NOT runtime-swappable (sweep.py therefore only wires
+# H16 tanh/relu and skips everything else). The 14→16→5 shape (W=325) is what
+# ships in BotNeuralBrain.cs.
 INPUTS = 14
 HIDDEN = 16
 OUTPUTS = 5
@@ -46,8 +47,8 @@ W1_LEN = HIDDEN * INPUTS
 B1_LEN = HIDDEN
 W2_LEN = OUTPUTS * HIDDEN
 W_ALL = W1_LEN + B1_LEN + W2_LEN + 5
-# dispatch table for activation (set by harness/sweep). Keep canonical tanh.
-# We keep _ACTIVATION at 0 but harness picks the njit via explicit call.
+# Activation is selected per call, not via a module flag: harness.ACTIVATION
+# picks simulate_match (tanh, what ships) or simulate_match_relu (sweeps).
 _WALL_SET = 0
 _LAYOUT_TAG = "H16-tanh"
 

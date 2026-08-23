@@ -8,9 +8,9 @@ Server-side mod that spawns real FPS bots in 7 Days to Die dedicated servers. Na
 
 - Keeps `TargetBotCount` bots alive (auto-respawns one per second).
 - Each bot bodies up as a **zombie soldier** (`BotEntityClass=mixed` pins the `zombieSoldier` class; the dedi rejects custom SDCS/Npc/Bandit appends with a negative EntityClass id and mod-spawned trader bodies render nothing, so soldiers are the working visible FPS bodies). Bots hold and fire real ranged weapons.
-- Weapons from `BotWeapon=mixed` → random from `LoadoutPool` (pistol/shotgun/AK/sniper/auto-shotgun/SMG) with per-weapon `WeaponProfile` (fire rate, burst 2-9, spread, damage, effective range, pellets).
+- Weapons from `BotWeapon=mixed` → random from `LoadoutPool` (pistol/shotgun/AK/sniper/auto-shotgun/SMG) with per-weapon `WeaponProfile` (fire rate, burst 1-9, spread, damage, effective range, pellets).
 - FPS combat loop (docs/research/00..06): wide `VisionAngle` cone → `Physics.Raycast` + voxel LOS → leading aim (velocity prediction) → burst fire with reaction delay; pellets/headshots via `DamageSourceEntity`.
-- **FPS tactics**: active combat-seeking when idle (hunt nearest enemy), weapon-range standoff (snipers hold ~73m, shotguns close), squad flanking (split around shared target), cover-advance (peek from cover while chasing), instant target re-acquisition after a kill, finish-the-kill (commit when the enemy is critically wounded), wounded-target priority.
+- **FPS tactics**: active combat-seeking when idle (hunt nearest enemy), weapon-range standoff (snipers work out to their ~70m effective range and backpedal inside ~24m, shotguns close), squad flanking (split around shared target), cover-advance (peek from cover while chasing), instant target re-acquisition after a kill, finish-the-kill (commit when the enemy is critically wounded), wounded-target priority.
 - **Neural controller** (optional `UseNeuralBrain`): a GA-evolved `14→16→5` net drives aim-bias/fire/strafe/retreat in every engagement when `evolved/best.json` is loaded (see `tools/ga/`). Heuristic is the fallback.
 - Movement: `MoveEntityHeaded` with a manual-position fallback for trader bodies (trader motors ignore the call), continuous `Strafe`/`Backpedal` circling in `Attack`, dodge on hit, unstuck jump.
 - DM spawns: reads `Data/Worlds/<World>/spawnpoints.xml` (far-from-players farthest spawn, bot/bot avoidance), falls back to radius jitter near spawn point.
@@ -36,8 +36,9 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 - Enable / disable bots (persists to the config, applies live)
 - Spawn N bots / remove all
 - **Spawn near player**: pick an online player (dropdown fed by the API) +
-  count + optional weapon -> bots spawn 12-30m from that player, out-of-sight
-  preferred (same path as `bot player <name>`)
+  count + optional weapon -> bots spawn near that player, out-of-sight
+  preferred (11-42m via DM spawnpoints with a ~22m sweet spot, else a 14-30m
+  ring; same path as `bot player <name>`)
 - Toggle **static AI vs GA brain** (`bot neural on/off`, reloads the weights)
 - **Squad mode** (`bot team on/off`): all bots become one team and never
   target/damage each other (players/zombies still fair game)
@@ -54,8 +55,10 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 
 API: authenticated `GET /api/bot` (status + online `players` list +
 scoreboard), `POST /api/bot` with
-`{"action":"enable|disable|spawn|spawnNear|remove|neural|team|vs|setTeam|teamCount|clearTeams", ...}`
-(permission level 0). `spawnNear` takes
+`{"action":"enable|disable|spawn|spawnNear|remove|removeOne|neural|team|vs|setTeam|teamCount|clearTeams", ...}`
+(permission level 0). `removeOne` takes
+`{"action":"removeOne","entityId":N}` and removes that single bot.
+`spawnNear` takes
 `{"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}`
 and responds `{"spawned":N,"found":bool,"player":"<name>"}`. `team` takes
 `{"action":"team","on":bool}`; `vs` takes
@@ -72,7 +75,7 @@ bot help
 bot status            # config + alive (class/weapon/diff/vision/attack/BotVs)
 bot list              # id, weapon, state, pos, target, hp, burst
 bot spawn [n] [x z] [weapon] | bot player <name|id> [n] [weapon]  # e.g. bot spawn 2 gunShotgunT1DoubleBarrel
-bot player Kira              # 1 bot near Kira (12-30m, out-of-sight preferred)
+bot player Kira              # 1 bot near Kira (out-of-sight preferred, ~22m ideal)
 bot player Kira 3 gunMGT1AK47 # 3 AK bots near Kira
 bot player me               # from in-game console, spawns near you
 # note: test/LiteNetLib clients (loadgen bots) have an empty EntityName - match

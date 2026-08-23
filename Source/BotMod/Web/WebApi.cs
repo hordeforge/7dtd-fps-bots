@@ -126,8 +126,9 @@ namespace BotMod.Web
                     case "spawnnear":
                         {
                             // {"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}
-                            // Same path as `bot player <name>`: bots spawn 12-30m
-                            // from the target player (out-of-sight preferred).
+                            // Same path as `bot player <name>`: bots spawn near the
+                            // target player, out-of-sight preferred (11-42m via DM
+                            // spawnpoints with a ~22m sweet spot, else a 14-30m ring).
                             string ident = GetString(_jsonInput, "player");
                             int count = Math.Max(1, Math.Min(16, GetInt(_jsonInput, "count", 1)));
                             string weapon = null;
