@@ -250,8 +250,16 @@ namespace BotMod.Config
                 }
                 TeamAssignments = canonical;
             }
-            if (BotNames == null || BotNames.Length == 0) BotNames = new[] { "Bot" };
-            if (LoadoutPool == null || LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };
+            // Drop null/empty entries first (hand-edited JSON tolerates them,
+            // e.g. "LoadoutPool": ["gunHandgunT1Pistol", null]): left in,
+            // ForGun's mixed pick dereferences null (ToLowerInvariant) and
+            // every mixed spawn - including the auto-respawn loop - throws
+            // every second; PickName mints tagless "_NN" names. Then apply
+            // the documented default when nothing survives the filter.
+            BotNames = WithoutEmptyEntries(BotNames);
+            if (BotNames.Length == 0) BotNames = new[] { "Bot" };
+            LoadoutPool = WithoutEmptyEntries(LoadoutPool);
+            if (LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };
             // Apply difficulty preset over tunables that weren't hand-tweaked far from defaults
             ApplyDifficulty();
             // The preset can raise VisionRange after the relational clamps
@@ -260,6 +268,17 @@ namespace BotMod.Config
             LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, LoseTargetRange));
             AttackRange = Math.Max(3f, Math.Min(VisionRange, AttackRange));
         }
+        /// <summary>Copy of <paramref name="items"/> without null or empty
+        /// entries. Never returns null; an empty result means "everything was
+        /// dropped" and the caller applies its documented fallback.</summary>
+        static string[] WithoutEmptyEntries(string[] items)
+        {
+            if (items == null || items.Length == 0) return new string[0];
+            var kept = new List<string>(items.Length);
+            foreach (string s in items) if (!string.IsNullOrEmpty(s)) kept.Add(s);
+            return kept.ToArray();
+        }
+
         void ApplyDifficulty()
         {
             // Higher diff = tighter aim, faster reaction, tighter bursts, wider engagement

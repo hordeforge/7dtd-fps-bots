@@ -49,6 +49,15 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 
 ## 3. Action heads (5 out)
 
+> Status (2026-08-21, R10/R12): outputs stay advisory but their live use moved.
+> `retreatLogit`, `fireGate` and `aimBiasYaw` work as tabled below
+> (`Bot.cs` retreat gate / `TryShootBurst` / aim window). `campLogit` no longer
+> replaces the idle `WantsToCamp` roll (idle camping stays heuristic); it damps
+> forward movement to 15% when healthy and far in `AttackInRange`. `strafeDir`
+> survives as the sign head, but since R10 the continuous strafe/retreat logits
+> also compose the bot's 2D velocity (`BotBrain.MoveDir`, Q3 fallback kept) —
+> see REPORT-2026-08-21-R10 and `05-integration.md` §2.
+
 | # | Output | Interpretation | Host clamp |
 |---|---|---|---|
 | 0 | `campLogit` | Sigmoid → `wantCamp` (replaces `WantsToCamp` roll) | Threshold 0.5; still needs `DecideGoal==Camp` |
@@ -91,6 +100,11 @@ If we want *gradient-free but smoother* than GA, OpenAI-ES (Salimans et al. 2017
 - Evaluation harness seeds every match from `generation × genomeIdx × matchIdx` via the same LCG tap (`2654435761 / 1103515245`). Same genome → same record → same fitness. This is what makes evolution stable and debuggable.
 
 ## 6. Warm-start (behavioral cloning from heuristic)
+
+> Status (2026-08-24): not implemented as described. `ga.clone_heuristic`
+> is a stub: generation 0 = He init + σ=0.02 jitter (the R1-R12 runs all
+> started from random weights and still beat the heuristic). Trace-based
+> fitting below remains the design target.
 
 Random weights in generation 0 waste evaluations. Instead:
 

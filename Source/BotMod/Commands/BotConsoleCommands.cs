@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using BotMod.Core;
 using UnityEngine;
 
@@ -105,8 +106,29 @@ namespace BotMod.Commands
         }
         void DoRemove(List<string> p)
         {
-            if (p.Count >= 2 && p[1].ToLowerInvariant() == "all") { int n = BotManager.Instance.RemoveAllBots("command"); SdtdConsole.Instance.Output($"Removed {n} bots."); return; }
-            if (p.Count >= 2 && int.TryParse(p[1], out int id)) { bool ok = BotManager.Instance.RemoveBot(id); SdtdConsole.Instance.Output(ok ? $"Removed bot {id}." : $"No bot with id {id}. Try: bot list"); return; }
+            // Documented grammar (see `bot help`): bot remove all | bot remove
+            // <id>. Bare `bot remove` keeps its remove-all shortcut; any other
+            // token is a named usage error - a typo like `bot remove al` must
+            // not silently wipe every live bot. Invariant parse: entity ids are
+            // protocol tokens, not locale text.
+            if (p.Count >= 2)
+            {
+                string arg = p[1];
+                if (arg.Equals("all", StringComparison.OrdinalIgnoreCase))
+                {
+                    int n = BotManager.Instance.RemoveAllBots("command");
+                    SdtdConsole.Instance.Output($"Removed {n} bots.");
+                    return;
+                }
+                if (int.TryParse(arg, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
+                {
+                    bool ok = BotManager.Instance.RemoveBot(id);
+                    SdtdConsole.Instance.Output(ok ? $"Removed bot {id}." : $"No bot with id {id}. Try: bot list");
+                    return;
+                }
+                SdtdConsole.Instance.Output($"Unrecognized argument '{arg}'.\n  Usage: bot remove all | bot remove <id>");
+                return;
+            }
             int n2 = BotManager.Instance.RemoveAllBots("command"); SdtdConsole.Instance.Output($"Removed {n2} bots.");
         }
         void DoCount(List<string> p)

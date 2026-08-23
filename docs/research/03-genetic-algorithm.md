@@ -63,19 +63,24 @@ Evolution collapses fast on small arenas. Countermeasures (cheap, deterministic)
 | Tournament size | kt | 3 | 2..5 |
 | Crossover prob | pc | 0.6 | 0.4..0.8 |
 | Gaussian σ (base) | σ | 0.05 | 0.02..0.10 |
-| Sparse reset prob | ps | 0.10 | 0.05..0.20 |
+| Sparse reset prob | ps | 0.14 (0.22 stagnant, per `ga.py::mutate`) | 0.05..0.22 |
 | Hall-of-Fame size | H | 8 | 4..16 |
 | Matches per genome | F | 36 train = dual-seed x2 draws over the 9-arena config mix (R9 draw regularization); eval gate pins F=18 | cost tradeoff |
 | Generations (run) | G | 40 (`evolve.py --gens`) | 40..400 in practice |
-| NEAT trigger: plateau gens | Gplat | 15 | 10..30 |
+| Stagnation burst trigger | plateau | 8 gens with no best improvement > 1e-6 (`evolve.py`: `stagnant = plateau >= 8`); fires the explorer burst, not NEAT | 5..15 |
+| NEAT trigger: plateau gens | Gplat | not implemented (NEAT is §2.4 phase 2) | n/a |
 
 Sweeping should touch at most 2 knobs per experiment; evolution is slow to evaluate so factorial sweeps are wasteful. Log every run; `evolved/runs/<ts>/config.json` freezes the table so results are reproducible.
 
 ## 5. Seeding and generation count
 
 - **Generation 0:** behavior-cloned net + σ=0.02 jitter (see `01` §6). One exact clone is the initial champion.
-- **Generations 1..G:** full loop. Checkpoint every generation (`best.json` overwritten + `gen_*.json` retained for the top 3).
-- **Early stop:** if best fitness is flat (no improvement > 0.005 norm units) for `Gplat` generations, stop or enter NEAT phase. Never run unbounded.
+- **Generations 1..G:** full loop. Checkpoints: `gen_*.json` (top 3) is written
+  when the generation improved on the best-so-far, not unconditionally;
+  `fitness.csv` is appended every generation.
+- **Early stop:** not implemented. `evolve.py` always runs to `--gens`; a flat
+  best (`plateau >= 8`, improvement ≤ 1e-6) only fires the explorer burst
+  (§2.3 stagnation arm). NEAT entry (§2.4) remains future work.
 - **Reruns:** a run can be replayed from `gen_*.json` + the fitness seeds; determinism means rerunning the same config replays the same learning curve.
 
 ## 6. Flat-float vs framework

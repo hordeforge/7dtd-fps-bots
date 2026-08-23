@@ -81,7 +81,8 @@ Binary blob (`Float32LE`) is also accepted as `best.bin` for smaller IO, but JSO
 | `bot neural reload` | console command | Re-reads `best.json` without restarting the server |
 | `bot neural off/on` | admin | Toggles flag live; useful for blind tests |
 
-If `TryLoad` fails (missing file, short array, `configHash` mismatch, `version` unknown), the mod does:
+If `TryLoad` fails (missing file, short array, weight count or NaN/Inf, unknown
+`version`) the mod does:
 
 ```csharp
 ModApi.Log("BotNeuralBrain: no valid model (" + reason + "), using heuristic.");
@@ -89,6 +90,10 @@ _active = false; // tick sees Loaded==false
 ```
 
 No exception propagates to `Bot.Tick`.
+
+> The file's `configHash` never affects loadability (`BotNeuralBrainFuzzTests`
+> pins this): it is recorded into `LoadedHash` and shown by `bot neural status`,
+> but a mismatch with the current hyperparam table does not reject the file.
 
 ## 5. Per-bot own trick: no cross-bot state
 

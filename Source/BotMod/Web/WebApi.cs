@@ -134,8 +134,16 @@ namespace BotMod.Web
                             string weapon = null;
                             {
                                 string wv = GetString(_jsonInput, "weapon");
-                                if (!string.IsNullOrEmpty(wv) && (wv.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || wv == "mixed"))
+                                if (!string.IsNullOrEmpty(wv))
+                                {
+                                    // Same grammar as `bot player <name> [count]
+                                    // [weapon]` (BotArgParser.LooksLikeWeapon): an
+                                    // off-grammar id used to be dropped silently and
+                                    // the bots spawned with random loadouts instead
+                                    // of the requested one.
+                                    if (!BotMod.Commands.BotArgParser.LooksLikeWeapon(wv)) { errorCode = "INVALID_WEAPON"; break; }
                                     weapon = wv;
+                                }
                             }
                             var r = RunOnMain(() =>
                             {
