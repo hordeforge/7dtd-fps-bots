@@ -9,7 +9,11 @@
     "outDir": ".",
     "rootDir": ".",
     "sourceMap": false,
-    "removeComments": false
+    // Comments stay out of the shipped artifact: the stock webserver serves
+    // bundle.js uncompressed (see scripts/lint-webui.sh wire budget), so
+    // every source comment is wire cost on each dashboard load. Read
+    // bundle.ts for the annotated source.
+    "removeComments": true
   },
   "files": ["bundle.ts"]
 }

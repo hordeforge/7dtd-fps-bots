@@ -547,7 +547,10 @@ function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, 
 function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
   const h = React.createElement;
 
-  // Stop polling after the first auth failure instead of hammering the API.
+  // Stop polling on auth rejection instead of hammering the API. Any other
+  // failure (server restart, network blip) keeps polling so the panel
+  // recovers by itself; blocking on those froze the dashboard on stale data
+  // until a manual reload.
   const [blocked, setBlocked] = React.useState(false);
   const query = useQuery("botmod-status", (): Promise<unknown> => HTTP.get("/api/bot"), {
     refetchInterval: POLL_INTERVAL_MS,
@@ -555,10 +558,11 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
     retry: false
   });
   React.useEffect((): void => {
-    if (query.isError === true) {
+    const status = num(query.error?.response?.status);
+    if (query.isError === true && (status === 401 || status === 403)) {
       setBlocked(true);
     }
-  }, [query.isError]);
+  }, [query.isError, query.error]);
   const [busy, setBusy] = React.useState("");
   const [spawnCount, setSpawnCount] = React.useState("2");
   const [nearPlayer, setNearPlayer] = React.useState("");
