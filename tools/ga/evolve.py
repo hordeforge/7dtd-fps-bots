@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
@@ -30,6 +31,15 @@ DEFAULT_FITNESS = {"elo": 0.55, "econ": 0.25, "survival": 0.15, "stuck": 0.05}
 # measuring stick (see docs/research/04).
 HELD_SEED = 999
 HELD_MATCHES = 40
+
+
+def _synthetic_fitness(w) -> float:
+    """Deterministic pseudo-fitness from genome bytes (--dry-run stub, per the
+    CLI help: "synthetic fitness stub (no sim)"). Exercises selection,
+    checkpoints and the CSV without touching the numba sim; higher bits of a
+    genome hash give stable, spread-out scores."""
+    digest = hashlib.sha256(np.asarray(w, dtype=np.float32).tobytes()).digest()
+    return -1.0 + 2.0 * int.from_bytes(digest[:4], "little") / 0xFFFFFFFF
 
 
 def _load_resume(resume: str, seed: int, pop: int):
@@ -186,13 +196,16 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
 
             # island eval: each island evaluates its subpop, global best is over all islands
             if islands == 1:
-                fitness = harness.evaluate_population(island_pops[0], g, seed)
+                fitness = ([_synthetic_fitness(w) for w in island_pops[0]] if dry_run
+                           else harness.evaluate_population(island_pops[0], g, seed))
                 all_fitness = fitness
                 all_pops_flat = island_pops[0]
             else:
                 island_fitness: list[list[float]] = []
                 for ii, ip in enumerate(island_pops):
-                    island_fitness.append(harness.evaluate_population(ip, g, seed ^ (ii * 7919)))
+                    fit = ([_synthetic_fitness(w) for w in ip] if dry_run
+                           else harness.evaluate_population(ip, g, seed ^ (ii * 7919)))
+                    island_fitness.append(fit)
                 all_fitness = [v for lst in island_fitness for v in lst]
                 all_pops_flat = [w for lst in island_pops for w in lst]
             order = np.argsort(all_fitness)
@@ -223,8 +236,9 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             stagnant = plateau >= 8
 
             # held probe (lightweight: 20 matches on held seed, same harness.ACTIVATION)
+            # skipped entirely for --dry-run: no sims, so there is nothing held-out to measure
             held_m = float("nan")
-            if g % 5 == 0 or g == gens - 1:
+            if not dry_run and (g % 5 == 0 or g == gens - 1):
                 cand = best_w if best_w is not None else all_pops_flat[best_idx]
                 held_m = float(np.mean([harness.evaluate(cand, HELD_SEED, m, HELD_SEED) for m in range(20)]))
 
@@ -272,8 +286,13 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
                     tgt[random.randrange(len(tgt))] = cand.copy()
 
-    # promote best — held-gated so a weaker run never clobbers the shipped champion
+    # promote best — held-gated so a weaker run never clobbers the shipped champion.
+    # --dry-run never promotes: synthetic fitness says nothing about real combat,
+    # and the run exists to exercise the loop, not to touch operator state.
     if best_w is not None:
+        if dry_run:
+            print("dry-run: synthetic fitness only - evolved/best.json untouched")
+            return
         best_path = Path("evolved/best.json")
         candidate_held = _held_probe(best_w)
         current_held = float("-inf")

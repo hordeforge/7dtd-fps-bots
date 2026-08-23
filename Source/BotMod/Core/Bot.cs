@@ -658,8 +658,10 @@ namespace BotMod.Core
             if (!wantToFire) return;
             if (_burstLeft <= 0)
             {
+                // Start a new burst. No extra pause here: finishing the previous
+                // burst already armed BurstPause below, so pausing again would
+                // hold fire for ~2x BurstPauseSec between every burst.
                 _burstLeft = Weapon.BurstMin + (int)(Rng01() * (Weapon.BurstMax - Weapon.BurstMin + 1));
-                _burstPauseUntil = Time.time + Weapon.BurstPause * (0.85f + Rng01() * 0.3f); // deterministic vs Unity Random (zdtd_bot parity)
                 // vary strafe dir between bursts
                 if (Rng01() < 0.6f) _strafeDir = -_strafeDir;
                 return;
@@ -725,9 +727,10 @@ namespace BotMod.Core
             _burstLeft--;
             _ammo--; // one round per trigger pull (zdtd_bot ammo pacing parity)
             // Fire-rate gate: spacing inside a burst is the next-shot pause set
-            // here (FireRate); BurstPause only separates bursts.
+            // here (FireRate); BurstPause only separates bursts (±15% roll,
+            // zdtd parity jitter).
             _burstPauseUntil = Time.time + Weapon.FireRate * 0.95f;
-            if (_burstLeft <= 0) _burstPauseUntil = Time.time + Weapon.BurstPause;
+            if (_burstLeft <= 0) _burstPauseUntil = Time.time + Weapon.BurstPause * (0.85f + Rng01() * 0.3f);
         }
 
         public string Status(World world)

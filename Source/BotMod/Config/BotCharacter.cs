@@ -60,7 +60,16 @@ namespace BotMod.Config
                     var loaded = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
                     if (loaded != null) Characters = loaded;
                 }
-                else ModApi.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
+                else
+                {
+                    ModApi.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
+                    // Rebuild from pristine defaults: with no file there is nothing
+                    // to re-parse, so Characters would keep the instances a previous
+                    // Load already shifted by the difficulty lerp below, and every
+                    // `bot reload` would drift aim/reaction/aggression further
+                    // toward their clamps.
+                    Characters = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
+                }
                 // Ensure at least defaults for known names
                 foreach (var n in cfg.BotNames)
                 {

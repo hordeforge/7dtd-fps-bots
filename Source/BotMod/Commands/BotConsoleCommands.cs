@@ -112,10 +112,12 @@ namespace BotMod.Commands
             else if (p.Count >= 3) { string last = p[p.Count - 1]; if (last.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || last == "mixed") weapon = last; }
             var world = GameManager.Instance?.World;
             if (world == null) { SdtdConsole.Instance.Output("No world."); return; }
-            EntityPlayer target = BotManager.FindPlayerByNameOrId(world, ident);
-            // Also try via sender fallback: if ident is "me" and sender has RemoteClientInfo
-            if (target == null && (ident == "me" || ident == "self"))
-                target = FindPlayerBySender(world, sender);
+            // "me"/"self" resolves to the commanding player FIRST: the name
+            // lookup's substring match would otherwise hit any online player
+            // whose name contains "me" (e.g. "Jeremy") and spawn near them
+            // instead of the sender documented in `bot help`.
+            EntityPlayer target = ident == "me" || ident == "self" ? FindPlayerBySender(world, sender) : null;
+            if (target == null) target = BotManager.FindPlayerByNameOrId(world, ident);
             if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game).\n  Online: " + ListPlayerNames(world)); return; }
             int spawned = 0;
             for (int i = 0; i < count; i++) {
