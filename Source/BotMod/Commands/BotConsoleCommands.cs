@@ -80,7 +80,12 @@ namespace BotMod.Commands
             }
             // parse x z if two floats near end (before optional weapon)
             int scanEnd = weapon != null ? p.Count - 1 : p.Count;
-            if (scanEnd >= 4 && float.TryParse(p[scanEnd - 2], out float x) && float.TryParse(p[scanEnd - 1], out float z))
+            // Coordinates are typed dot-decimal (the game's convention) regardless of
+            // the host locale; parse invariantly or "bot spawn 1 1200.5 -1300.7"
+            // silently loses its position on comma-decimal systems.
+            if (scanEnd >= 4
+                && float.TryParse(p[scanEnd - 2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
+                && float.TryParse(p[scanEnd - 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float z))
                 pos = new Vector3(x, 60f, z);
             int spawned = 0;
             for (int i = 0; i < count; i++) if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;

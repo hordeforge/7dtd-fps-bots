@@ -264,23 +264,26 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
         total_ticks += 1
         for bi in range(n_bots):
             if not balive[bi]: continue
-            best = -1; best_kind = 0; best_d2 = 1e9; bx0 = bx[bi]; by0 = by[bi]
+            best = -1; best_kind = 0; best_d2 = 1e9; best_d2_true = 1e9; bx0 = bx[bi]; by0 = by[bi]
             for j in range(n_bots):
                 if j == bi or not balive[j]: continue
                 d2 = (bx[j] - bx0) ** 2 + (by[j] - by0) ** 2
-                if d2 < best_d2: best_d2 = d2; best = j; best_kind = 0
+                if d2 < best_d2: best_d2 = d2; best_d2_true = d2; best = j; best_kind = 0
             for j in range(n_zombies):
                 if not zalive[j]: continue
                 d2 = (zx[j] - bx0) ** 2 + (zy[j] - by0) ** 2
+                # d2_eff only biases target *selection* toward bots; hit chance,
+                # range gating and obs must see the true distance (sqrt(1.05)
+                # inflation here made zombies ~2.5% farther than they are).
                 d2_eff = d2 * 1.05
-                if d2_eff < best_d2: best_d2 = d2_eff; best = j; best_kind = 1
+                if d2_eff < best_d2: best_d2 = d2_eff; best_d2_true = d2; best = j; best_kind = 1
             if best < 0:
                 v, rng = _lcg01(rng); ang = v * 6.283185307179586
                 bx[bi] += math.cos(ang) * 0.4; by[bi] += math.sin(ang) * 0.4
                 continue
             if best_kind == 0: tx = bx[best]; ty = by[best]; thp = bhp[best]
             else: tx = zx[best]; ty = zy[best]; thp = zhp[best]
-            dist = math.sqrt(best_d2)
+            dist = math.sqrt(best_d2_true)
             if env == 0: can_see = los_clear(bx0, by0, tx, ty, WALLS, 3)
             elif env == 1: can_see = los_clear(bx0, by0, tx, ty, WALLS_CROSS, 4)
             elif env == 2: can_see = True
@@ -515,21 +518,24 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             best = -1
             best_kind = 0  # 0 bot, 1 zombie
             best_d2 = 1e9
+            best_d2_true = 1e9
             bx0 = bx[bi]; by0 = by[bi]
             for j in range(n_bots):
                 if j == bi or not balive[j]:
                     continue
                 d2 = (bx[j] - bx0) ** 2 + (by[j] - by0) ** 2
                 if d2 < best_d2:
-                    best_d2 = d2; best = j; best_kind = 0
+                    best_d2 = d2; best_d2_true = d2; best = j; best_kind = 0
             for j in range(n_zombies):
                 if not zalive[j]:
                     continue
                 d2 = (zx[j] - bx0) ** 2 + (zy[j] - by0) ** 2
-                # zombies are preferred at equal distance? slightly less than bots (mirrors clanker 0.9/0.82)
+                # d2_eff only biases target *selection* toward bots; hit chance,
+                # range gating and obs must see the true distance (sqrt(1.05)
+                # inflation here made zombies ~2.5% farther than they are).
                 d2_eff = d2 * 1.05
                 if d2_eff < best_d2:
-                    best_d2 = d2_eff; best = j; best_kind = 1
+                    best_d2 = d2_eff; best_d2_true = d2; best = j; best_kind = 1
             if best < 0:
                 # wander
                 v, rng = _lcg01(rng)
@@ -541,7 +547,7 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
                 tx = bx[best]; ty = by[best]; thp = bhp[best]
             else:
                 tx = zx[best]; ty = zy[best]; thp = zhp[best]
-            dist = math.sqrt(best_d2)
+            dist = math.sqrt(best_d2_true)
             if env == 0: can_see = los_clear(bx0, by0, tx, ty, WALLS, 3)
             elif env == 1: can_see = los_clear(bx0, by0, tx, ty, WALLS_CROSS, 4)
             elif env == 2: can_see = True

@@ -277,7 +277,12 @@ namespace BotMod.Core
                         if (posAttr == null) continue;
                         var parts = posAttr.Value.Split(',');
                         if (parts.Length < 3) continue;
-                        if (float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y) && float.TryParse(parts[2], out float z))
+                        // spawnpoints.xml is machine data with dot decimals; parse
+                        // invariantly so a comma-decimal host locale cannot reject
+                        // every spawnpoint (which silently drops DM spawn selection).
+                        if (float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
+                            && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float y)
+                            && float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float z))
                             list.Add(new Vector3(x, y, z));
                     }
                     if (list.Count > 0) { _dmSpawns = list; _dmSpawnsWorld = worldName; ModApi.Log($"DM spawns: {list.Count} from {path} (world={worldName})"); return list; }
