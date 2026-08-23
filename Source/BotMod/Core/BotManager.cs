@@ -21,7 +21,6 @@ namespace BotMod.Core
         public IReadOnlyList<Bot> Bots => _bots;
         public int BotCount => _bots.Count;
         public bool IsBotEntity(int entityId) => _botEntityIds.Contains(entityId);
-        public bool IsBotEntity(Entity e) => e != null && _botEntityIds.Contains(e.entityId);
         public Bot GetBot(int entityId) => _botById.TryGetValue(entityId, out var b) ? b : null;
 
         // Teams are keyed by base bot name ([Bot] Grunt_42 -> Grunt, same split

@@ -27,3 +27,10 @@ jobs:
           key: npx-${{ hashFiles('scripts/*.sh') }}
           restore-keys: npx-
       - run: make check
+      # C# analysis gate: scripts/test-idempotency.sh compiles pure-BCL sources
+      # with mcs -warnaserror (warnings are errors, same contract as build) and
+      # runs their unit/fuzz suites; suites needing game DLLs self-skip when
+      # absent. Runners ship no mono, hence this step.
+      - name: Install mono for the C# warning gate
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mono-mcs mono-runtime
+      - run: bash scripts/test-idempotency.sh

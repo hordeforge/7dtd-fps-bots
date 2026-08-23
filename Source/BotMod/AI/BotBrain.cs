@@ -95,15 +95,14 @@ namespace BotMod.AI
             return best;
         }
 
-        // Q3 LTG/NBG analog: long-term seek (kill/item/camp) + nearby pickup weight
-        public enum GoalType { Kill, GetItem, Camp, Roam }
-        public static GoalType DecideGoal(EntityAlive me, BotConfig cfg, BotCharacter ch)
+        /// <summary>Q3 LTG analog for idle bots: hold ground when hurt enough that
+        /// BotWantsToRetreat fires, or when a committed camper rolls a hold. The
+        /// kill/item/roam goal picks collapse here to "not camping".</summary>
+        public static bool WantsIdleCamp(EntityAlive me, BotConfig cfg, BotCharacter ch)
         {
             float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);
-            if (ch.WantsToRetreat(hp, 12f, false)) return GoalType.Camp;
-            if (ch.Camper > 0.6f && hp > 0.7f && ((me.entityId * 2654435761u) % 100 < (uint)(ch.Camper*12))) return GoalType.Camp;
-            if (ch.EasyFragger > 0.5f && ((me.entityId * 1103515245u) % 100 < (uint)(ch.EasyFragger*25))) return GoalType.Kill; // quick frag
-            return GoalType.Kill;
+            if (hp < 0.35f + ch.SelfPreservation * 0.18f) return true;
+            return ch.Camper > 0.6f && hp > 0.7f && ((me.entityId * 2654435761u) % 100 < (uint)(ch.Camper*12));
         }
         static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
         {

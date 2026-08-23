@@ -11,7 +11,7 @@ define HELP
 Targets:
   make build        compile BotMod.dll + web bundle into dist/BotMod (needs game DLLs or dotnet SDK)
   make build-mcs    same, forcing the mono mcs backend
-  make test         run tests/BotMod.Web.Tests via scripts/test-idempotency.sh (needs mcs + mono; not run in CI)
+  make test         run tests/BotMod.Web.Tests via scripts/test-idempotency.sh (needs mcs + mono; CI runs it after installing mono)
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make check        what CI runs: shellcheck + vnu HTML lint + tsc/oxlint/bundle freshness
   make lint-shell   shellcheck over scripts/*.sh
@@ -22,8 +22,9 @@ Targets:
   make clean        remove dist/ and C# obj/bin intermediates
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
 SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip
-timestamps; defaults to the HEAD commit time). CI only runs `make check`;
-`make test` and `make build` additionally need mono/the game install locally.
+timestamps; defaults to the HEAD commit time). CI runs `make check` plus
+`scripts/test-idempotency.sh` (mono installed in the workflow); `make build`
+additionally needs the game install locally.
 endef
 export HELP
 help:

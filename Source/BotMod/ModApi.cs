@@ -48,12 +48,6 @@ namespace BotMod
                 try { ModEvents.WorldShuttingDown.RegisterHandler(OnWorldShuttingDown); }
                 catch (Exception ex) { Error("WorldShuttingDown register failed: " + ex.Message); }
 
-                // Best-effort injection of a UMA player-mesh survivor class on dedi,
-                // where the vanilla XML keeps npcSurvivor* inside an HTML comment.
-                // Purely opportunistic: the spawn pool stays zombieSoldier either way;
-                // this only pre-stages a player-looking class for when the dedis'
-                // negative-id wall is solved.
-                try { BotSurvivorPatch.EnsureSurvivorClasses(); } catch (Exception ex) { Warn("EnsureSurvivorClasses: " + ex.Message); }
                 Log("BotMod init OK. Commands: bot help");
             }
             catch (Exception ex)

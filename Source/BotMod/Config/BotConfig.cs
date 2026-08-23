@@ -138,11 +138,6 @@ namespace BotMod.Config
             }
         }
 
-        public WeaponProfile ResolveWeapon(string gunId)
-        {
-            return WeaponProfile.ForGun(gunId ?? BotWeapon, this);
-        }
-
         /// <summary>Warning sink for config problems. Wired to ModApi.Warn by
         /// ModApi.InitMod so this file stays free of engine/game type
         /// dependencies (headless unit tests can exercise Load); the default

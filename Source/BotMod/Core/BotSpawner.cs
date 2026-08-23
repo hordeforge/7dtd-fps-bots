@@ -306,26 +306,22 @@ namespace BotMod.Core
             return null;
         }
 
-        // Default pool: pinned to plain zombieSoldier (the entries are identical,
-        // so this is a single class wearing a list). Kept as a pool only so variant
-        // classes can be re-added without touching call sites. The vanilla humanoid
+        // Single body class, pinned to plain zombieSoldier. The vanilla humanoid
         // alternatives are NOT usable on this dedi: npcTraderJoel has a positive id
         // but mod-spawned traders render NOTHING for clients (verified), EntityPlayer
         // classes require the full player join path, and survivor/UMA classes
         // (npcSurvivor*) return negative ids on this dedi build. A custom player-mesh
         // class via the entityclasses patch is the path to true player models, pending
         // the negative-id wall being solved.
-        static readonly string[] _botClassPool = new[] { "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier", "zombieSoldier" };
+        const string BotClass = "zombieSoldier";
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)
         {
             try
             {
-                string want = entityClassName ?? "zombieSoldier";
-                // BotEntityClass="mixed" -> full pool; any other value passes
-                // through as-is (the zombieSoldier branch re-picks from the pool,
-                // which is uniform today).
-                if (want != null && want.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) want = _botClassPool[RngPick(_botClassPool.Length)];
-                else if (want == "zombieSoldier") want = _botClassPool[RngPick(3)]; // pool is uniform today; pick kept for when variants return
+                // "mixed" (the BotEntityClass default) resolves to the single soldier
+                // body; any other value passes through as-is.
+                string want = entityClassName ?? BotClass;
+                if (want.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) want = BotClass;
                 int classId = EntityClass.FromString(want);
                 if (classId < 0)
                 {

@@ -38,9 +38,8 @@ namespace BotMod.Config
         public bool ChallengeAim { get; set; } = false; // Q3 bot_challenge cvar: true=clamped smooth, false=spring
 
         public static BotCharacter Defaults(string name = "Grunt") => new BotCharacter { Name = name };
-        // Q3-style decisions (BotWantsToRetreat/Camp helpers) - used by BotBrain
-        public bool WantsToRetreat(float healthFrac, float enemyDist, bool hasBetterWeapon) { return healthFrac < 0.35f + SelfPreservation * 0.18f && (enemyDist < 22f || !hasBetterWeapon); }
-        // Deterministic overloads: caller supplies a 0..1 roll from the bot's per-slot LCG (zdtd parity).
+        // Q3-style camp decision (BotWantsToCamp helper) - used by BotBrain
+        // Deterministic overload: caller supplies a 0..1 roll from the bot's per-slot LCG (zdtd parity).
         public bool WantsToCamp(float healthFrac, float roll01) { return Camper > 0.45f && healthFrac > 0.55f && roll01 < Camper * 0.4f; }
     }
 

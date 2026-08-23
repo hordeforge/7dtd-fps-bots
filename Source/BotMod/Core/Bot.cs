@@ -304,13 +304,14 @@ namespace BotMod.Core
             float effRange = Mathf.Min(Weapon.Range, cfg.AttackRange + Mathf.Max(0f, Weapon.Range - 55f) * 0.7f);
             bool inRange = dist <= effRange;
 
-            if (inRange && canSee) AttackInRange(me, world, cfg, dist, canSee, effRange);
+            if (inRange && canSee) AttackInRange(me, world, cfg, dist, effRange);
             else ChaseTarget(me, world, cfg, canSee, tPos, myPos);
         }
 
-        /// <summary>In-range combat: aim (with per-engagement bias), fire the gated
-        /// burst, then move via the neural policy or the Q3 fallback movement.</summary>
-        void AttackInRange(EntityAlive me, World world, BotConfig cfg, float dist, bool canSee, float effRange)
+        /// <summary>In-range combat (target is visible by the caller's contract): aim
+        /// (with per-engagement bias), fire the gated burst, then move via the neural
+        /// policy or the Q3 fallback movement.</summary>
+        void AttackInRange(EntityAlive me, World world, BotConfig cfg, float dist, float effRange)
         {
             Vector3 tPos = _target.position;
             Vector3 myPos = me.position;
@@ -364,13 +365,13 @@ namespace BotMod.Core
                     }
                 }
             }
-            if (!neuralMoved) AttackMoveFallback(me, world, cfg, dist, canSee, effRange);
+            if (!neuralMoved) AttackMoveFallback(me, world, cfg, dist, effRange);
         }
 
         /// <summary>Q3 fallback movement while in attack range (net off/broken or no
         /// move decided): squad flanking, cover-while-reloading, phased dodge, and
         /// weapon-aware standoff (strafe outside ~35% of effective range, backpedal inside).</summary>
-        void AttackMoveFallback(EntityAlive me, World world, BotConfig cfg, float dist, bool canSee, float effRange)
+        void AttackMoveFallback(EntityAlive me, World world, BotConfig cfg, float dist, float effRange)
         {
             // Squad flanking: if another bot is strafing the same target in the same
             // direction, flip mine so the team splits around the target (FPS handshake)
@@ -384,7 +385,7 @@ namespace BotMod.Core
             // Cover-while-reloading (CS-bot lineage, docs/oss-fps-bot-survey.md):
             // an empty mag with a live visible target seeks cover instead of
             // standing in the open. Gated by the path-recalc cadence.
-            if (Time.time < _reloadUntil && canSee && Time.time >= _nextPathRecalc)
+            if (Time.time < _reloadUntil && Time.time >= _nextPathRecalc)
             {
                 Vector3 cover = BotBrain.FindCover(me, _target, world);
                 if (cover != Vector3.zero)
@@ -499,9 +500,8 @@ namespace BotMod.Core
             // The net's camp output is only consumed inside engagements
             // (attack movement); zombies must always pull idle bots out of
             // cover, so no neural gate sits on this branch.
-            bool wantCamp = ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01());
-            BotBrain.GoalType maybeGoal = BotBrain.DecideGoal(me, cfg, ch);
-            if (wantCamp && maybeGoal == BotBrain.GoalType.Camp)
+            float idleHp = me.Health / System.Math.Max(1f, cfg.BotHealth);
+            if (ch.WantsToCamp(idleHp, Rng01()) && BotBrain.WantsIdleCamp(me, cfg, ch))
             {
                 _state = BotBrain.State.Wander;
                 // Camp hold + facing sweep (zdtd_bot camp, ported back): instead of
@@ -633,7 +633,7 @@ namespace BotMod.Core
             catch { return false; }
         }
 
-        void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire = true)
+        void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire)
         {
             // Ally guard: squad mode, vsBot-off and same-team bots never get shot.
             // FindTarget already excludes them via IsFriendly; this covers a stale

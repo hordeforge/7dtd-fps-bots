@@ -99,12 +99,12 @@ namespace BotMod.Web
                 {
                     case "enable":
                         ModApi.Config.Enabled = true;
-                        PersistEnabled(true);
+                        ModApi.PersistConfigField("Enabled", true);
                         respBody = RespondJson("enabled", true);
                         break;
                     case "disable":
                         ModApi.Config.Enabled = false;
-                        PersistEnabled(false);
+                        ModApi.PersistConfigField("Enabled", false);
                         respBody = RespondJson("enabled", false);
                         break;
                     case "spawn":
@@ -313,8 +313,6 @@ namespace BotMod.Web
                 task => ThreadManager.AddSingleTaskMainThread("bot-web-api", task),
                 TimeSpan.FromSeconds(15), op);
         }
-
-        static void PersistEnabled(bool enabled) => ModApi.PersistConfigField("Enabled", enabled);
 
         /// <summary>Optional string field of the POST body; null when absent.</summary>
         static string GetString(IDictionary<string, object> body, string key)
