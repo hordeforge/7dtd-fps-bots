@@ -5,11 +5,12 @@ using System.Xml;
 namespace BotMod.Core
 {
     /// <summary>
-    /// Best-effort hot-inject of npcSurvivorTemplate/npcSurvivorRanged into
-    /// EntityClass.list at runtime, so BotSpawner can pick generated UMA player
-    /// models (AvatarUMAController) that actually render held guns. Vanilla XML
-    /// has them inside <!-- --> so EntityClass.FromString("npcSurvivorRanged")
-    /// is -1 on stock dedi.
+    /// Best-effort hot-inject of a UMA player-mesh survivor class (named
+    /// "npcSurvivorBot", parent zombieSoldier) into EntityClass.list at
+    /// runtime, so a player-looking body exists on dedi where the vanilla XML
+    /// keeps npcSurvivor* inside &lt;!-- --&gt; (EntityClass.FromString is -1
+    /// on stock dedi). Opportunistic only: the default spawn pool stays
+    /// zombieSoldier regardless of whether the injection succeeds.
     /// </summary>
     public static class BotSurvivorPatch
     {

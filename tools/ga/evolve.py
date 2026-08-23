@@ -112,9 +112,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             print(f"resume failed ({ex}), starting fresh")
             pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
             best_w = None; best_f = float("-inf"); resume_ckpts = []
-    elif resume == "auto":
-        # Auto-resume is not requested
-        if False: pass
     if resume and resume != "auto" and resume_ckpts is not None:
         # We already primed pop_w/best_w — need to run the remaining gens explicitly.
         # Replace the simple for-loop with an explicit continuation that appends generations.
@@ -168,12 +165,9 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             print(f"run dir: {run_dir}")
             (run_dir / "leaderboards.jsonl").write_text("")
             return
-    if resume and resume != "auto": pass  # already handled
-    if False: pass
     if resume == "auto":
-        raise SystemExit(f"resume from {resume} not yet wired — rerun from gen 0 for now")
-        # TODO: load checkpoint and continue (deterministic replay)
-        raise SystemExit(f"resume from {resume} not yet wired — rerun from gen 0 for now")
+        # --resume takes an explicit run dir; there is no implicit auto-resume.
+        raise SystemExit("--resume needs a run dir (e.g. evolved/runs/<ts>); 'auto' is not supported")
 
     # island split (ring migration)
     if islands == 1:

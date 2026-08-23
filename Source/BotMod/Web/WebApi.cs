@@ -13,7 +13,9 @@ namespace BotMod.Web
     /// <summary>
     /// Admin web API for the bot mod: GET /api/bot reports config + alive bots
     /// with the stock entity scoreboard stats; POST /api/bot drives the same
-    /// paths as the `bot` console command (enable/disable/spawn/remove/neural).
+    /// paths as the `bot` console command. Actions: enable, disable, spawn,
+    /// spawnNear, remove (alias clear), removeOne, skill, neural, team, vs,
+    /// setTeam, teamCount, clearTeams.
     /// The menu entry and data are admin-only (permission level 0).
     ///
     /// Duplicate semantics: POST bodies accept an optional client-generated
@@ -332,8 +334,10 @@ namespace BotMod.Web
             var players = new List<object>();
             if (world != null)
             {
-                // Real players (bots are EntityTrader bodies, so they are not in
-                // world.Players; a spawned test client counts as a player here).
+                // Real players only: world.Players holds connected EntityPlayer
+                // clients, and bots are NPC bodies (zombieSoldier by default),
+                // so bots never appear here. A spawned test client counts as a
+                // player.
                 var plist = world.Players != null ? world.Players.list : null;
                 if (plist != null)
                 {

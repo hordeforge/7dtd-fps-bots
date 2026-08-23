@@ -35,7 +35,7 @@ namespace BotMod.Patches
 
     // Generic authorizer bypass was too broad; keep only the concrete Steam auth server bypass above. AuthorizationManager dispatches sync+async; patching it generically interferes with normal flow.
 
-    /// <summary>Server console lp/listplayers should also list [Bot] zombies so operators see bots in the roster.</summary>
+    /// <summary>Server console lp/listplayers should also list [Bot] entries so operators see bots in the roster.</summary>
     [HarmonyPatch(typeof(ConsoleCmdListPlayers), "Execute")]
     public static class Patch_ListPlayers_Bots
     {
@@ -114,8 +114,8 @@ namespace BotMod.Patches
 
     /// <summary>Deaths where a bot is killer or victim were previously invisible in the HUD score column because the
     /// vanilla score lane only fires for <c>EntityPlayer</c> killers. This postfix credits the right side directly on the shared
-    /// <c>EntityAlive</c> counters (<c>KilledPlayers</c>/<c>KilledZombies</c>/<c>Died</c>/<c>Score</c>) the research docs trace at
-    /// docs/inventories/loop-complete IL=97 and protocol-packages 6.21, and then nudges a stat refresh toward the scoreboard.
+    /// <c>EntityAlive</c> counters (<c>KilledPlayers</c>/<c>KilledZombies</c>/<c>Died</c>/<c>Score</c>), and then nudges a stat
+    /// refresh toward the scoreboard.
     /// NOTE: scoring for bot shooters is already handled in <see cref="BotCombat.OnKilled"/> which runs from <c>Bot.TryShootBurst</c>
     /// on the killing blow. This patch only handles the victim side and the rarer paths where the bot wasn't the direct DamageEntity
     /// caller (explosions, fall, zombie melee finishing a bot).</summary>

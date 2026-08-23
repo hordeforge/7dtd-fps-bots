@@ -5,7 +5,7 @@ Server-side mod that spawns real FPS bots. Names are prefixed `[Bot] Grunt_42` s
 ## What it does
 
 - Keeps `TargetBotCount` bots alive (auto-respawns one per second).
-- Each bot bodies up as a **zombie soldier** (`BotEntityClass=mixed` picks the `zombieSoldier*` pool; the dedi rejects custom SDCS/Npc/Bandit appends with a negative EntityClass id and mod-spawned trader bodies render nothing, so soldiers are the working visible FPS bodies). Bots hold and fire real ranged weapons.
+- Each bot bodies up as a **zombie soldier** (`BotEntityClass=mixed` pins the `zombieSoldier` class; the dedi rejects custom SDCS/Npc/Bandit appends with a negative EntityClass id and mod-spawned trader bodies render nothing, so soldiers are the working visible FPS bodies). Bots hold and fire real ranged weapons.
 - Weapons from `BotWeapon=mixed` → random from `LoadoutPool` (pistol/shotgun/AK/sniper/auto-shotgun/SMG) with per-weapon `WeaponProfile` (fire rate, burst 2-9, spread, damage, effective range, pellets).
 - FPS combat loop (docs/research/00..06): wide `VisionAngle` cone → `Physics.Raycast` + voxel LOS → leading aim (velocity prediction) → burst fire with reaction delay; pellets/headshots via `DamageSourceEntity`.
 - **FPS tactics**: active combat-seeking when idle (hunt nearest enemy), weapon-range standoff (snipers hold ~73m, shotguns close), squad flanking (split around shared target), cover-advance (peek from cover while chasing), instant target re-acquisition after a kill, finish-the-kill (commit when the enemy is critically wounded), wounded-target priority.
@@ -91,7 +91,7 @@ bot reload | bot enable | bot disable
 ## Tuning (`config/botmod.json`)
 
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
-- `BotEntityClass` (default `mixed` = `zombieSoldier*` pool, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
+- `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
 - `BotVsBot/BotVsZombie/BotVsPlayer` (which classes bots shoot; `bot vs <t> <on|off>`), `BotTeam` (squad mode; `bot team <on|off>`).
 - `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight.
 - `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
@@ -128,9 +128,10 @@ atomic with a `.bak` last-known-good).
 make build && make install
 ./7DaysToDieServer.x86_64 -logfile /tmp/bot.log -quit -batchmode -nographics -dedicated -configfile /tmp/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.4.0 loading... diff=2 weapon=mixed
+# [BotMod] BotMod v0.4.0 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True
+# [BotMod] BotManager ready. TargetBots=6 diff=2 weapon=mixed
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
-# [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) ...
+# [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) (1/6)
 # [BotMod] Bots alive: 6/6
 ```
 

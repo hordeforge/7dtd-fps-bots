@@ -1,26 +1,39 @@
 # `tools/ga/` — Offline Neuroevolution Harness
 
-Phase R0 → R1 tooling for `docs/research/04-training-pipeline.md`. The trainer is
-**Python-first** (NumPy + stdlib); a Zig trainer with the same protocol can be
-added later. The harness reuses the game's own sense (`ZBS2`) and `bot <verb>`
-commands, so evolved weights transfer with no sim-to-real gap.
+Training and evaluation tooling for `docs/research/04-training-pipeline.md`,
+used for every experiment recorded in `docs/research/REPORT-*.md` (R0..R13).
+The trainer is **Python-first** (NumPy + stdlib); a Zig trainer with the same
+protocol can be added later. The harness reuses the game's own sense (`ZBS2`)
+and `bot <verb>` commands, so evolved weights transfer with no sim-to-real gap.
 
 ## Layout
 
 ```
 tools/ga/
-  README.md        this file
-  evolve.py        CLI: --pop --gens --seed --resume runs/<ts>
-  eval.py          re-evaluates a single best.json on the held-out pool
-  clone.py         behavioural-cloning warm-start (heuristic traces → cloned net)
-  plot.py          fitness.csv → plot.png + Pareto scatter
-  ga.py            operators: tournament, crossover, mutation (imported by evolve)
-  harness.py       evaluation loop over combat_sim.py, the numba PvP+zombie sim
-                   (the headless zdtd-binary bridge was the R0 stub)
-  requirements.txt numpy, matplotlib
+  README.md              this file
+  ga.py                  genome contract (INPUTS/HIDDEN/OUTPUTS = 14/16/5) +
+                         operators: tournament, crossover, mutation
+  combat_sim.py          numba-JIT PvP+zombie arena simulation
+  harness.py             evaluation loop over combat_sim.py arenas
+                         (the headless zdtd-binary bridge was the R0 stub)
+  evolve.py              CLI trainer: --pop --gens --seed --resume <runDir>
+                         [--islands N] [--curriculum ...] [--activation ...]
+  eval.py                re-evaluates a single best.json on the held-out pool
+  eval_static_vs_neural.py  canonical promotion gate (static vs neural,
+                         seeds/matches on the CLI, prints GOAL MET)
+  clone.py               behavioural-cloning warm-start stub (heuristic
+                         traces -> cloned net)
+  sweep.py               net-layout sweeps (writes tools/ga/sweeps/)
+  fitness_sweep.py       scalarization-weight sweep over harness.FIT_*
+  plot.py                fitness.csv -> plot.png + Pareto scatter
+  replay.py              match recorder + HTML renderer
+  viz.py                 network diagram rendering
+  report.py              per-run report.html generator
+  dashboard.py           live training dashboard (docs/ga-dashboard.html)
+  requirements.txt       numpy, numba, matplotlib
 ```
 
-## How to run R0 (once the harness is wired to a headless binary)
+## How to run
 
 Requires Python 3 with NumPy, numba and matplotlib. Use a project-local
 virtualenv so nothing leaks into your system Python:

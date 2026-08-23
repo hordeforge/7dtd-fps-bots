@@ -77,7 +77,9 @@ namespace BotMod.AI
                         foreach (var a in alives)
                         {
                             if (a == null || a == me || a.IsDead() || !a.IsAlive()) continue;
-                            // Bot bodies are EntityTrader here, so do NOT restrict to zombies.
+                            // Scan every EntityAlive, not just zombies: bot bodies follow
+                            // BotEntityClass (and its negative-id fallbacks), so they are
+                            // not guaranteed to be zombie-typed.
                             if (IsFriendly(me, a, cfg)) continue;
                             float dist = Vector3.Distance(myPos, a.position);
                             if (dist > cfg.VisionRange) continue;

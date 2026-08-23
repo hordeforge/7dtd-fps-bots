@@ -37,7 +37,9 @@ namespace BotMod.Core
             return WeaponProfile.ForGun(gun, cfg);
         }
 
-        // Spawn near a specific player: FPS-like, 12-28m away, line-of-sight blocked, not on top of player
+        // Spawn near a specific player: FPS-like, out-of-sight preferred. DM
+        // spawnpoints within 11-42m of the player score best around ~22m; the
+        // radial fallback ring is 14-30m; never on top of the player.
         public static Vector3 PickSpawnNearPlayer(World world, EntityPlayer player, BotConfig cfg)
         {
             if (player == null) return PickSpawnPosition(world, cfg);
@@ -286,9 +288,10 @@ namespace BotMod.Core
             return _dmSpawns;
         }
 
-        // Default pool: zombie soldier variants. Verified positive on this dedi and
-        // they render on clients (zombies are the game's core classes). The vanilla
-        // humanoid alternatives are NOT usable here: npcTraderJoel has a positive id
+        // Default pool: pinned to plain zombieSoldier (the entries are identical,
+        // so this is a single class wearing a list). Kept as a pool only so variant
+        // classes can be re-added without touching call sites. The vanilla humanoid
+        // alternatives are NOT usable on this dedi: npcTraderJoel has a positive id
         // but mod-spawned traders render NOTHING for clients (verified), EntityPlayer
         // classes require the full player join path, and survivor/UMA classes
         // (npcSurvivor*) return negative ids on this dedi build. A custom player-mesh
@@ -307,9 +310,11 @@ namespace BotMod.Core
             try
             {
                 string want = entityClassName ?? "zombieSoldier";
-                // BotEntityClass="mixed" → full pool; "zombieSoldier" stays soldier variants only.
+                // BotEntityClass="mixed" -> full pool; any other value passes
+                // through as-is (the zombieSoldier branch re-picks from the pool,
+                // which is uniform today).
                 if (want != null && want.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) want = _botClassPool[RngPick(_botClassPool.Length)];
-                else if (want == "zombieSoldier") want = _botClassPool[RngPick(3)]; // first 3 are soldier variants
+                else if (want == "zombieSoldier") want = _botClassPool[RngPick(3)]; // pool is uniform today; pick kept for when variants return
                 int classId = EntityClass.FromString(want);
                 if (classId < 0)
                 {

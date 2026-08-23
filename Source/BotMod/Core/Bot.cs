@@ -91,13 +91,13 @@ namespace BotMod.Core
         uint RngNext() { _rngState = _rngState * 1103515245u + 12345u; return _rngState; }
         float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
         float RngSym() { return 2f * Rng01() - 1f; }
-        float _missingSince = 0f; // when GetEntity last returned null (grace for trader lookup hiccups)
+        float _missingSince = 0f; // when GetEntity last returned null (grace for transient entity-dict lookup misses)
         public bool IsDeadOrUnloaded(World world)
         {
             if (_dead) return true;
             if (world == null) return false;
-            // Trust a cached alive entity even if a fresh lookup glitches (trader bodies can
-            // occasionally miss the world entity dict). Prevents bots being dropped mid-fight.
+            // Trust a cached alive entity even if a fresh lookup glitches (entities can
+            // transiently miss the world entity dict). Prevents bots being dropped mid-fight.
             if (_cachedEntity != null && _cachedEntity.entityId == EntityId && _cachedEntity.IsAlive() && !_cachedEntity.IsDead()) return false;
             var e = world.GetEntity(EntityId) as EntityAlive;
             if (e == null)
@@ -465,9 +465,10 @@ namespace BotMod.Core
                     _hasLastKnownTarget = false;
                     _nextTargetScan = 0f; // force re-acquisition this tick
                 }
-                // Q3 LTG decision: camp vs roam — heuristic (neural kept only for PvP chase).
-                // The GA's "camp" signal is intentionally not used here; zombies should
-                // always pull bots out of cover.
+                // Q3 LTG decision: idle camp-vs-roam stays heuristic on purpose.
+                // The net's camp output is only consumed inside engagements
+                // (attack movement); zombies must always pull idle bots out of
+                // cover, so no neural gate sits on this branch.
                 var campCh = Character ?? BotCharacterDB.ForName(Name);
                 bool wantCamp = ch.WantsToCamp(me.Health / System.Math.Max(1f, cfg.BotHealth), Rng01());
                 BotBrain.GoalType maybeGoal = BotBrain.DecideGoal(me, cfg, campCh);
@@ -520,7 +521,8 @@ namespace BotMod.Core
             if (e.entityId == EntityId) return false;
             bool eIsBot = BotManager.Instance.IsBotEntity(e.entityId);
             if (eIsBot && !cfg.BotVsBot) return false;
-            // A mod bot uses a trader body, so don't auto-reject EntityTrader for bots.
+            // A bot can still run a trader body when the configured entity class
+            // falls back to npcTraderJoel, so don't auto-reject EntityTrader for bots.
             if (!eIsBot && e is EntityTrader) return false;
             if (e is EntityPlayer && !cfg.BotVsPlayer) return false;
             if (e is EntityZombie && !cfg.BotVsZombie) return false;
@@ -631,15 +633,6 @@ namespace BotMod.Core
                 if (Rng01() < 0.6f) _strafeDir = -_strafeDir;
                 return;
             }
-            // Weapon fire rate gate
-            float fireGate = Weapon.FireRate * (0.9f + Rng01() * 0.2f);
-            // Use a per-bot accumulator instead of global _nextFire for burst fidelity
-            // Reuse burstPauseUntil as fire gate when bursting
-            if (Time.time < _burstPauseUntil - Weapon.BurstPause + fireGate && _burstLeft != Weapon.BurstMin)
-            {
-                // inside burst - respect fire rate via short pause
-                // encode as: we set _burstPauseUntil to next shot time within burst
-            }
             // Pellet/shot loop with per-pellet spread
             try
             {
@@ -700,6 +693,8 @@ namespace BotMod.Core
             catch { }
             _burstLeft--;
             _ammo--; // one round per trigger pull (zdtd_bot ammo pacing parity)
+            // Fire-rate gate: spacing inside a burst is the next-shot pause set
+            // here (FireRate); BurstPause only separates bursts.
             _burstPauseUntil = Time.time + Weapon.FireRate * 0.95f;
             if (_burstLeft <= 0) _burstPauseUntil = Time.time + Weapon.BurstPause;
         }
