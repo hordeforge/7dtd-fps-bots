@@ -12,8 +12,14 @@ namespace BotMod.AI
                 bool victimIsPlayer = victim is EntityPlayer;
                 if (!killerIsBot && !victimIsBot && !killerIsPlayer && !victimIsPlayer) return;
 
-                string k = killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString()) : "?";
-                string v = victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString()) : "?";
+                // EntityName for players is player-chosen text (arbitrary under
+                // EAC-off / synthetic-auth joins), so scrub it before it reaches
+                // the server log or client chat: control, DEL/C1, bidi and
+                // zero-width characters would otherwise forge log lines or
+                // reorder visible chat text (same contract as the web API's
+                // sanitized audit fields).
+                string k = BotMod.Web.LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString()) : "?");
+                string v = BotMod.Web.LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString()) : "?");
                 ModApi.Log($"Kill: {k} killed {v}");
 
                 // Keep vanilla score paths for player->anything. For bot killers we must credit manually

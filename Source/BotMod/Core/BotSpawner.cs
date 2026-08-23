@@ -271,7 +271,14 @@ namespace BotMod.Core
                 foreach (var path in roots)
                 {
                     if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
-                    var doc = new XmlDocument(); doc.Load(path);
+                    // World files are shared, semi-trusted content: load with DTD
+                    // and entity resolution off so a crafted spawnpoints.xml cannot
+                    // expand external entities (file:// read, http:// SSRF) or run
+                    // an entity-expansion DoS. The format has no DTD.
+                    var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null };
+                    var doc = new XmlDocument { XmlResolver = null };
+                    using (var reader = XmlReader.Create(path, settings))
+                        doc.Load(reader);
                     var list = new List<Vector3>();
                     foreach (XmlNode n in doc.SelectNodes("//spawnpoint"))
                     {
