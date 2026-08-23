@@ -37,7 +37,6 @@ namespace BotMod.Config
         public float AttackRange { get; set; } = 45f;
         // Per-weapon spread is in WeaponProfile; this is base fallback
         public float AimJitterDegrees { get; set; } = 2.0f;
-        public int DamagePerShot { get; set; } = 16;
         public float HeadshotChance { get; set; } = 0.08f;
         public float HeadshotMultiplier { get; set; } = 2.0f;
         // Burst fire - FPS feel. 0 = auto
