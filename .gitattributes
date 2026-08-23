@@ -1,0 +1,22 @@
+# Line-ending policy
+#
+# The repo's build gates are byte-exact across machines:
+#   - scripts/lint-webui.sh compares the committed WebMod/bundle.js byte-for-byte
+#     against a fresh tsc compilation,
+#   - scripts/package.sh promises two zips of one commit hash identically
+#     regardless of build machine,
+#   - every script/*.sh and the Makefile break outright when run with CRLF
+#     endings under bash.
+# Normalize all text files to LF in the index and force LF in working trees on
+# every platform, so a checkout on Windows or macOS cannot corrupt those
+# contracts the way core.autocrlf=true would.
+* text=auto eol=lf
+
+# Binary artifacts git must never touch (explicit even where detection already
+# gets it right).
+*.png binary
+*.zip binary
+*.dll binary
+*.tar.gz binary
+*.tgz binary
+*.jar binary
