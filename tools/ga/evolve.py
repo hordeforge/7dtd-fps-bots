@@ -285,7 +285,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             print(f"skipped best.json: candidate held40 {candidate_held:+.4f} < existing {current_held:+.4f} (keep current champion)")
 
     print(f"run dir: {run_dir}")
-    (run_dir / "leaderboards.jsonl").write_text("")  # placeholder
 
 
 if __name__ == "__main__":

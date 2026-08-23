@@ -2,13 +2,13 @@
 """replay.py — deterministic arena match recorder + top-down HTML replay renderer.
 
 The production fitness uses the numba `combat_sim.simulate_match` which discards
-per-tick state. This module is a faithful pure-Python mirror of that sim (same
-LCG seeds, same weapon table, same LOS/move/fire rules) that ALSO records a
-per-tick trace so a match can be replayed as a top-down animation.
+per-tick state. This module is a pure-Python recorder of the pre-R10 sim rules
+(heuristic movement, retreat fire-suppression, old mag table), kept for
+visualization; it stopped tracking combat_sim 1:1 when R10-R13 reworked
+movement/fire/ammo. Traces are still deterministic per `(w, seed, ...)` but no
+longer reproduce the exact match a numba eval scored.
 
-Because it reuses the exact same seed -> LCG chain and rules, replaying a given
-`(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)` reproduces the same match
-the numba evals scored. `record_match` exposes the per-tick frames; `render_html`
+`record_match` exposes the per-tick frames; `render_html`
 writes a self-contained HTML canvas replay (no external JS).
 
 Usage:
@@ -25,7 +25,6 @@ from pathlib import Path
 
 import numpy as np
 
-# Match combat_sim.py exactly.
 INPUTS = 14
 WEAPON_DAMAGE = [16, 14, 16, 42, 9, 9]
 WEAPON_RANGE = [40, 22, 55, 90, 22, 35]
@@ -324,7 +323,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
             if d < 2.0:
                 bhp[best_b] -= 10 * dt * 8
                 damage_taken += 10 * dt * 8
-                if bhp[best_b] <= 0 < bhp[best_b] + 1:
+                if bhp[best_b] <= 0:
                     balive[best_b] = False; deaths += 1
                     frame["events"].append("zombie%d ate b%d" % (zi, best_b))
             if tick % RECORD_STRIDE == 0:

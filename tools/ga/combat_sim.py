@@ -65,24 +65,6 @@ def _lcg01(s: int):
 
 
 @numba.njit
-def _forward_hidden(w, x, h):
-    # w flat, x[14], h[16] out
-    off = 0
-    for hi in range(HIDDEN):
-        s = w[off + HIDDEN * INPUTS + hi]  # b1[hi] at offset W1_LEN+hi  (careful: w is flat so b1 starts at W1_LEN)
-        # actually recompute: layout is W1[0:W1_LEN], b1[W1_LEN:W1_LEN+B1_LEN], W2, b2
-        # so do explicit
-        s = w[W1_LEN + hi]
-        base = hi * INPUTS
-        for i in range(INPUTS):
-            s += w[base + i] * x[i]
-        # tanh
-        # numba lacks math.tanh for float32? use np.tanh
-        h[hi] = math.tanh(s)
-    # we ignore second layer here; caller does it
-
-
-@numba.njit
 def forward_numba(w, x, y):
     # canonical tanh — what ships (BotNeuralBrain.cs). Sweep relu uses forward_numba_relu.
     h = np.empty(HIDDEN, dtype=numba.float32)
@@ -227,8 +209,6 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
     bweapon = np.empty(16, dtype=numba.int64)
     bskill = np.empty(16, dtype=numba.float32)
     balive = np.empty(16, dtype=numba.boolean)
-    bvelx = np.empty(16, dtype=numba.float32)
-    bvely = np.empty(16, dtype=numba.float32)
     zx = np.empty(16, dtype=numba.float32)
     zy = np.empty(16, dtype=numba.float32)
     zhp = np.empty(16, dtype=numba.float32)
@@ -246,7 +226,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
             rad = 8.0 + v2 * 18.0
             bx[i] = 40.0 + math.cos(ang) * rad
             by[i] = 40.0 + math.sin(ang) * rad
-        bhp[i] = 100.0; bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6); bskill[i] = float(bot_skill); balive[i] = True; bvelx[i] = 0.0; bvely[i] = 0.0
+        bhp[i] = 100.0; bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6); bskill[i] = float(bot_skill); balive[i] = True
     for i in range(n_zombies):
         v, rng = _lcg01(rng)
         ang = v * 6.283185307179586
@@ -279,11 +259,8 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
         alive_bots = 0
         for i in range(n_bots):
             if balive[i]: alive_bots += 1
-        alive_z = 0
-        for i in range(n_zombies):
-            if zalive[i]: alive_z += 1
-        if alive_bots == 0 or (n_zombies > 0 and alive_z == 0 and alive_bots <= 1):
-            if alive_bots == 0: break
+        # keep going for FFAs; stop when bots dead
+        if alive_bots == 0: break
         total_ticks += 1
         for bi in range(n_bots):
             if not balive[bi]: continue
@@ -315,7 +292,7 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
                 forward_numba_relu(w_opp, x_obs, y_raw)
             else:
                 forward_numba_relu(w, x_obs, y_raw)
-            camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4]); sdir = 1 if strafe_sig > 0.5 else -1
+            camp = sigmoid(y_raw[0]); retreat = sigmoid(y_raw[1]); aim_raw = math.tanh(y_raw[2]); fire_gate = sigmoid(y_raw[3]); strafe_sig = sigmoid(y_raw[4])
             # movement — policy-driven (deeper sim rework): net controls a 2D
             # velocity via retreat (forward), strafe_sig (lateral), camp (hold)
             fwd = 1.2 * (1.0 - 2.0 * retreat)
@@ -330,7 +307,6 @@ def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_we
                 vx *= 1.3 / vmag; vy *= 1.3 / vmag
             bx[bi] += vx; by[bi] += vy
             strafe_dir[bi] = 1 if strafe_sig > 0.5 else -1
-            is_retreating = retreat > 0.5 and bhp[bi] < 42.0
             if bx[bi] < 2: bx[bi] = 2
             if bx[bi] > 78: bx[bi] = 78
             if by[bi] < 2: by[bi] = 2
@@ -444,8 +420,6 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
     bweapon = np.empty(16, dtype=numba.int64)
     bskill = np.empty(16, dtype=numba.float32)
     balive = np.empty(16, dtype=numba.boolean)
-    bvelx = np.empty(16, dtype=numba.float32)
-    bvely = np.empty(16, dtype=numba.float32)
     # zombies
     zx = np.empty(16, dtype=numba.float32)
     zy = np.empty(16, dtype=numba.float32)
@@ -469,8 +443,6 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
         bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6)  # pinned loadout or random
         bskill[i] = float(bot_skill)
         balive[i] = True
-        bvelx[i] = 0.0
-        bvely[i] = 0.0
     for i in range(n_zombies):
         v, rng = _lcg01(rng)
         ang = v * 6.283185307179586
@@ -532,14 +504,9 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
         for i in range(n_bots):
             if balive[i]:
                 alive_bots += 1
-        alive_z = 0
-        for i in range(n_zombies):
-            if zalive[i]:
-                alive_z += 1
-        if alive_bots == 0 or (n_zombies > 0 and alive_z == 0 and alive_bots <= 1):
-            # keep going for FFAs; for now stop when bots dead
-            if alive_bots == 0:
-                break
+        # keep going for FFAs; stop when bots dead
+        if alive_bots == 0:
+            break
         total_ticks += 1
         for bi in range(n_bots):
             if not balive[bi]:
@@ -609,7 +576,6 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
             aim_raw = math.tanh(y_raw[2])
             fire_gate = sigmoid(y_raw[3])
             strafe_sig = sigmoid(y_raw[4])
-            sdir = 1 if strafe_sig > 0.5 else -1
 
             # movement — policy-driven (deeper sim rework): the net controls a
             # 2D velocity. retreat 0 -> full approach, 1 -> full backpedal;
@@ -630,7 +596,6 @@ def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
                 vx *= 1.3 / vmag; vy *= 1.3 / vmag
             bx[bi] += vx; by[bi] += vy
             strafe_dir[bi] = 1 if strafe_sig > 0.5 else -1
-            is_retreating = retreat > 0.5 and bhp[bi] < 42.0
             # clamp to arena 0..80
             if bx[bi] < 2: bx[bi] = 2
             if bx[bi] > 78: bx[bi] = 78

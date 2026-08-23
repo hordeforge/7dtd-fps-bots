@@ -5,9 +5,8 @@ Usage:
   python tools/ga/sweep.py --seeds 1 --trials 2   # quick check
   python tools/ga/sweep.py --sweep builtin       # built-in 4-layout ablation
 
-Each layout re-runs a short evolution (same seed chain, same fitness stub),
-plots all runs on one chart, and prints the ranking. Real-headless runs just
-swap the fitness; the ranking is identical.
+Each layout re-runs a short evolution (same seed chain, same combat-sim
+fitness), plots all runs on one chart, and prints the ranking.
 """
 
 from __future__ import annotations
@@ -143,7 +142,7 @@ def main():
             xs, bs, ms = zip(*ok[key])
             ax.plot(xs, bs, lw=1.5, label=f"{key} best")
             ax.plot(xs, ms, lw=1.0, ls="--", alpha=0.85, label=f"{key} mean")
-        ax.set_xlabel("generation"); ax.set_ylabel("fitness (synthetic)")
+        ax.set_xlabel("generation"); ax.set_ylabel("fitness")
         ax.set_title("Layout sweep — fitness over generations (pop "
                      f"{args.pop} gens {args.gens} seed {args.seed}, combat)")
         ax.legend(frameon=False, fontsize=7, ncols=3)

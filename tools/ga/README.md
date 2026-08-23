@@ -2,9 +2,9 @@
 
 Training and evaluation tooling for `docs/research/04-training-pipeline.md`,
 used for every experiment recorded in `docs/research/REPORT-*.md` (R0..R13).
-The trainer is **Python-first** (NumPy + stdlib); a Zig trainer with the same
-protocol can be added later. The harness reuses the game's own sense (`ZBS2`)
-and `bot <verb>` commands, so evolved weights transfer with no sim-to-real gap.
+The trainer is **Python-first** (NumPy + stdlib); fitness comes from the numba
+combat sim in `combat_sim.py`, so no 7DTD binary is needed and evolved weights
+drop straight into the live mod's `BotNeuralBrain.cs`.
 
 ## Layout
 
@@ -49,7 +49,7 @@ numba on first use (the first JIT pass takes a few seconds).
 ```bash
 python tools/ga/clone.py --heuristic-traces traces/heur.jsonl --out evolved/clone.json
 python tools/ga/evolve.py --pop 32 --gens 40 --seed 42
-python tools/ga/eval.py evolved/best.json --held-out
+python tools/ga/eval.py evolved/best.json
 python tools/ga/plot.py evolved/runs/<ts>/fitness.csv
 ```
 

@@ -175,9 +175,6 @@ namespace BotMod.AI
                 }
                 if (!File.Exists(resolved)) { reason = "file not found: " + resolved; _lastReason = reason; return false; }
                 string json = File.ReadAllText(resolved);
-                // Minimal JSON parse without adding a dep — the file is tiny and
-                // predictable (see evolved/README.md). We still use Newtonsoft for
-                // robustness since the mod already ships it.
                 var obj = Newtonsoft.Json.Linq.JObject.Parse(json);
                 int version = obj.Value<int?>("version") ?? 1;
                 if (version != kVersion)
@@ -190,7 +187,8 @@ namespace BotMod.AI
                 {
                     reason = "unsupported inputs=" + inputs + " (v" + kVersion + " packs " + kInputs + " features)";
                     _lastReason = reason; return false;
-                }                int hidden = obj.Value<int?>("hidden") ?? 16;
+                }
+                int hidden = obj.Value<int?>("hidden") ?? 16;
                 int outputs = obj.Value<int?>("outputs") ?? 5;
                 var arr = obj["weights"] as Newtonsoft.Json.Linq.JArray;
                 if (arr == null) { reason = "missing weights[]"; _lastReason = reason; return false; }
@@ -234,22 +232,6 @@ namespace BotMod.AI
             _weights = null; _w1 = null; _b1 = null; _w2 = null; _b2 = null;
             _loadedPath = ""; _loadedHash = "";
             _lastReason = "unloaded";
-        }
-
-        /// <summary>
-        /// Behavioural-cloning helper used offline/never on the dedi tick:
-        /// given an observation, produce the heuristic's "label" as 5 logits so the
-        /// trainer can fit the net to them. Kept here so Python and C# share labels.
-        /// Not called from Bot.Tick.
-        /// </summary>
-        public static NeuralOutputs HeuristicLabelsForTraining(
-            bool wantCamp, bool wantRetreat, float aimBiasYaw, bool shouldFire, int strafeDir)
-        {
-            return new NeuralOutputs
-            {
-                WantCamp = wantCamp, WantRetreat = wantRetreat,
-                AimBiasYaw = aimBiasYaw, ShouldFire = shouldFire, StrafeDir = strafeDir
-            };
         }
     }
 }

@@ -301,8 +301,7 @@ namespace BotMod.Core
         public static string PickBotClass(BotConfig cfg)
         {
             if (cfg.BotEntityClass == null) return "zombieSoldier";
-            if (cfg.BotEntityClass == "mixed") return _botClassPool[RngPick(_botClassPool.Length)];
-            if (cfg.BotEntityClass != null && cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
+            if (cfg.BotEntityClass.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0) return _botClassPool[RngPick(_botClassPool.Length)];
             return cfg.BotEntityClass;
         }
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)

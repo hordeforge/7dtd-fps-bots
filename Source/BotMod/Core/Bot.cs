@@ -288,7 +288,6 @@ namespace BotMod.Core
             if (cover == Vector3.zero) return;
             _state = BotBrain.State.Wander; // Retreat (reuse Wander while seeking cover)
             BotBrain.MoveTo(me, cover);
-            if (Vector3.Distance(me.position, cover) < 4f) { /* reached cover */ }
         }
         /// <summary>Live-target combat: refresh last-seen memory, then either fight
         /// at range or pursue the last-seen position.</summary>

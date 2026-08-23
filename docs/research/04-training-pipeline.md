@@ -46,7 +46,6 @@ evolved/
     gen_000.json            # top-3 genomes of that gen (weights + fitness)
     gen_001.json ...
     fitness.csv             # per-gen best/mean/median/diversity, append-only
-    leaderboards.jsonl      # per-genome per-match rows (§02 §7)
     innovations.json        # NEAT only
     traces/<gen>_<idx>.bin  # optional: obs→action log for debugging
   archive/                  # old bests moved here before promoting a new one

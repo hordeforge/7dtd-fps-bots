@@ -89,7 +89,7 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
     ax.plot(gens, mean, color=CAB, lw=1.1, alpha=0.9, label="mean")
     ax.plot(gens, median, color=ACCENT, lw=1.4, ls="--", label="median")
     ax.plot(gens, best, color="#111827", lw=1.7, label="best")
-    ax.set_xlabel("generation"); ax.set_ylabel("fitness (synthetic)")
+    ax.set_xlabel("generation"); ax.set_ylabel("fitness")
     ax.set_title("Evolution — fitness over generations")
     ax.legend(frameon=False, ncols=4, fontsize=8)
     ax.grid(True, alpha=0.18)
@@ -209,7 +209,7 @@ def build(runs: list[Path], out: Path):
 <h1>Clanker — Evolution Report</h1>
 <p class="muted">Generated {Path.cwd()} · {__import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
 {"<hr style='border:none;border-top:1px solid #e2e8f0;margin:14px 0'/>".join(parts) if parts else "<p>No runs.</p>"}
-<footer class="muted" style="margin-top:22px">Charts are synthetic-fitness until the headless harness is live; the report shape stays identical for the real sim.</footer>
+<footer class="muted" style="margin-top:22px">Charts score the headless combat sim (tools/ga/harness.py).</footer>
 """
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)
@@ -217,7 +217,6 @@ def build(runs: list[Path], out: Path):
     return out
 
 if __name__ == "__main__":
-    import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", nargs="+", required=True, help="evolved/runs/<ts> dirs")
     ap.add_argument("--out", default=None, help="output HTML path")

@@ -22,13 +22,12 @@ def load_best(path: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("best", type=str, help="evolved/best.json")
-    ap.add_argument("--held-out", action="store_true", help="held-out opponent/map pool flag (stub)")
     ap.add_argument("--matches", type=int, default=30)
     args = ap.parse_args()
 
     best_path = Path(args.best)
     if not best_path.is_file():
-        raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
+        raise SystemExit(f"best.json not found: {best_path} (e.g. evolved/best.json)")
     w, meta = load_best(best_path)
     if w.size != ga.W:
         raise SystemExit(f"weights size {w.size} != want {ga.W}")

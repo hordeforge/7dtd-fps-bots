@@ -36,7 +36,7 @@ def main():
     plt.figure()
     plt.plot(gens, best, label="best")
     plt.plot(gens, mean, label="mean")
-    plt.xlabel("generation"); plt.ylabel("fitness (synthetic)")
+    plt.xlabel("generation"); plt.ylabel("fitness")
     plt.legend(); plt.tight_layout()
     plt.savefig(out)
     print(f"saved {out}")

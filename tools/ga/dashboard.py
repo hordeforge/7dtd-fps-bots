@@ -126,7 +126,7 @@ def curves_b64(runs, best_run_name: str | None):
 def held_strip_b64(runs):
     # final held per run (seed 999, last non-nan entry)
     fig, ax = plt.subplots(figsize=(12, 2.8))
-    labels, helds, cols = [], [], []
+    labels, helds = [], []
     for run in runs:
         _, _, _, _, _, held = load_run_csv(run)
         vals = [v for v in held if v == v]  # drop nan
@@ -134,7 +134,6 @@ def held_strip_b64(runs):
             continue
         labels.append(run.name.replace("evolved/runs/", ""))
         helds.append(vals[-1])
-        cols.append("#0ea5e9" if vals[-1] == max([h for h in helds]) else "#94a3b8")
     if not helds:
         return ""
     order = np.argsort(helds)[::-1]
@@ -152,22 +151,14 @@ def held_strip_b64(runs):
 
 
 def best_net_b64():
-    w = np.array(json.loads((RUNS_DIR / "best.json").read_text())["weights"], dtype=float)
-    hidden = int(json.loads((RUNS_DIR / "best.json").read_text()).get("hidden", 16))
+    best = json.loads((RUNS_DIR / "best.json").read_text())
+    w = np.array(best["weights"], dtype=float)
+    hidden = int(best.get("hidden", 16))
     png = RUNS_DIR / "sweeps" / "viz_champion_dashboard.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     # render to a matplotlib figure via viz.draw (saves PNG); embed that PNG as b64.
     draw_net(w, hidden, 14, title="Champion controller", out=png)
     return base64.b64encode(png.read_bytes()).decode()
-
-
-def replay_html_frames(best_weights, seed, nb, nz, env_fixed=None):
-    """Return the <div> html from replay.py embedded (self-contained canvas)."""
-    summary, frames = record_match(best_weights, seed, nb, nz, 1200, 3, 0, env_fixed)
-    walls = __import__("replay").WALLS[env_fixed if env_fixed is not None else seed % 5]
-    buf = io.StringIO()
-    html = render_html(summary, frames, walls, Path("/tmp/_replay_drop.html"), "x")  # writes file
-    return html
 
 
 def build(runs, out: Path, replays):
@@ -251,7 +242,7 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
     for r in rows:
         chunks.append(f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td><td>{r[5]}</td></tr>")
     chunks.append("</table></div>")
-    chunks.append(f"""<p style="color:#64748b;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and mirror the production numba evaluator.</p></div></body></html>""")
+    chunks.append(f"""<p style="color:#64748b;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div></body></html>""")
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(chunks))

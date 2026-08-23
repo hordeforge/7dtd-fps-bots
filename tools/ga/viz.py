@@ -64,7 +64,6 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
     xs = [0, 1, 2]
     max_n = max(layers)
     for li, (n, x) in enumerate(zip(layers, xs)):
-        ys = np.linspace(0.08, 0.92, n)
         # pad centering
         off = (max_n - n) * 0.04
         ys = np.linspace(0.08 + off, 0.92 - off, n)
@@ -101,7 +100,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
                     continue
                 x0, x1 = xs[li], xs[li + 1]
                 # W1 is hidden×inputs: r=hidden, c=inputs; W2 is outputs×hidden: r=out, c=hidden
-                y0 = yss[li][c] if li == 0 else yss[li][c]
+                y0 = yss[li][c]
                 y1 = yss[li + 1][r]
                 col = "#ef4444" if W[r, c] < 0 else "#2563eb"
                 ax.plot([x0, x1], [y0, y1], color=col, alpha=float(np.clip(abs(W[r, c]) * 0.95, 0.12, 0.92)), lw=float(np.clip(abs(W[r,c])*2.1, 0.45, 2.8)), zorder=1)
