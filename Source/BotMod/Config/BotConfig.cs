@@ -55,6 +55,47 @@ namespace BotMod.Config
         // base bot name so assignments survive respawn). 0 = free-for-all (no teams).
         public int BotTeamCount { get; set; } = 2;
         public Dictionary<string, int> TeamAssignments { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        // TeamAssignments is written by admin surfaces that run OFF the main
+        // thread (web API handlers execute on thread pool threads) while the
+        // game tick reads it on every damage event. Dictionary is not safe for
+        // concurrent read+write, so every mutation and lookup goes through the
+        // locked helpers below; never touch the property directly at runtime.
+        internal readonly object TeamGate = new object();
+
+        /// <summary>Set (team > 0) or clear (team <= 0) a base-name assignment.</summary>
+        public void SetTeamAssignment(string baseName, int team)
+        {
+            if (string.IsNullOrEmpty(baseName)) return;
+            lock (TeamGate)
+            {
+                if (team <= 0) TeamAssignments.Remove(baseName);
+                else TeamAssignments[baseName] = team;
+            }
+        }
+
+        public void ClearTeamAssignments()
+        {
+            lock (TeamGate) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Locked lookup for hot paths (per-damage-event ally checks).</summary>
+        public int GetTeamAssignment(string baseName)
+        {
+            if (string.IsNullOrEmpty(baseName)) return 0;
+            lock (TeamGate)
+            {
+                int t;
+                return TeamAssignments.TryGetValue(baseName, out t) ? Math.Max(0, t) : 0;
+            }
+        }
+
+        /// <summary>Copy for off-main persistence/enumeration so no thread ever
+        /// iterates the live dictionary while another mutates it.</summary>
+        public Dictionary<string, int> SnapshotTeamAssignments()
+        {
+            lock (TeamGate) return new Dictionary<string, int>(TeamAssignments, TeamAssignments.Comparer);
+        }
         public float PathRecalcIntervalSec { get; set; } = 0.45f;
         public float StuckTimeoutSec { get; set; } = 2.0f;
         public float RandomWanderRadius { get; set; } = 60f;
@@ -128,10 +169,13 @@ namespace BotMod.Config
             StrafeChance = Math.Max(0f, Math.Min(1f, StrafeChance));
             DodgeOnHitChance = Math.Max(0f, Math.Min(1f, DodgeOnHitChance));
             BotTeamCount = Math.Max(0, Math.Min(8, BotTeamCount));
-            if (TeamAssignments == null) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            // Drop assignments outside the current team range back to free-for-all.
-            foreach (string k in new List<string>(TeamAssignments.Keys))
-                if (TeamAssignments[k] < 0 || TeamAssignments[k] > BotTeamCount) TeamAssignments[k] = 0;
+            lock (TeamGate)
+            {
+                if (TeamAssignments == null) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                // Drop assignments outside the current team range back to free-for-all.
+                foreach (string k in new List<string>(TeamAssignments.Keys))
+                    if (TeamAssignments[k] < 0 || TeamAssignments[k] > BotTeamCount) TeamAssignments[k] = 0;
+            }
             if (BotNames == null || BotNames.Length == 0) BotNames = new[] { "Bot" };
             if (LoadoutPool == null || LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };
             // Apply difficulty preset over tunables that weren't hand-tweaked far from defaults

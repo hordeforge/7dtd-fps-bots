@@ -143,18 +143,30 @@ namespace BotMod
         // through AtomicTextFile: a crash mid-persist must not tear the JSON
         // (an unparseable config resets all persisted operator state to
         // defaults on next start) and leaves a .bak last-known-good behind.
+        //
+        // Web handlers run concurrently on thread pool threads, so persists are
+        // serialized: without this gate two overlapping requests read-modify-
+        // write the same JSON (one field update lost) and interleave
+        // AtomicTextFile's fixed .tmp staging (a half-written tmp can be moved
+        // onto the live file). No I/O outside the lock; callers never take
+        // other locks around it, so there is no ordering hazard.
+        static readonly object PersistGate = new object();
+
         public static void PersistConfigField(string key, object value)
         {
-            foreach (string path in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
+            lock (PersistGate)
             {
-                try
+                foreach (string path in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
                 {
-                    if (!File.Exists(path)) continue;
-                    var root = JObject.Parse(File.ReadAllText(path));
-                    root[key] = JToken.FromObject(value);
-                    AtomicTextFile.Write(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                    try
+                    {
+                        if (!File.Exists(path)) continue;
+                        var root = JObject.Parse(File.ReadAllText(path));
+                        root[key] = JToken.FromObject(value);
+                        AtomicTextFile.Write(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                    }
+                    catch (Exception ex) { Warn("bot config persist failed (" + path + "): " + ex.Message); }
                 }
-                catch (Exception ex) { Warn("bot config persist failed (" + path + "): " + ex.Message); }
             }
         }
     }

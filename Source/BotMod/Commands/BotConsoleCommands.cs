@@ -59,7 +59,7 @@ namespace BotMod.Commands
         {
             var cfg = ModApi.Config; var mgr = BotManager.Instance;
             SdtdConsole.Instance.Output($"BotMod: enabled={cfg.Enabled} target={cfg.TargetBotCount} max={cfg.MaxBots} alive={mgr.BotCount} class={cfg.BotEntityClass} weapon={cfg.BotWeapon} diff={cfg.Difficulty} vision={cfg.VisionRange} attack={cfg.AttackRange}");
-            SdtdConsole.Instance.Output($"  team={cfg.BotTeam} teams={cfg.BotTeamCount} assigned={(cfg.TeamAssignments != null ? cfg.TeamAssignments.Count : 0)} vsBot={cfg.BotVsBot} vsZombie={cfg.BotVsZombie} vsPlayer={cfg.BotVsPlayer} (bot team on|off / bot vs <target> on|off)");
+            SdtdConsole.Instance.Output($"  team={cfg.BotTeam} teams={cfg.BotTeamCount} assigned={cfg.SnapshotTeamAssignments().Count} vsBot={cfg.BotVsBot} vsZombie={cfg.BotVsZombie} vsPlayer={cfg.BotVsPlayer} (bot team on|off / bot vs <target> on|off)");
             SdtdConsole.Instance.Output($"  spawn: radius={cfg.SpawnRadius} nearPlayer={cfg.SpawnNearPlayerChance} spawnpoints={cfg.UseSpawnpoints} strafe={cfg.StrafeChance} dodge={cfg.DodgeOnHitChance}");
         }
         void DoList()
@@ -201,21 +201,23 @@ namespace BotMod.Commands
             string name = BotManager.BaseName(p[2]);
             bool live = false;
             foreach (var b in BotManager.Instance.Bots) if (BotManager.BaseName(b.Name) == name) { live = true; break; }
-            if (team == 0) cfg.TeamAssignments.Remove(name); else cfg.TeamAssignments[name] = team;
-            ModApi.PersistConfigField("TeamAssignments", cfg.TeamAssignments);
+            cfg.SetTeamAssignment(name, team);
+            ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
             SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).") + (live ? "" : " No live bot with that name - applies to future spawns."));
         }
         void DoTeamList()
         {
             var cfg = ModApi.Config;
-            SdtdConsole.Instance.Output("Teams: count=" + cfg.BotTeamCount + " squadMode=" + cfg.BotTeam + " assigned=" + (cfg.TeamAssignments != null ? cfg.TeamAssignments.Count : 0));
-            if (cfg.TeamAssignments == null || cfg.TeamAssignments.Count == 0) { SdtdConsole.Instance.Output("  (none - all bots free-for-all)"); return; }
-            foreach (var kv in cfg.TeamAssignments) SdtdConsole.Instance.Output($"  {kv.Key} -> team {kv.Value}");
+            // Snapshot: never enumerate the live map (web threads mutate it).
+            Dictionary<string, int> teams = cfg.SnapshotTeamAssignments();
+            SdtdConsole.Instance.Output("Teams: count=" + cfg.BotTeamCount + " squadMode=" + cfg.BotTeam + " assigned=" + teams.Count);
+            if (teams.Count == 0) { SdtdConsole.Instance.Output("  (none - all bots free-for-all)"); return; }
+            foreach (var kv in teams) SdtdConsole.Instance.Output($"  {kv.Key} -> team {kv.Value}");
         }
         void DoTeamClear()
         {
-            ModApi.Config.TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+            ModApi.Config.ClearTeamAssignments();
+            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
             SdtdConsole.Instance.Output("All team assignments cleared - every bot is free-for-all.");
         }
         void DoTeams(List<string> p)
@@ -228,7 +230,7 @@ namespace BotMod.Commands
             ModApi.Config.BotTeamCount = n;
             ModApi.Config.Normalize(); // drops assignments outside the new range
             ModApi.PersistConfigField("BotTeamCount", n);
-            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
             SdtdConsole.Instance.Output("Team count set to " + n + (n == 0 ? " - free-for-all only." : "."));
         }
         static bool ParseOnOff(string v, out bool on)

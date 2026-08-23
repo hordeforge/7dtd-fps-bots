@@ -73,9 +73,8 @@ namespace BotMod.Core
             var bot = GetBot(entityId);
             if (bot == null) return 0;
             // Bot.TeamKey is the base name frozen at spawn; no per-call Split allocs.
-            var map = ModApi.Config.TeamAssignments;
-            if (map != null && map.TryGetValue(bot.TeamKey, out int t)) return Math.Max(0, t);
-            return 0;
+            // Locked lookup: web threads mutate TeamAssignments concurrently.
+            return ModApi.Config.GetTeamAssignment(bot.TeamKey);
         }
         // Single ally rule for every damage path (targeting, firing, DamageEntity):
         // same entity, global no-bot-vs-bot, squad mode, or a shared nonzero team.

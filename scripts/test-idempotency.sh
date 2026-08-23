@@ -53,3 +53,28 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
 else
   echo "skip neuralfuzz (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
 fi
+
+# Team-map concurrency hammer: BotConfig pulls ModApi -> engine types, so this
+# compiles the FULL mod source against the game DLLs (same reference set as
+# scripts/build.sh) and is skipped without a game install. Harmony lives in
+# the server's (or client's) Mods dir, where build.sh finds it too.
+need_refs=(netstandard.dll System.Runtime.dll UnityEngine.CoreModule.dll UnityEngine.PhysicsModule.dll UnityEngine.AIModule.dll Assembly-CSharp.dll Newtonsoft.Json.dll Utf8Json.dll System.Xml.dll LogLibrary.dll)
+have_all=true
+for dll in "${need_refs[@]}"; do [[ -f "$managed/$dll" ]] || have_all=false; done
+harmony=""
+if [[ -n "$managed" ]]; then
+  candidate="$(dirname "$(dirname "$managed")")/Mods/0_TFP_Harmony/0Harmony.dll"
+  if [[ -f "$candidate" ]]; then harmony="$candidate"; fi
+fi
+if $have_all && [[ -n "$harmony" ]]; then
+  mapfile -d '' sources < <(find "$root/Source/BotMod" -type f -name '*.cs' -print0 | sort -z)
+  refs=()
+  for dll in "${need_refs[@]}"; do refs+=(-r:"$managed/$dll"); done
+  refs+=(-r:"$managed/mscorlib.dll" -r:"$managed/System.dll" -r:"$managed/System.Core.dll" -r:"$harmony")
+  mcs -nostdlib -sdk:4.7.2 -warnaserror -langversion:latest "${refs[@]}" \
+    -out:"$work/teamshammer.exe" "${sources[@]}" \
+    "$root/tests/BotMod.Web.Tests/TeamAssignmentsConcurrencyTests.cs" > /dev/null
+  mono "$work/teamshammer.exe"
+else
+  echo "skip teamshammer (game DLLs or 0_TFP_Harmony not found; set SEVENDTD_DS_DIR to a dedicated-server install)"
+fi

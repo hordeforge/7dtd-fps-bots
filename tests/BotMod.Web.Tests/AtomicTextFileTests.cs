@@ -6,6 +6,7 @@
 //
 //   bash scripts/test-idempotency.sh
 using System;
+using System.Collections.Generic;
 using System.IO;
 using BotMod.Config;
 
@@ -99,6 +100,45 @@ static class AtomicTextFileTests
                 File.ReadAllText(path) == cfg + "\n");
             Check(".bak keeps the prior full content",
                 File.ReadAllText(AtomicTextFile.BackupPath(path)) == cfg);
+        }
+
+        // 7. Concurrency: overlapping writers must serialize. Before the
+        //    WriteGate fix, two threads could interleave the fixed .tmp staging:
+        //    FileShare.None collisions threw IOException out of Write, and a
+        //    half-written tmp could be moved onto the primary (torn JSON).
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            var errors = new List<string>();
+            var done = new System.Threading.ManualResetEvent(false);
+            const int writers = 8, perWriter = 40;
+            int remaining = writers;
+            for (int w = 0; w < writers; w++)
+            {
+                int id = w;
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        for (int i = 0; i < perWriter; i++)
+                            AtomicTextFile.Write(path, "{\"writer\":" + id + ",\"seq\":" + i + ",\"pad\":\"0123456789\"}");
+                    }
+                    catch (Exception ex) { lock (errors) errors.Add(ex.Message); }
+                    finally { if (System.Threading.Interlocked.Decrement(ref remaining) == 0) done.Set(); }
+                });
+            }
+            done.WaitOne(30000);
+            Check("concurrent writes complete without errors", errors.Count == 0);
+            foreach (string e in errors) Console.WriteLine("     " + e);
+            string s;
+            bool read = AtomicTextFile.TryRead(path, out s);
+            // The final content must be ONE complete payload from a single
+            // write call, never interleaved bytes from two.
+            bool complete = false;
+            for (int w = 0; w < writers && !complete; w++)
+                for (int i = 0; i < perWriter && !complete; i++)
+                    complete = read && s == "{\"writer\":" + w + ",\"seq\":" + i + ",\"pad\":\"0123456789\"}";
+            Check("final primary is one complete payload (no torn write)", complete);
+            Check("no staging tmp left after concurrent writes", !File.Exists(AtomicTextFile.TmpPath(path)));
         }
 
         foreach (string dir in Directory.GetDirectories(Path.GetTempPath(), "botmod-atomictest-*"))

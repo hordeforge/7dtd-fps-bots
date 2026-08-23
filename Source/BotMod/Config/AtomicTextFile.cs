@@ -22,30 +22,42 @@ namespace BotMod.Config
         internal static string TmpPath(string path) { return path + ".tmp"; }
         internal static string BackupPath(string path) { return path + ".bak"; }
 
+        // Process-wide writer serialization: Write stages into a fixed
+        // "<path>.tmp" and finishes with delete-then-move over the live path,
+        // so two overlapping Writes on the same path could otherwise move a
+        // half-written tmp onto the primary (torn file) or lose one update.
+        // Callers that read-modify-write (PersistConfigField) take their own
+        // gate first; acquisition order is always caller-gate -> WriteGate, so
+        // no deadlock. Pure in-memory/FS work under the lock, no callbacks.
+        internal static readonly object WriteGate = new object();
+
         /// <summary>Replace path with contents atomically, keeping the previous
         /// content at path.bak. Throws only if the new content could not be
         /// staged; a failure after staging leaves the old file intact.</summary>
         public static void Write(string path, string contents)
         {
-            string tmp = TmpPath(path);
-            byte[] bytes = Encoding.UTF8.GetBytes(contents ?? "");
-            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            lock (WriteGate)
             {
-                fs.Write(bytes, 0, bytes.Length);
-                fs.Flush(true); // flush to disk: survive power loss, not just process death
+                string tmp = TmpPath(path);
+                byte[] bytes = Encoding.UTF8.GetBytes(contents ?? "");
+                using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    fs.Write(bytes, 0, bytes.Length);
+                    fs.Flush(true); // flush to disk: survive power loss, not just process death
+                }
+                // Best-effort snapshot of the current good content BEFORE the swap,
+                // so every interruption point stays recoverable: crash before this
+                // line leaves the old primary intact; crash during the swap leaves
+                // .bak as the last good copy, which BotConfig.Load picks up.
+                try { if (File.Exists(path)) File.Copy(path, BackupPath(path), overwrite: true); }
+                catch (Exception) { }
+                // File.Move cannot overwrite on .NET Framework/Windows, and
+                // File.Replace is unavailable on some filesystems; delete-then-move
+                // behaves identically everywhere. The momentary absence of path is
+                // covered by the .bak above.
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
             }
-            // Best-effort snapshot of the current good content BEFORE the swap,
-            // so every interruption point stays recoverable: crash before this
-            // line leaves the old primary intact; crash during the swap leaves
-            // .bak as the last good copy, which BotConfig.Load picks up.
-            try { if (File.Exists(path)) File.Copy(path, BackupPath(path), overwrite: true); }
-            catch (Exception) { }
-            // File.Move cannot overwrite on .NET Framework/Windows, and
-            // File.Replace is unavailable on some filesystems; delete-then-move
-            // behaves identically everywhere. The momentary absence of path is
-            // covered by the .bak above.
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(tmp, path);
         }
 
         /// <summary>Read the best available copy: the primary, else the .bak

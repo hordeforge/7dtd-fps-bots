@@ -233,8 +233,10 @@ namespace BotMod.Web
                             string baseName = BotManager.BaseName(name);
                             var cfg = ModApi.Config;
                             team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
-                            if (team == 0) cfg.TeamAssignments.Remove(baseName); else cfg.TeamAssignments[baseName] = team;
-                            ModApi.PersistConfigField("TeamAssignments", cfg.TeamAssignments);
+                            // Locked helper + snapshot: this handler runs on a web
+                            // thread pool thread while the game tick reads the map.
+                            cfg.SetTeamAssignment(baseName, team);
+                            ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
                             respBody = RespondJson("name", baseName, "team", team);
                         }
                         break;
@@ -249,14 +251,14 @@ namespace BotMod.Web
                             ModApi.Config.BotTeamCount = count;
                             ModApi.Config.Normalize(); // drops assignments outside the range
                             ModApi.PersistConfigField("BotTeamCount", count);
-                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
                             respBody = RespondJson("teamCount", count);
                         }
                         break;
                     case "clearteams":
                         {
-                            ModApi.Config.TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.TeamAssignments);
+                            ModApi.Config.ClearTeamAssignments();
+                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
                             respBody = RespondJson("cleared", true);
                         }
                         break;
