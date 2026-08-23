@@ -5,8 +5,8 @@ Usage:
   python tools/ga/report.py --runs evolved/runs/2026-08-19_011136_pop32_g30_s42 --out evolved/runs/2026-08-19_.../report.html
   python tools/ga/report.py --runs run1 run2 --out compare.html
 
-Produces one HTML file that embeds base64 PNGs (no external deps, works as
-GitHub preview) plus JSON for programmatic checks.
+Produces one HTML file that embeds palette-optimized base64 PNGs (lazy-loaded,
+sized via width/height; no external deps) plus JSON for programmatic checks.
 """
 
 from __future__ import annotations
@@ -31,6 +31,43 @@ except ImportError:
 CAB = "#2563eb"  # blue
 ACCENT = "#0ea5e9"
 
+# Charts are flat-color line/bar/heatmap figures: an adaptive-palette PNG runs
+# ~3-4x smaller than matplotlib's default RGBA at identical visual quality, and
+# these base64 blobs are the entire weight of the generated report.
+def optimized_png_bytes(fig) -> bytes:
+    bio = io.BytesIO()
+    fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    raw = bio.getvalue()
+    try:
+        from PIL import Image
+    except ImportError:
+        return raw  # palette optimization unavailable; ship the plain PNG
+    im = Image.open(io.BytesIO(raw))
+    if im.mode != "RGBA":
+        im = im.convert("RGBA")
+    q = im.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
+    out = io.BytesIO()
+    q.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
+def png_dimensions(data: bytes) -> tuple[int, int]:
+    """Intrinsic pixel size straight from the PNG IHDR chunk (no image lib)."""
+    import struct
+    w, h = struct.unpack(">II", data[16:24])
+    return w, h
+
+
+def img_tag(data: bytes, alt: str) -> str:
+    """Self-contained <img>: width/height reserve layout space before decode,
+    loading=lazy keeps off-screen charts from decoding on open."""
+    b64 = base64.b64encode(data).decode()
+    w, h = png_dimensions(data)
+    return (f"<img src='data:image/png;base64,{b64}' alt='{alt}' width='{w}' height='{h}'"
+            f" loading='lazy' decoding='async'"
+            f" style='max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:10px' />")
+
 
 def load_csv(path: Path):
     gens, best, mean, median, q25, q75 = [], [], [], [], [], []
@@ -46,14 +83,7 @@ def load_csv(path: Path):
     return gens, best, mean, median, q25, q75
 
 
-def fig_to_b64(fig) -> str:
-    bio = io.BytesIO()
-    fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return base64.b64encode(bio.getvalue()).decode()
-
-
-def fitness_band(gens, best, mean, median, q25, q75) -> str:
+def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
     fig, ax = plt.subplots(figsize=(9, 4))
     ax.fill_between(gens, q25, q75, color=CAB, alpha=0.14, label="IQR (q25–q75)")
     ax.plot(gens, mean, color=CAB, lw=1.1, alpha=0.9, label="mean")
@@ -64,7 +94,7 @@ def fitness_band(gens, best, mean, median, q25, q75) -> str:
     ax.legend(frameon=False, ncols=4, fontsize=8)
     ax.grid(True, alpha=0.18)
     fig.tight_layout()
-    return fig_to_b64(fig)
+    return optimized_png_bytes(fig)
 
 
 def weight_hist(run_dir: Path) -> str | None:
@@ -88,7 +118,7 @@ def weight_hist(run_dir: Path) -> str | None:
     ax.set_title(f"Weight histogram — best of gen {last.get('gen', '?')}  (W={len(w)}, mean {np.mean(w):+.3f} σ {np.std(w):.3f})")
     ax.grid(True, axis="y", alpha=0.18)
     fig.tight_layout()
-    return fig_to_b64(fig)
+    return optimized_png_bytes(fig)
 
 
 def best_net(run_dir: Path) -> str | None:
@@ -125,7 +155,7 @@ def best_net(run_dir: Path) -> str | None:
     fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04, label="weight")
     axes[1].set_title("W2  (outputs × hidden)  5×16   —  b2 as right bar", pad=10)
     fig.tight_layout()
-    return fig_to_b64(fig)
+    return optimized_png_bytes(fig)
 
 
 def build(runs: list[Path], out: Path):
@@ -160,9 +190,9 @@ def build(runs: list[Path], out: Path):
         sec = [f"<h2 style='margin:18px 0 4px'>{run_dir.name}</h2>",
                f"<p style='color:#334155;font-size:13px'>{headline}</p>",
                f"<p style='color:#64748b;font-size:11px'>source: <code>{csv_path}</code> · {len(gens)} rows</p>"]
-        if band: sec.append(f"<div style='margin:10px 0'><img alt='fitness band over generations' style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{band}' /></div>")
-        if wh:   sec.append(f"<div style='margin:10px 0'><img alt='weight histogram' style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{wh}' /></div>")
-        if topo: sec.append(f"<div style='margin:10px 0'><img alt='best network topology' style='max-width:100%;border:1px solid #e2e8f0;border-radius:10px' src='data:image/png;base64,{topo}' /></div>")
+        if band: sec.append(f"<div style='margin:10px 0'>{img_tag(band, 'fitness band over generations')}</div>")
+        if wh:   sec.append(f"<div style='margin:10px 0'>{img_tag(wh, 'weight histogram')}</div>")
+        if topo: sec.append(f"<div style='margin:10px 0'>{img_tag(topo, 'best network topology')}</div>")
         if not HAS_MPL:
             sec.append("<p style='color:#b45309'>matplotlib not installed — showing headline only. <code>pip install matplotlib</code></p>")
         parts.append("\n".join(sec))

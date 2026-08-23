@@ -338,14 +338,26 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
     return summary, frames
 
 
+def _round_floats(o, nd=2):
+    """Trim float precision for serialization only: world units are 0..80 on an
+    8 px/unit canvas, so 2 decimals are far below one pixel. Full-precision
+    repr doubles or triples the embedded JSON otherwise."""
+    if isinstance(o, float):
+        return round(o, nd)
+    if isinstance(o, dict):
+        return {k: _round_floats(v, nd) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_round_floats(v, nd) for v in o]
+    return o
+
+
 def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
     """Self-contained HTML with a <canvas> top-down replay (play/pause/scrub)."""
     world = 80  # arena 0..80 units -> pixels
     scale = 8.0
     W = int(world * scale); H = int(world * scale)
-    js_frames = json.dumps(frames)
+    js_frames = json.dumps(_round_floats(frames))
     js_walls = json.dumps(walls)
-    js_summary = json.dumps(summary)
     # Build with token substitution (not an f-string) so the embedded JS/CSS braces are literal.
     html = """<!doctype html><html><head><meta charset="utf-8">
 <title>@TITLE@</title>

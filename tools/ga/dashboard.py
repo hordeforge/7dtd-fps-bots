@@ -44,10 +44,40 @@ from viz import draw as draw_net  # noqa: E402
 
 
 def fig_b64(fig) -> str:
+    """Palette-optimized PNG as base64. Charts are flat-color figures, so an
+    adaptive 256-color palette keeps them visually identical at ~3-4x smaller
+    (the embedded charts are nearly all of this file's weight)."""
     bio = io.BytesIO()
     fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
     plt.close(fig)
-    return base64.b64encode(bio.getvalue()).decode()
+    raw = bio.getvalue()
+    try:
+        from PIL import Image
+    except ImportError:
+        return base64.b64encode(raw).decode()
+    im = Image.open(io.BytesIO(raw))
+    if im.mode != "RGBA":
+        im = im.convert("RGBA")
+    q = im.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
+    out = io.BytesIO()
+    q.save(out, "PNG", optimize=True)
+    return base64.b64encode(out.getvalue()).decode()
+
+
+def png_dimensions(data_b64: str) -> tuple[int, int]:
+    """Intrinsic pixel size from the base64 PNG's IHDR chunk (no image lib).
+    The IHDR ends at byte 24, i.e. base64 char 32."""
+    import struct
+    raw = base64.b64decode(data_b64[:32])
+    w, h = struct.unpack(">II", raw[16:24])
+    return w, h
+
+
+def chart_card(data_b64: str, alt: str) -> str:
+    w, h = png_dimensions(data_b64)
+    return (f'<div class="card"><img alt="{alt}" src="data:image/png;base64,{data_b64}"'
+            f' width="{w}" height="{h}" loading="lazy" decoding="async"'
+            f' style="max-width:100%;height:auto"></div>')
 
 
 def load_run_csv(run: Path):
@@ -186,23 +216,22 @@ def build(runs, out: Path, replays):
         cd = curves_b64(runs, best_run_name)
         hs = held_strip_b64(runs)
         net = best_net_b64()
-        chunks.append(f"""<h2>1 · Evolution curves</h2><div class="card"><img alt="evolution curves" src="data:image/png;base64,{cd}"></div>""")
-        chunks.append(f"""<h2>2 · Held-out stability</h2><div class="card"><img alt="held-out stability strip" src="data:image/png;base64,{hs}"></div>""")
-        chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2><div class="card"><img alt="champion controller network" src="data:image/png;base64,{net}"></div>""")
+        chunks.append(f"""<h2>1 · Evolution curves</h2>{chart_card(cd, 'evolution curves')}""")
+        chunks.append(f"""<h2>2 · Held-out stability</h2>{chart_card(hs, 'held-out stability strip')}""")
+        chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'champion controller network')}""")
 
     # Arena replays
     if replays:
         chunks.append('<h2>4 · Arena replays (top-down, live)</h2>')
         chunks.append('<div class="grid">')
-        for label, html in replays.items():
-            b64 = base64.b64encode(html.encode()).decode()
+        encoded = {label: base64.b64encode(html.encode()).decode() for label, html in replays.items()}
+        for label in replays:
             chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#93c5fd">{label}</div><iframe id="f{abs(hash(label))%9999}" style="width:100%" height="430"></iframe></div>')
         chunks.append('</div>')
         # Set srcdoc via JS so large embedded HTML/payloads don't need escaping in attributes.
         chunks.append("<script>")
         chunks.append("const fr = {};")
-        for label, html in replays.items():
-            b64 = base64.b64encode(html.encode()).decode()
+        for label, b64 in encoded.items():
             chunks.append(f'fr["{abs(hash(label))%9999}"] = "{b64}";')
         chunks.append("""function deb64(s){ const bin=atob(s); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); return new TextDecoder().decode(u8); }
 for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=deb64(fr[k]); }

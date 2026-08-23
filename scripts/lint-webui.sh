@@ -9,6 +9,7 @@
 #      (warnings fail via --deny-warnings).
 #   3. Freshness: the committed bundle.js must equal a fresh compilation, so a
 #      .ts edit that was not compiled and committed fails the gate.
+#   4. Wire budget: bundle.js must stay under BUNDLE_MAX_BYTES (default 32 KiB).
 #
 # tsc/oxlint run through npx pinned by TSC_VERSION/OXLINT_VERSION. The repo
 # deliberately does not track package.json/node_modules (.gitignore), so the
@@ -78,4 +79,14 @@ if ! diff -q <(sed '1{/^"use strict";$/d}' "$tmp/bundle.js") \
   echo "BotMod: lint-webui: committed bundle.js is stale (bundle.ts changed without regeneration). Run: make build" >&2
   exit 1
 fi
-echo "BotMod: lint-webui: tsc type-check, oxlint, and bundle freshness ok"
+
+# 4. Wire budget: the stock dashboard loads bundle.js as a plain <script> tag
+#    and its webserver serves it uncompressed, so every panel open pays the
+#    full byte cost. Keep the delivered weight bounded (~1.5x current size).
+max_bytes="${BUNDLE_MAX_BYTES:-32768}"
+size="$(wc -c <"$webmod_dir/bundle.js")"
+if [ "$size" -gt "$max_bytes" ]; then
+  echo "BotMod: lint-webui: bundle.js is $size bytes, over the $max_bytes wire budget. Trim or lazy-load before adding." >&2
+  exit 1
+fi
+echo "BotMod: lint-webui: tsc type-check, oxlint, bundle freshness, and wire budget ($size/$max_bytes bytes) ok"

@@ -370,13 +370,13 @@ namespace BotMod.Web
             }
             return Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
+                // Only what the dashboard panel reads: this is polled every
+                // 5 s per admin session, so unused config echo is dead bytes.
                 enabled = cfg.Enabled,
-                dedicatedOnly = cfg.DedicatedOnly,
                 targetBotCount = cfg.TargetBotCount,
                 maxBots = cfg.MaxBots,
                 alive = mgr.BotCount,
                 difficulty = cfg.Difficulty,
-                weapon = cfg.BotWeapon,
                 neural = cfg.UseNeuralBrain,
                 neuralLoaded = BotMod.AI.BotNeuralBrain.Loaded,
                 neuralPath = BotMod.AI.BotNeuralBrain.LoadedPath,
@@ -391,7 +391,6 @@ namespace BotMod.Web
                 botTeam = cfg.BotTeam,
                 teamCount = cfg.BotTeamCount,
                 botHealth = cfg.BotHealth,
-                useSpawnpoints = cfg.UseSpawnpoints,
                 players = players,
                 bots = bots
             });

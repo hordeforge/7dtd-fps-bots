@@ -62,12 +62,10 @@ type BotPlayer = {
 };
 type BotStatus = {
   enabled?: boolean;
-  dedicatedOnly?: boolean;
   targetBotCount?: number;
   maxBots?: number;
   alive?: number;
   difficulty?: number;
-  weapon?: string;
   neural?: boolean;
   neuralLoaded?: boolean;
   neuralPath?: string;
@@ -82,7 +80,6 @@ type BotStatus = {
   botTeam?: boolean;
   teamCount?: number;
   botHealth?: number;
-  useSpawnpoints?: boolean;
   players?: Array<BotPlayer>;
   bots?: Array<BotStat>;
 };
