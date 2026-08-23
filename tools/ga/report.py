@@ -70,7 +70,8 @@ def fitness_band(gens, best, mean, median, q25, q75) -> str:
 def weight_hist(run_dir: Path) -> str | None:
     """Weight histogram of the final best (or first gen ckpt if no best yet)."""
     import numpy as np
-    cand = list(sorted(run_dir.glob("gen_*.json")))
+    import ga
+    cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
     if not cand:
         return None
     # pick the best genome of the last generation file
@@ -96,7 +97,8 @@ def best_net(run_dir: Path) -> str | None:
     scan without opening JSON.
     """
     import numpy as np
-    cand = list(sorted(run_dir.glob("gen_*.json")))
+    import ga
+    cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
     if not cand:
         return None
     last = json.loads(cand[-1].read_text())
@@ -175,7 +177,7 @@ def build(runs: list[Path], out: Path):
  .muted{{color:#64748b; font-size:12px}}
 </style>
 <h1>Clanker — Evolution Report</h1>
-<p class="muted">Generated {Path.cwd()} · {__import__('datetime').datetime.now().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
+<p class="muted">Generated {Path.cwd()} · {__import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
 {"<hr style='border:none;border-top:1px solid #e2e8f0;margin:14px 0'/>".join(parts) if parts else "<p>No runs.</p>"}
 <footer class="muted" style="margin-top:22px">Charts are synthetic-fitness until the headless harness is live; the report shape stays identical for the real sim.</footer>
 """

@@ -140,6 +140,14 @@ def config_hash(obj: dict) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def gen_ckpt_key(path: Path) -> int:
+    """Numeric generation for gen_NNN.json checkpoints (-1 if unparsable).
+    Order checkpoints with this key: the %03d filename padding stops sorting
+    correctly at gen 1000 ('gen_1000' < 'gen_101' lexicographically)."""
+    tail = path.stem.rsplit("_", 1)[-1]
+    return int(tail) if tail.isdigit() else -1
+
+
 def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

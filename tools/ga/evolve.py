@@ -41,7 +41,7 @@ def _load_resume(resume: str, seed: int, pop: int):
         return 0, None, None, float("-inf")
 
     resume_path = Path(resume)
-    ckpts = sorted(resume_path.glob("gen_*.json")) if resume_path.is_dir() else [resume_path]
+    ckpts = sorted(resume_path.glob("gen_*.json"), key=ga.gen_ckpt_key) if resume_path.is_dir() else [resume_path]
     try:
         if not ckpts or not ckpts[-1].is_file():
             return _fresh(f"resume: no checkpoints in {resume}, starting fresh")

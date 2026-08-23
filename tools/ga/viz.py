@@ -18,6 +18,8 @@ from pathlib import Path
 
 import numpy as np
 
+import ga
+
 INPUT_LABELS = ["hp", "eHp", "dist", "see", "lose", "wpRg", "pel", "acc", "skill", "aggr", "selfP", "camp", "vel", "stuck"]
 OUT_LABELS = ["camp", "retreat", "aim", "fire", "strafe"]
 
@@ -166,7 +168,7 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="/tmp/net.png")
     args = ap.parse_args()
     if args.run:
-        cands = sorted(Path(args.run).glob("gen_*.json"))
+        cands = sorted(Path(args.run).glob("gen_*.json"), key=ga.gen_ckpt_key)
         path = Path(cands[-1]) if cands else None
         if path is None:
             raise SystemExit(f"no gen_*.json in {args.run}")
