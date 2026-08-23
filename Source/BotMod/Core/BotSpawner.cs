@@ -291,8 +291,12 @@ namespace BotMod.Core
                 }
             }
             catch (Exception ex) { ModApi.Log("GetDmSpawns failed: " + ex.Message); }
-            // Fallback: scan trader POI-ish spots via world prefabs? skip
-            return _dmSpawns;
+            // Nothing found for THIS world: return null, never a list memoized
+            // under another world's name. Hits above check _dmSpawnsWorld, so
+            // the failure path must honor the same keying or bots would spawn
+            // at coordinates from a different map. Callers treat null/empty as
+            // "no DM spawns" and fall back to the radial ring.
+            return null;
         }
 
         // Default pool: pinned to plain zombieSoldier (the entries are identical,
