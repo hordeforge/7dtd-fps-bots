@@ -264,23 +264,14 @@ namespace BotMod.Web
         /// <summary>Run a world-touching action on the game's main thread and
         /// wait for it (the web server handler runs on a thread pool thread;
         /// Unity/world state must not be touched from there). <paramref name="op"/>
-        /// names the operation so a dispatch timeout is attributable in the log.</summary>
+        /// names the operation so a dispatch timeout is attributable in the log.
+        /// The wait-handle lifecycle lives in MainThreadDispatch (unit-tested).</summary>
         static T RunOnMain<T>(Func<T> fn, T fallback, string op)
         {
             if (ThreadManager.IsMainThread()) return fn();
-            T result = fallback;
-            Exception error = null;
-            var done = new System.Threading.ManualResetEventSlim(false);
-            ThreadManager.AddSingleTaskMainThread("bot-web-api", () =>
-            {
-                try { result = fn(); }
-                catch (Exception ex) { error = ex; }
-                finally { done.Set(); }
-            });
-            if (!done.Wait(TimeSpan.FromSeconds(15)))
-                throw new TimeoutException("main-thread dispatch timeout after 15s: " + op);
-            if (error != null) throw error;
-            return result;
+            return MainThreadDispatch.Execute(fn,
+                task => ThreadManager.AddSingleTaskMainThread("bot-web-api", task),
+                fallback, TimeSpan.FromSeconds(15), op);
         }
 
         static void PersistEnabled(bool enabled) => ModApi.PersistConfigField("Enabled", enabled);

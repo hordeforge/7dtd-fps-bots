@@ -32,6 +32,12 @@ run_suite idempotencyfuzz \
   "$root/Source/BotMod/Web/IdempotencyLedger.cs" \
   "$root/tests/BotMod.Web.Tests/IdempotencyLedgerFuzzTests.cs"
 
+# Web -> main-thread dispatch lifecycle: wait handle released on every exit
+# path, abandoned (timed-out) dispatch signals a disposed event safely.
+run_suite mainthreaddispatch \
+  "$root/Source/BotMod/Web/MainThreadDispatch.cs" \
+  "$root/tests/BotMod.Web.Tests/MainThreadDispatchTests.cs"
+
 # Weights-file parser fuzzer: needs the game install's Newtonsoft.Json.dll,
 # copied beside the exe so mono resolves the reference at runtime.
 srv="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
