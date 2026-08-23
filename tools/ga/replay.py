@@ -167,20 +167,25 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
         for bi in range(n_bots):
             if not balive[bi]:
                 continue
-            best = -1; best_kind = 0; best_d2 = 1e18
+            best = -1; best_kind = 0; best_d2 = 1e18; best_d2_true = 1e18
             bx0 = bx[bi]; by0 = by[bi]
             for j in range(n_bots):
                 if j == bi or not balive[j]:
                     continue
                 d2 = (bx[j] - bx0) ** 2 + (by[j] - by0) ** 2
                 if d2 < best_d2:
-                    best_d2 = d2; best = j; best_kind = 0
+                    best_d2 = d2; best_d2_true = d2; best = j; best_kind = 0
             for j in range(n_zombies):
                 if not zalive[j]:
                     continue
-                d2 = ((zx[j] - bx0) ** 2 + (zy[j] - by0) ** 2) * 1.05
-                if d2 < best_d2:
-                    best_d2 = d2; best = j; best_kind = 1
+                d2 = (zx[j] - bx0) ** 2 + (zy[j] - by0) ** 2
+                # d2_eff only biases target *selection* toward bots; hit chance,
+                # range gating and obs must see the true distance (sqrt(1.05)
+                # inflation here made zombies ~2.5% farther than they are).
+                # Mirrors combat_sim.simulate_match.
+                d2_eff = d2 * 1.05
+                if d2_eff < best_d2:
+                    best_d2 = d2_eff; best_d2_true = d2; best = j; best_kind = 1
             if best < 0:
                 v, rng = _lcg01(rng); ang = v * 6.283185307179586
                 bx[bi] += math.cos(ang) * 0.4; by[bi] += math.sin(ang) * 0.4
@@ -191,7 +196,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                 tx = bx[best]; ty = by[best]; thp = bhp[best]
             else:
                 tx = zx[best]; ty = zy[best]; thp = zhp[best]
-            dist = math.sqrt(best_d2)
+            dist = math.sqrt(best_d2_true)
             can_see = _los(bx0, by0, tx, ty, walls)
             x_obs = [
                 bhp[bi] / 100.0, thp / 100.0, min(1.0, dist / 70.0), 1.0 if can_see else 0.0,
@@ -333,7 +338,10 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
 
     summary = {"kills": kills, "deaths": deaths, "damage_dealt": damage_dealt,
                "damage_taken": damage_taken, "shots": shots, "hits": hits,
-               "total_ticks": total_ticks, "winner_hp": max(bhp) if balive else 0}
+               "total_ticks": total_ticks,
+               # Alive bots only: dead bots keep their residual hp (<= 0), and
+               # balive is always non-empty so a plain truthiness guard is dead code.
+               "winner_hp": max((h for h, a in zip(bhp, balive) if a), default=0)}
     return summary, frames
 
 
