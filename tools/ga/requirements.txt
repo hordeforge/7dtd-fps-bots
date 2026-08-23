@@ -1,3 +1,7 @@
-numpy>=1.24
-numba>=0.58
-matplotlib>=3.7
+# Floor excludes EOL branches; cap excludes untested majors.
+numpy>=1.24,<3
+numba>=0.58,<1
+matplotlib>=3.8,<4
+
+# Optional (report.py/dashboard.py): Pillow shrinks the embedded report PNGs
+# ~3-4x when installed; without it they fall back to plain RGBA PNGs.

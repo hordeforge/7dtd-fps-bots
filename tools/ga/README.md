@@ -30,13 +30,14 @@ tools/ga/
   viz.py                 network diagram rendering
   report.py              per-run report.html generator
   dashboard.py           live training dashboard (docs/ga-dashboard.html)
-  requirements.txt       numpy, numba, matplotlib
+  requirements.txt       numpy, numba, matplotlib (+ optional Pillow)
 ```
 
 ## How to run
 
-Requires Python 3 with NumPy, numba and matplotlib. Use a project-local
-virtualenv so nothing leaks into your system Python:
+Requires Python 3 with NumPy, numba and matplotlib. Pillow is optional
+(report.py/dashboard.py use it, when present, to shrink embedded PNGs ~3-4x).
+Use a project-local virtualenv so nothing leaks into your system Python:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
