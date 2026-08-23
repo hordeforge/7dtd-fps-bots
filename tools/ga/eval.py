@@ -14,7 +14,7 @@ import ga
 
 
 def load_best(path: Path):
-    obj = json.loads(path.read_text())
+    obj = json.loads(path.read_text(encoding="utf-8"))
     w = np.array(obj["weights"], dtype=np.float32)
     return w, obj
 

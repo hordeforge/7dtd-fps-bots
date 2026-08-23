@@ -57,7 +57,7 @@ def _load_resume(resume: str, seed: int, pop: int):
         if not ckpts or not ckpts[-1].is_file():
             return _fresh(f"resume: no checkpoints in {resume}, starting fresh")
         last = ckpts[-1]
-        ckpt = json.loads(last.read_text())
+        ckpt = json.loads(last.read_text(encoding="utf-8"))
         top3_raw = ckpt.get("top3") or []
         if not top3_raw:
             return _fresh(f"resume: {last} has no top3, starting fresh")
@@ -154,7 +154,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     run_dir.mkdir(parents=True, exist_ok=True)
 
     config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": HELD_SEED}
-    (run_dir / "config.json").write_text(json.dumps(config, indent=2))
+    (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     start_gen = 0
     best_w = None
@@ -186,7 +186,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     plateau = 0
 
     csv_path = run_dir / "fitness.csv"
-    with open(csv_path, "w", newline="") as cf:
+    with open(csv_path, "w", newline="", encoding="utf-8") as cf:
         writer = csv.writer(cf)
         writer.writerow(["gen", "best", "mean", "median", "q25", "q75", "held"])
 

@@ -86,15 +86,16 @@ namespace BotMod.Config
         }
 
         /// <summary>Locked lookup for hot paths (per-damage-event ally checks).
-        /// NFC on the lookup side mirrors SetTeamAssignment, so an NFD caller
-        /// spelling cannot miss an entry stored under its NFC form.</summary>
+        /// IdentityKey on the lookup side mirrors SetTeamAssignment, so an NFD
+        /// or invisible-noise caller spelling cannot miss an entry stored under
+        /// its canonical form.</summary>
         public int GetTeamAssignment(string baseName)
         {
             if (string.IsNullOrEmpty(baseName)) return 0;
             lock (TeamGate)
             {
                 int t;
-                return TeamAssignments.TryGetValue(BotText.Canon(baseName), out t) ? Math.Max(0, t) : 0;
+                return TeamAssignments.TryGetValue(BotText.IdentityKey(baseName), out t) ? Math.Max(0, t) : 0;
             }
         }
 
@@ -219,14 +220,16 @@ namespace BotMod.Config
             lock (TeamGate)
             {
                 if (TeamAssignments == null) TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                // Canonical NFC keys at ingestion: hand-edited configs may hold
-                // NFD spellings (macOS editors split accented names into base +
-                // combining mark) while runtime lookups derive NFC keys from bot
-                // names; OrdinalIgnoreCase alone cannot bridge the two forms.
+                // Canonical keys at ingestion (IdentityKey = NFC + no control/
+                // invisible characters): hand-edited configs may hold NFD
+                // spellings (macOS editors split accented names into base +
+                // combining mark) or paste noise like a zero-width space, while
+                // runtime lookups derive IdentityKeys from bot names;
+                // OrdinalIgnoreCase alone cannot bridge either gap.
                 var canonical = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (KeyValuePair<string, int> kv in TeamAssignments)
                 {
-                    string key = BotText.Canon(kv.Key);
+                    string key = BotText.IdentityKey(kv.Key);
                     if (key.Length == 0) continue;
                     int team = kv.Value < 0 || kv.Value > BotTeamCount ? 0 : kv.Value;
                     canonical[key] = team;

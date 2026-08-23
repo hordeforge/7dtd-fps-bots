@@ -104,6 +104,17 @@ static class BotConfigLoadTests
             Check("SetTeamAssignment stores NFC key", cfg.GetTeamAssignment(nfcKira) == 2);
         }
 
+        // Paste noise in identity keys: a name copied from a web page can
+        // carry zero-width characters; the stored key must collapse onto the
+        // clean spelling, or the assignment silently never applies.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            string json = "{ \"BotTeamCount\": 2, \"TeamAssignments\": { \"Gru\u200bnt\": 1 } }";
+            File.WriteAllText(path, json, System.Text.Encoding.UTF8);
+            BotConfig cfg = BotConfig.Load(path);
+            Check("ZWSP config key found via clean lookup", cfg.GetTeamAssignment("Grunt") == 1);
+        }
+
 
         // Recovery: torn primary + good .bak restores the last-known-good
         // values instead of silently resetting to defaults.

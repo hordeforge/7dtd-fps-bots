@@ -60,7 +60,7 @@ if __name__=="__main__":
         print(f"  {tag:22s} train {bf:+.3f}  held60(canon) {held:+.3f} +- {std:.3f}")
     rows.sort(key=lambda r: r[2], reverse=True)
     print(f"\nwinner (held60 canon): {rows[0][0]}  held {rows[0][2]:+.3f}  train {rows[0][1]:+.3f}")
-    Path("/tmp/fitness_sweep_R7.json").write_text(json.dumps([{"tag":t,"train":bf,"held":h,"held_std":s,"mix":m} for t,bf,h,s,m in rows], indent=2))
+    Path("/tmp/fitness_sweep_R7.json").write_text(json.dumps([{"tag":t,"train":bf,"held":h,"held_std":s,"mix":m} for t,bf,h,s,m in rows], indent=2), encoding="utf-8")
     print("json -> /tmp/fitness_sweep_R7.json")
     # plot
     try:

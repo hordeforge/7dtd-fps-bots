@@ -63,11 +63,13 @@ namespace BotMod.Config
                     var loaded = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
                     if (loaded != null)
                     {
-                        // Canonical NFC keys: file keys are operator-authored text
-                        // (possibly NFD), lookups go through BotText.BaseName which
-                        // yields NFC; keep one form on both sides of the lookup.
+                        // Canonical IdentityKeys (NFC, no control/invisible
+                        // characters): file keys are operator-authored text
+                        // (possibly NFD or carrying paste noise), lookups go
+                        // through BotText.BaseName which yields the same form;
+                        // keep one form on both sides of the lookup.
                         var canon = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var kv in loaded) canon[BotText.Canon(kv.Key)] = kv.Value;
+                        foreach (var kv in loaded) canon[BotText.IdentityKey(kv.Key)] = kv.Value;
                         Characters = canon;
                     }
                 }

@@ -34,7 +34,7 @@ except ImportError:
 
 
 def load_best(path: Path):
-    obj = json.loads(path.read_text())
+    obj = json.loads(path.read_text(encoding="utf-8"))
     w = np.array(obj["weights"], dtype=float)
     hidden = int(obj.get("hidden", 16))
     inputs = int(obj.get("inputs", 14))
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         path = Path(cands[-1]) if cands else None
         if path is None:
             raise SystemExit(f"no gen_*.json in {args.run}")
-        obj = json.loads(path.read_text())
+        obj = json.loads(path.read_text(encoding="utf-8"))
         w = np.array(obj["top3"][0], dtype=float)
         hidden, inputs = 16, 14
         meta_title = f"{Path(args.run).name} gen {obj.get('gen','?')}  best {obj.get('best_fitness',0):+.3f}"

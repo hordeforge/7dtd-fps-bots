@@ -23,7 +23,7 @@ def main():
     if not p.is_file():
         raise SystemExit(f"fitness.csv not found: {p} (usage: plot.py evolved/runs/<ts>/fitness.csv)")
     gens, best, mean = [], [], []
-    with open(p) as f:
+    with open(p, encoding="utf-8") as f:
         r = csv.DictReader(f)
         for row in r:
             gens.append(int(row["gen"]))

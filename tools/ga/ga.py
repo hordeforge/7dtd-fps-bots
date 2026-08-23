@@ -158,8 +158,8 @@ def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config
         "fitness": float(fitness),
         "generation": generation,
     }
-    path.write_text(json.dumps(payload, indent=2))
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (path.parent / "best.meta.json").write_text(json.dumps({
         "generation": generation, "fitness": float(fitness),
         "configHash": config_hash(config),
-    }, indent=2))
+    }, indent=2), encoding="utf-8")

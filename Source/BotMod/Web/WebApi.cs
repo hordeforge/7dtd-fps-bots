@@ -290,7 +290,11 @@ namespace BotMod.Web
                 return;
             }
             if (keyed) IdempotencyLedger.Complete(requestId, respBody);
-            ModApi.Log("web api action=" + logAction + " req=" + logTag + " ok in " + sw.ElapsedMilliseconds + "ms " + respBody);
+            // The body echoes request-supplied text (spawnNear's player name /
+            // ident). Json.NET escapes C0 controls but passes DEL/C1, bidi
+            // controls and zero-width characters through verbatim, so the same
+            // LogSanitizer contract that guards action/requestId guards it too.
+            ModApi.Log("web api action=" + logAction + " req=" + logTag + " ok in " + sw.ElapsedMilliseconds + "ms " + LogSanitizer.Clean(respBody));
             writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }

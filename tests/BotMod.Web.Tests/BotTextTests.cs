@@ -54,6 +54,22 @@ static class BotTextTests
         Check("name without tag passes through", BotText.BaseName("Dozer_11") == "Dozer");
         Check("null base name is empty", BotText.BaseName(null) == "");
 
+        // Invisible characters must not fork identity keys: a name pasted from
+        // a web page can carry zero-width spaces, bidi controls or variation
+        // selectors, and a key holding them silently never matches the clean
+        // spelling every live lookup derives.
+        Check("zero-width space stripped from key", BotText.BaseName("[Bot] Grunt\u200b_42") == "Grunt");
+        Check("bidi override stripped from key", BotText.BaseName("[Bot] Do\u202ezer") == "Dozer");
+        Check("variation selector stripped from key", BotText.BaseName("[Bot] Visor\ufe0f") == "Visor");
+        Check("BOM stripped from key", BotText.BaseName("\ufeffGrunt") == "Grunt");
+        Check("control characters stripped from key", BotText.IdentityKey("Gru\r\n\tnt") == "Grunt");
+        Check("C1 control stripped from key", BotText.IdentityKey("G\u009frunt") == "Grunt");
+        Check("ZWSP-pasted assignment hits clean lookup",
+            BotText.BaseName("Grunt\u200b") == "Grunt" && BotText.IdentityKey("Grunt\u200b") == BotText.IdentityKey("Grunt"));
+        Check("visible non-ASCII preserved in key", BotText.IdentityKey("K\u00edra\u2603") == "K\u00edra\u2603");
+        Check("WithoutInvisible leaves clean text alone", BotText.WithoutInvisible(nfcKira) == nfcKira);
+        Check("WithoutInvisible null is empty", BotText.WithoutInvisible(null) == "");
+
         Console.WriteLine(_failures == 0 ? "all bot text tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
     }
