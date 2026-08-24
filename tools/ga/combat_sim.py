@@ -187,7 +187,7 @@ def trait_jitter(net_id):
     return (v - 0.5) * 0.06
 
 
-@numba.njit
+@numba.njit(nogil=True)
 def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp, n_evolved,
               spawn_gap, env_pin, wep_pin, relu):
     """One headless match. Returns a struct of stats for fitness.
@@ -196,6 +196,8 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
     compositions; fitness aggregates across arenas in harness.py.
     `relu` picks the hidden activation: False = tanh (canonical, what ships),
     True = relu (activation sweeps; harness.ACTIVATION selects the wrapper).
+    nogil=True: harness.evaluate_population fans genomes across OS threads, so
+    the kernel must not hold the GIL (pure numeric work, no Python objects).
     """
     # Per-bot state arrays below are fixed at 16 slots; a caller passing more
     # bodies must fail loudly here instead of corrupting memory in njit.

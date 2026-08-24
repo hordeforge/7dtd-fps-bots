@@ -156,6 +156,22 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
     frames = []
     RECORD_STRIDE = 4  # ~12.5 fps at dt=0.05
 
+    # Flat-genome -> layer split hoisted out of the tick loop: _forward
+    # re-copied W1/b1/W2/b2 (~325 floats) on every call, once per live bot
+    # per tick (~n_bots * max_ticks array rebuilds per match). Same ops and
+    # dtypes as _forward (hidden 16, outputs 5), so traces stay bit-identical.
+    hid, outs = 16, 5
+    W1 = np.array(w[: hid * INPUTS]).reshape(hid, INPUTS)
+    b1 = np.array(w[hid * INPUTS: hid * INPUTS + hid])
+    _off = hid * INPUTS + hid
+    W2 = np.array(w[_off: _off + outs * hid]).reshape(outs, hid)
+    b2 = np.array(w[_off + outs * hid: _off + outs * hid + outs])
+
+    def _fwd(x_obs):
+        h = np.tanh(W1 @ np.array(x_obs, dtype=float) + b1)
+        return W2 @ h + b2
+
+
     for tick in range(max_ticks):
         alive_bots = sum(balive)
         alive_z = sum(zalive)
@@ -204,7 +220,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                 0.55 + bskill[bi] * 0.10, 0.55 + bskill[bi] * 0.10, 0.6, 0.5, 0.2, 0.0,
                 min(1.0, float(stuck[bi]) / 40.0),
             ]
-            y = _forward(w, x_obs)
+            y = _fwd(x_obs)
             camp = _sigmoid(y[0]); retreat = _sigmoid(y[1]); aim_raw = math.tanh(y[2])
             fire_gate = _sigmoid(y[3]); strafe_sig = _sigmoid(y[4])
             sdir = 1 if strafe_sig > 0.5 else -1

@@ -10,6 +10,8 @@ Matches docs/research/02-environment-and-fitness.md.
 from __future__ import annotations
 
 import hashlib
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 import numpy as np
@@ -37,6 +39,9 @@ DRAWS_PER_CONFIG = 2
 # weapon sampling pool (BotConfig.LoadoutPool indices into combat_sim WEAPON_*)
 # 0 pistol, 2 AK, 3 sniper, 5 SMG — keep it mixed per match
 _POOL = [0, 2, 3, 5, 0, 2]
+# Thread cap for evaluate_population: one worker per genome up to the core
+# count (each sim is CPU-bound; oversubscribing only adds context switches).
+_MAX_WORKERS = max(1, os.cpu_count() or 1)
 # fixed opponent policy for mixed arenas: all-zero weights = always-firing no-brain
 _OPP_STATIC = np.zeros(325, dtype=np.float32)
 # duel arena pins (R11 rework): 50-unit spawn gap, open env, equal AKs so the
@@ -111,4 +116,15 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
 
 
 def evaluate_population(pop: List[np.ndarray], generation: int, run_seed: int = 42) -> List[float]:
-    return [evaluate(w, generation, i, run_seed) for i, w in enumerate(pop)]
+    """Evaluate genomes across OS threads. combat_sim._simulate releases the
+    GIL (nogil), so threads give true multi-core parallelism on the dominant
+    training cost (pop x arena sims). Scores stay byte-identical to the
+    sequential order: each genome's fitness depends only on its own
+    deterministic seed chain (evaluate(generation, idx, run_seed)), nothing
+    is shared between sims, and ex.map collects results in index order.
+    """
+    workers = min(_MAX_WORKERS, len(pop))
+    if workers <= 1:
+        return [evaluate(w, generation, i, run_seed) for i, w in enumerate(pop)]
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return list(ex.map(lambda i: evaluate(pop[i], generation, i, run_seed), range(len(pop))))
