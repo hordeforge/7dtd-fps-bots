@@ -90,6 +90,10 @@ fails on drift between them.
   `BotManager`.
 
 ### Fixed
+- Neural weights resolution joins path segments through `System.IO.Path`
+  instead of embedding `/` separators, so `evolved/best.json` fallback
+  candidates stay the platform API's job on every OS the dedicated server
+  ships for.
 - Character lookup strips the `[Bot]` prefix so non-Grunt bot names resolve;
   aggro honors the `bot vs` gates; wandering skips allies and teammates.
 - `evolved/best.json` files whose `inputs` differs from the frozen v1

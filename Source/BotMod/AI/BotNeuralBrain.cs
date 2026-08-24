@@ -176,12 +176,14 @@ namespace BotMod.AI
                 if (!Path.IsPathRooted(path))
                 {
                     string mod = ModApi.ModPath;
+                    // Multi-segment Combine everywhere: never embed a separator,
+                    // so resolution is the platform API's job on every OS.
                     string[] tries = new[]
                     {
                         Path.Combine(mod ?? "", path),
-                        Path.Combine(mod ?? "", "evolved/best.json"),
+                        Path.Combine(mod ?? "", "evolved", "best.json"),
                         Path.Combine(Directory.GetCurrentDirectory(), path),
-                        Path.Combine(Directory.GetCurrentDirectory(), "evolved/best.json"),
+                        Path.Combine(Directory.GetCurrentDirectory(), "evolved", "best.json"),
                         path
                     };
                     resolved = null;

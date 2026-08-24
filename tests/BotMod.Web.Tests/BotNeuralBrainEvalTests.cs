@@ -199,6 +199,37 @@ static class BotNeuralBrainEvalTests
                 && a.ShouldFire == b.ShouldFire);
         }
 
+        // 4. Relative-path resolution: a non-rooted config value must resolve
+        //    against BotMod.ModApi.ModPath, including the canonical evolved/best.json
+        //    fallback when the configured name does not exist there. Pins the
+        //    candidate list in TryLoad so separator handling stays inside
+        //    System.IO.Path on every OS.
+        {
+            string prevModPath = BotMod.ModApi.ModPath;
+            string modDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "botmod-neuraleval-mod-" + Guid.NewGuid().ToString("N"));
+            string evolvedDir = System.IO.Path.Combine(modDir, "evolved");
+            System.IO.Directory.CreateDirectory(evolvedDir);
+            string golden = System.IO.Path.Combine(evolvedDir, "best.json");
+            string reason;
+            try
+            {
+                System.IO.File.WriteAllText(golden, WeightsJson(0, new float[Outputs * Hidden]));
+                BotMod.ModApi.ModPath = modDir;
+                Check("canonical evolved/best.json under ModPath resolves relatively",
+                    BotNeuralBrain.TryLoad("evolved/best.json", out reason));
+                Check("configured name missing beside assembly falls back to evolved/best.json",
+                    BotNeuralBrain.TryLoad("not-the-weights.json", out reason));
+            }
+            finally
+            {
+                BotMod.ModApi.ModPath = prevModPath;
+                try { System.IO.File.Delete(golden); } catch (System.IO.IOException) { }
+                try { System.IO.Directory.Delete(evolvedDir); } catch (System.IO.IOException) { }
+                try { System.IO.Directory.Delete(modDir); } catch (System.IO.IOException) { }
+            }
+        }
+
         if (_failures == 0) { Console.WriteLine("all bot neural eval tests passed"); return 0; }
         Console.WriteLine(_failures + " bot neural eval test(s) FAILED");
         return 1;
