@@ -188,7 +188,7 @@ def trait_jitter(net_id):
 
 
 @numba.njit(nogil=True)
-def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp, n_evolved,
+def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved,
               spawn_gap, env_pin, wep_pin, relu):
     """One headless match. Returns a struct of stats for fitness.
     w is flat. We simulate n_bots evolved bots vs each other + zombies.
@@ -561,15 +561,15 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
     return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits, kills_ev, deaths_ev, damage_dealt_ev, damage_taken_ev, shots_ev, hits_ev
 
 
-def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill,
                    w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
     """Canonical tanh sim (what ships). See _simulate."""
-    return _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+    return _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill,
                      w_opp, n_evolved, spawn_gap, env_pin, wep_pin, False)
 
 
-def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+def simulate_match_relu(w, seed, n_bots, n_zombies, max_ticks, bot_skill,
                         w_opp=None, n_evolved=-1, spawn_gap=0.0, env_pin=-1, wep_pin=-1):
     """Relu-hidden variant for activation sweeps. See _simulate."""
-    return _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon,
+    return _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill,
                      w_opp, n_evolved, spawn_gap, env_pin, wep_pin, True)
