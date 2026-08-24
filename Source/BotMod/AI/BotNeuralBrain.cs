@@ -34,6 +34,12 @@ namespace BotMod.AI
         static float[] _b2;
         static string _lastReason = "not loaded";
 
+        // Mod root directory for relative weight-path resolution. Wired from
+        // ModApi.ModPath by ModApi.InitMod so this file stays free of a
+        // dependency on the entry-point type (headless unit tests can exercise
+        // TryLoad); the default keeps headless runs on the CWD candidates.
+        internal static string ModRoot = "";
+
         public static bool Loaded => _loaded;
         public static string LastReason => _lastReason;
         public static string LoadedPath => _loadedPath;
@@ -175,7 +181,7 @@ namespace BotMod.AI
                 string resolved = path;
                 if (!Path.IsPathRooted(path))
                 {
-                    string mod = ModApi.ModPath;
+                    string mod = ModRoot;
                     // Multi-segment Combine everywhere: never embed a separator,
                     // so resolution is the platform API's job on every OS.
                     string[] tries = new[]

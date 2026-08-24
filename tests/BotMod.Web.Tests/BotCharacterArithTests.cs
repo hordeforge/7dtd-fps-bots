@@ -17,21 +17,14 @@
 //
 // Needs Newtonsoft.Json.dll from the game install (same gate as the neural
 // suites); compiles BotCharacter.cs (BotCharacter + BotCharacterDB) +
-// BotConfig.cs + BotText.cs + AtomicTextFile.cs plus a ModApi.Warn stub.
-// Run locally: bash scripts/test-idempotency.sh
+// BotConfig.cs + BotText.cs + AtomicTextFile.cs. Run locally:
+// bash scripts/test-idempotency.sh
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json;
 using BotMod.Config;
-
-namespace BotMod
-{
-    // Headless stand-in for the engine type BotCharacterDB.Load consults;
-    // same shim the neural/config suites use (separate exe, no collision).
-    public class ModApi { public static void Warn(string msg) { } }
-}
 
 static class BotCharacterArithTests
 {

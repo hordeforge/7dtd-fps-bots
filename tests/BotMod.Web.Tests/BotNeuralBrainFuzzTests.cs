@@ -17,15 +17,6 @@ using System.IO;
 using System.Text;
 using Newtonsoft.Json.Linq;
 
-// Test-only stand-in: BotNeuralBrain resolves relative weight paths against
-// ModApi.ModPath. Compiling the real ModApi would drag in game engine
-// assemblies; this suite therefore compiles BotNeuralBrain.cs together with
-// this stub, and MUST NOT be compiled alongside Source/BotMod/ModApi.cs.
-namespace BotMod
-{
-    public class ModApi { public static string ModPath = ""; }
-}
-
 static class BotNeuralBrainFuzzTests
 {
     const int Mutants = 500;

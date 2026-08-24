@@ -24,6 +24,9 @@ namespace BotMod
                 // Config-layer warnings route through the same WARN log line.
                 BotConfig.Warn = Warn;
                 ModPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
+                // Neural weight-path resolution anchors on the mod root (see
+                // BotNeuralBrain.ModRoot); wired before any TryLoad call.
+                BotMod.AI.BotNeuralBrain.ModRoot = ModPath;
                 Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
                 Config.Normalize();
                 try { BotCharacterDB.Load(Config); }

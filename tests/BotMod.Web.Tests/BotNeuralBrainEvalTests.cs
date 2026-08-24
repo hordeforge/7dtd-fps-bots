@@ -14,20 +14,12 @@
 //      brain must stay a pure function; no hidden state across evals).
 //
 // Needs Newtonsoft.Json.dll from the game install (same gate as the neural
-// weights fuzzer); compiles only BotNeuralBrain.cs plus a ModApi.ModPath
-// stub. Run locally:
+// weights fuzzer); compiles only BotNeuralBrain.cs. Run locally:
 //
 //   bash scripts/test-idempotency.sh
 using System;
 using System.Text;
 using BotMod.AI;
-
-namespace BotMod
-{
-    // Headless stand-in for the engine type BotNeuralBrain.TryLoad consults;
-    // same shim BotNeuralBrainFuzzTests uses (separate exe, no collision).
-    public class ModApi { public static string ModPath = ""; }
-}
 
 static class BotNeuralBrainEvalTests
 {
@@ -200,12 +192,13 @@ static class BotNeuralBrainEvalTests
         }
 
         // 4. Relative-path resolution: a non-rooted config value must resolve
-        //    against BotMod.ModApi.ModPath, including the canonical evolved/best.json
-        //    fallback when the configured name does not exist there. Pins the
-        //    candidate list in TryLoad so separator handling stays inside
-        //    System.IO.Path on every OS.
+        //    against BotNeuralBrain.ModRoot (wired from ModApi.ModPath in the
+        //    game), including the canonical evolved/best.json fallback when
+        //    the configured name does not exist there. Pins the candidate
+        //    list in TryLoad so separator handling stays inside System.IO.Path
+        //    on every OS.
         {
-            string prevModPath = BotMod.ModApi.ModPath;
+            string prevModRoot = BotNeuralBrain.ModRoot;
             string modDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                 "botmod-neuraleval-mod-" + Guid.NewGuid().ToString("N"));
             string evolvedDir = System.IO.Path.Combine(modDir, "evolved");
@@ -215,15 +208,15 @@ static class BotNeuralBrainEvalTests
             try
             {
                 System.IO.File.WriteAllText(golden, WeightsJson(0, new float[Outputs * Hidden]));
-                BotMod.ModApi.ModPath = modDir;
-                Check("canonical evolved/best.json under ModPath resolves relatively",
+                BotNeuralBrain.ModRoot = modDir;
+                Check("canonical evolved/best.json under ModRoot resolves relatively",
                     BotNeuralBrain.TryLoad("evolved/best.json", out reason));
                 Check("configured name missing beside assembly falls back to evolved/best.json",
                     BotNeuralBrain.TryLoad("not-the-weights.json", out reason));
             }
             finally
             {
-                BotMod.ModApi.ModPath = prevModPath;
+                BotNeuralBrain.ModRoot = prevModRoot;
                 try { System.IO.File.Delete(golden); } catch (System.IO.IOException) { }
                 try { System.IO.Directory.Delete(evolvedDir); } catch (System.IO.IOException) { }
                 try { System.IO.Directory.Delete(modDir); } catch (System.IO.IOException) { }

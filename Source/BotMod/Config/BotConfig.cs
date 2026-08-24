@@ -157,10 +157,11 @@ namespace BotMod.Config
             }
         }
 
-        /// <summary>Warning sink for config problems. Wired to ModApi.Warn by
-        /// ModApi.InitMod so this file stays free of engine/game type
-        /// dependencies (headless unit tests can exercise Load); the default
-        /// writes to stdout.</summary>
+        /// <summary>Warning sink for config-layer problems (BotConfig.Load and
+        /// BotCharacterDB ingestion). Wired to ModApi.Warn by ModApi.InitMod
+        /// so this layer stays free of engine/game type dependencies
+        /// (headless unit tests can exercise Load); the default writes to
+        /// stdout.</summary>
         internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
 
         public static BotConfig Load(string path)

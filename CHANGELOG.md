@@ -28,6 +28,11 @@ fails on drift between them.
   `sha256sum -c` format), so an extracted package can be verified offline.
 
 ### Changed
+- The engine-free Config and AI layers no longer reference the `ModApi`
+  entry-point type: `BotCharacterDB` warnings flow through the existing
+  `BotConfig.Warn` sink, and neural weight-path resolution reads
+  `BotNeuralBrain.ModRoot`, wired once during init. The headless unit suites
+  compile without their previous test-only `ModApi` shims.
 - Pinned npx tool versions (typescript, oxlint + plugin packages, vnu-jar,
   anti-slop commit) now live in `scripts/tool-versions.sh`, sourced by
   `scripts/build.sh`, `scripts/lint-webui.sh`, and `scripts/lint-html.sh`;

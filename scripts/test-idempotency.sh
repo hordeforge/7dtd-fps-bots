@@ -102,9 +102,9 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
   # Repo root as argv[1] so the fuzzer can find evolved/best.json.
   mono "$work/neuralfuzz.exe" "$root"
 
-  # Forward-pass correctness pins for the same brain (needs Newtonsoft only,
-  # plus a ModApi.ModPath stub compiled into the test): input packing order,
-  # sigmoid/tanh head math, decision thresholds, eval purity.
+  # Forward-pass correctness pins for the same brain (needs only Newtonsoft):
+  # input packing order, sigmoid/tanh head math, decision thresholds, eval
+  # purity.
   mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
     -out:"$work/neuraleval.exe" \
     "$root/Source/BotMod/AI/BotNeuralBrain.cs" \

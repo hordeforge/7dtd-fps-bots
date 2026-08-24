@@ -138,7 +138,7 @@ namespace BotMod.Config
                 }
                 else
                 {
-                    ModApi.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
+                    BotConfig.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
                     // Rebuild from pristine defaults: with no file there is nothing
                     // to re-parse, so Characters would keep the instances a previous
                     // Load already shifted by the difficulty lerp below, and every
@@ -166,7 +166,7 @@ namespace BotMod.Config
                     ch.Aggression = Math.Max(0f, Math.Min(1f, ch.Aggression + diffSkill * 0.2f - 0.1f));
                 }
             }
-            catch (Exception ex) { ModApi.Warn("characters.json load failed, using defaults: " + ex.Message); }
+            catch (Exception ex) { BotConfig.Warn("characters.json load failed, using defaults: " + ex.Message); }
         }
         public static BotCharacter ForName(string name)
         {
