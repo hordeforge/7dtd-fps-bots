@@ -170,14 +170,8 @@ namespace BotMod.Web
                                 if (world == null || string.IsNullOrEmpty(ident)) return new { spawned = 0, found = false, name = ident };
                                 EntityPlayer target = BotManager.FindPlayerByNameOrId(world, ident);
                                 if (target == null) return new { spawned = 0, found = false, name = ident };
-                                int n = 0;
-                                for (int i = 0; i < count; i++)
-                                {
-                                    UnityEngine.Vector3 pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config);
-                                    if (pos == UnityEngine.Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
-                                    if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) n++;
-                                }
-                                return new { spawned = n, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
+                                int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
+                                return new { spawned, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
                             }, "spawnNear");
                             respBody = RespondJson("spawned", r.spawned, "found", r.found, "player", r.name);
                         }

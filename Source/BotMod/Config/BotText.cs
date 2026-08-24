@@ -30,11 +30,13 @@ namespace BotMod.Config
         }
 
         // Control characters (C0, DEL, C1) and invisible formatting characters
-        // (same ranges LogSanitizer scrubs from log lines, plus variation
-        // selectors): none of them carry meaning in a stored identifier, but a
-        // value pasted from a web page can carry them silently, and a key like
-        // "Grunt" + U+200B never equals "Grunt", so the assignment it stores
-        // would silently never apply.
+        // (zero-width + LRM/RLM, bidi embedding/override controls, word
+        // joiner + invisible operators, BOM, variation selectors): none of
+        // them carry meaning in a stored identifier, but a value pasted from a
+        // web page can carry them silently, and a key like "Grunt" + U+200B
+        // never equals "Grunt", so the assignment it stores would silently
+        // never apply. Single source of truth: LogSanitizer.Clean delegates
+        // here for its log-line scrub of the same ranges.
         internal static bool IsInvisible(char c)
         {
             return c < ' ' || (c >= '\x7f' && c <= '\x9f')

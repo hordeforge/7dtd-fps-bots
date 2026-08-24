@@ -53,9 +53,11 @@ run_suite mainthreaddispatch \
   "$root/tests/BotMod.Web.Tests/MainThreadDispatchTests.cs"
 
 # Log-injection guard: request-supplied requestId/action must reach server log
-# lines with control characters (CRLF, ANSI escapes) scrubbed.
+# lines with control characters (CRLF, ANSI escapes) scrubbed. Clean delegates
+# its invisible-character table to BotText, so both sources compile here.
 run_suite logsanitize \
   "$root/Source/BotMod/Config/LogSanitizer.cs" \
+  "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
 
 # vs-class combat gate: bot identity overrides body class (zombieSoldier

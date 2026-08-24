@@ -148,6 +148,23 @@ namespace BotMod.Core
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
             return true;
         }
+        /// <summary>Spawn <paramref name="count"/> bots near an already-resolved
+        /// player, retrying each failed position once (shared body of
+        /// `bot player` and the web API's spawnNear so both surfaces pick spots
+        /// and loadouts identically). Returns how many bots actually spawned.</summary>
+        public int SpawnNearPlayer(EntityPlayer target, int count, string weaponOverride)
+        {
+            var world = GameManager.Instance?.World;
+            if (world == null || target == null || count <= 0) return 0;
+            int spawned = 0;
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config);
+                if (pos == Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
+                if (TrySpawnOne(pos, weaponOverride: weaponOverride)) spawned++;
+            }
+            return spawned;
+        }
         public int RemoveAllBots(string reason = "command")
         {
             var world = GameManager.Instance?.World; int n = 0;

@@ -145,7 +145,8 @@ namespace BotMod.Commands
         }
         void DoCount(List<string> p)
         {
-            if (p.Count < 2 || !int.TryParse(p[1], out int n)) { SdtdConsole.Instance.Output($"Usage: bot count <n>  (0..{ModApi.Config.MaxBots})"); return; }
+            if (p.Count < 2 || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+            { SdtdConsole.Instance.Output($"Usage: bot count <n>  (0..{ModApi.Config.MaxBots})"); return; }
             n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n; ModApi.PersistConfigField("TargetBotCount", n); SdtdConsole.Instance.Output($"Target bot count set to {n} (persisted). Will converge within a few seconds.");
         }
         void DoPlayer(List<string> p, CommandSenderInfo sender)
@@ -163,12 +164,7 @@ namespace BotMod.Commands
             EntityPlayer target = ident == "me" || ident == "self" ? FindPlayerBySender(world, sender) : null;
             if (target == null) target = BotManager.FindPlayerByNameOrId(world, ident);
             if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game).\n  Online: " + ListPlayerNames(world)); return; }
-            int spawned = 0;
-            for (int i = 0; i < count; i++) {
-                UnityEngine.Vector3 pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config);
-                if (pos == UnityEngine.Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
-                if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) spawned++;
-            }
+            int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {BotMod.Config.LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident)} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
         }
         static EntityPlayer FindPlayerBySender(World world, CommandSenderInfo sender)
@@ -202,7 +198,7 @@ namespace BotMod.Commands
         }
         void DoSkill(List<string> p)
         {
-            if (p.Count < 2 || !int.TryParse(p[1], out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
+            if (p.Count < 2 || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
             d = Math.Max(0, Math.Min(4, d)); ModApi.Config.Difficulty = d; ModApi.Config.Normalize(); ModApi.PersistConfigField("Difficulty", d); SdtdConsole.Instance.Output($"Skill set to {d} (persisted). Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
         }
         void DoVs(List<string> p)
@@ -244,7 +240,9 @@ namespace BotMod.Commands
         }
         void DoTeamAssign(List<string> p)
         {
-            if (p.Count < 4 || !int.TryParse(p[3], out int team))
+            // Invariant parse: team ids are protocol tokens like entity ids
+            // (same convention as DoRemove / BotArgParser).
+            if (p.Count < 4 || !int.TryParse(p[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int team))
             {
                 SdtdConsole.Instance.Output("Usage: bot team assign <botName> <teamId>  (teamId 0 = free-for-all, 1.." + ModApi.Config.BotTeamCount + ")"); return;
             }
@@ -274,7 +272,7 @@ namespace BotMod.Commands
         }
         void DoTeams(List<string> p)
         {
-            if (p.Count < 2 || !int.TryParse(p[1], out int n))
+            if (p.Count < 2 || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
             {
                 SdtdConsole.Instance.Output("Teams count: " + ModApi.Config.BotTeamCount + " (0 = free-for-all only). Usage: bot teams <0-8>"); return;
             }

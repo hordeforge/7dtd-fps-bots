@@ -95,6 +95,15 @@ fails on drift between them.
   `BotManager`.
 
 ### Fixed
+- Target selection's finish-the-wounded bias now scales target health as a
+  fraction of `BotHealth` like every other health fraction in the mod;
+  previously it divided by a hardcoded 100, so with a tuned `BotHealth`
+  (config accepts 10..10000) wounded-target preference was mis-scaled by up
+  to 100x and bots effectively ignored who was hurt.
+- `bot count`, `bot skill`, `bot teams` and `bot team assign` parse their
+  numeric argument in the invariant culture (entity ids and coordinates
+  already did): under a comma-decimal host locale these commands no longer
+  depend on `int.TryParse`'s current-culture behavior.
 - Neural weights resolution joins path segments through `System.IO.Path`
   instead of embedding `/` separators, so `evolved/best.json` fallback
   candidates stay the platform API's job on every OS the dedicated server

@@ -173,11 +173,10 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
 
 
     for tick in range(max_ticks):
-        alive_bots = sum(balive)
-        alive_z = sum(zalive)
-        if alive_bots == 0 or (n_zombies > 0 and alive_z == 0 and alive_bots <= 1):
-            if alive_bots == 0:
-                break
+        # Stop only when every bot is dead: the sim records FFA/K/D accounting,
+        # so a wiped zombie horde or a lone survivor still plays out the clock.
+        if sum(balive) == 0:
+            break
         total_ticks += 1
         frame = {"t": tick, "env": env, "bots": [], "zombies": [], "events": []}
         for bi in range(n_bots):

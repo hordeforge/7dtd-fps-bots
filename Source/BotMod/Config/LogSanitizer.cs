@@ -17,24 +17,17 @@ namespace BotMod.Config
     /// terminal ("admin\u202e..."), so a request-supplied value must not be
     /// able to carry them into the log verbatim. Substitution keeps the string
     /// length stable.
+    ///
+    /// The invisible-character table itself lives in BotText.IsInvisible (one
+    /// definition shared with stored-key canonicalization, so the two cannot
+    /// drift); Clean adds only the control-character test on top.
     /// </summary>
     internal static class LogSanitizer
     {
-        // U+200B-U+200F zero-width space/joiners + LRM/RLM marks,
-        // U+202A-U+202E embedding/override bidi controls,
-        // U+2060-U+2064 word joiner + invisible operators,
-        // U+FEFF zero-width no-break space / byte-order mark.
-        static bool IsInvisibleFormat(char c)
-        {
-            return (c >= '\u200b' && c <= '\u200f')
-                || (c >= '\u202a' && c <= '\u202e')
-                || (c >= '\u2060' && c <= '\u2064')
-                || c == '\ufeff';
-        }
-
+        // char.IsControl spans exactly C0 + DEL + C1 ('\0'..'\x1f', '\x7f'..'\x9f').
         static bool NeedsClean(char c)
         {
-            return c < ' ' || (c >= '\x7f' && c <= '\x9f') || IsInvisibleFormat(c);
+            return char.IsControl(c) || BotText.IsInvisible(c);
         }
 
         public static string Clean(string value)

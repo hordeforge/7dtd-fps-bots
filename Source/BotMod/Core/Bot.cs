@@ -97,6 +97,11 @@ namespace BotMod.Core
         }
 
         public void MarkDead() { _dead = true; }
+        /// <summary>Aim traits with the documented fallback when this bot has
+        /// no character entry (single definition; consumers: engagement aim
+        /// bias and the neural observation slots).</summary>
+        float AimAcc => Character?.AimAccuracy ?? 0.75f;
+        float AimSkillVal => Character?.AimSkill ?? 0.75f;
         float Rng01() { return _rng.Next01(); }
         float RngSym() { return _rng.NextSymmetric(); }
         public bool IsDeadOrUnloaded(World world)
@@ -247,7 +252,7 @@ namespace BotMod.Core
             // zdtd_bot skill_aimerr, ported: roll a fixed per-engagement
             // aim bias so bots are imperfect-but-stable shots; better
             // aim skill (BotCharacter.AimAccuracy) shrinks the bias.
-            float acc = Character?.AimAccuracy ?? 0.75f;
+            float acc = AimAcc;
             _aimBiasYaw = RngSym() * Mathf.Max(0.03f, (1f - acc) * 0.45f);
             // announce occasionally
             if (Time.time > _nextTaunt && Rng01() < 0.12f)
@@ -332,8 +337,7 @@ namespace BotMod.Core
             // Reuses the tick's cached eval (see TryNeuralOnce).
             if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
             {
-                float acc = Character != null ? Character.AimAccuracy : 0.75f;
-                float window = Mathf.Max(0.03f, (1f - acc) * 0.45f);
+                float window = Mathf.Max(0.03f, (1f - AimAcc) * 0.45f);
                 _aimBiasYaw = _neuralOuts.AimBiasYaw * window; // outs already tanh in [-1,1]
             }
             if (_aimBiasYaw != 0f)
@@ -805,10 +809,8 @@ namespace BotMod.Core
             try { wpRange = Mathf.Clamp01(Weapon.Range / Mathf.Max(1f, cfg.AttackRange)); } catch { }
             float pellets = 0f;
             try { pellets = Mathf.Clamp01(Weapon.Pellets / 8f); } catch { }
-            float acc = 0.75f;
-            try { acc = Character != null ? Character.AimAccuracy : 0.75f; } catch { }
-            float skill = 0.75f;
-            try { skill = Character != null ? Character.AimSkill : 0.75f; } catch { }
+            float acc = AimAcc;
+            float skill = AimSkillVal;
             float aggr = 0.5f, selfPres = 0.5f, camper = 0.2f;
             try { if (Character != null) { aggr = Character.Aggression; selfPres = Character.SelfPreservation; camper = Character.Camper; } } catch { }
             // Slot 12: rounds-left fraction. The sim divides ammo+reserve by the
