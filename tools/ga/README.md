@@ -40,8 +40,8 @@ Requires Python 3 with NumPy, numba and matplotlib. Pillow is optional
 Use a project-local virtualenv so nothing leaks into your system Python:
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r tools/ga/requirements.txt   # numpy, numba, matplotlib
+uv venv .venv && . .venv/bin/activate
+uv pip install -r tools/ga/requirements.txt   # numpy, numba, matplotlib
 ```
 
 `evolve.py`/`eval.py` import `combat_sim.py`, which compiles its hot loops with
