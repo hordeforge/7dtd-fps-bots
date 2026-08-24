@@ -27,6 +27,7 @@ config_src=(
   "$root/Source/BotMod/Config/BotText.cs"
   "$root/Source/BotMod/Config/AtomicTextFile.cs"
   "$root/Source/BotMod/Config/Lcg.cs"
+  "$root/Source/BotMod/Config/WeaponProfile.cs"
 )
 character_src=(
   "$root/Source/BotMod/Config/BotCharacter.cs"

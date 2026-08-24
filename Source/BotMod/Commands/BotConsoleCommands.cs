@@ -199,7 +199,10 @@ namespace BotMod.Commands
         void DoSkill(List<string> p)
         {
             if (p.Count < 2 || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
-            d = Math.Max(0, Math.Min(4, d)); ModApi.Config.Difficulty = d; ModApi.Config.Normalize(); ModApi.PersistConfigField("Difficulty", d); SdtdConsole.Instance.Output($"Skill set to {d} (persisted). Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
+            // Clamp + Normalize live in BotConfig.SetDifficulty (shared with the
+            // web `skill` action); the persisted value is the post-clamp property.
+            ModApi.PersistConfigField(ModApi.Config.SetDifficulty(d), ModApi.Config.Difficulty);
+            SdtdConsole.Instance.Output($"Skill set to {ModApi.Config.Difficulty} (persisted). Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
         }
         void DoVs(List<string> p)
         {
@@ -276,12 +279,11 @@ namespace BotMod.Commands
             {
                 SdtdConsole.Instance.Output("Teams count: " + ModApi.Config.BotTeamCount + " (0 = free-for-all only). Usage: bot teams <0-8>"); return;
             }
-            n = Math.Max(0, Math.Min(8, n));
-            ModApi.Config.BotTeamCount = n;
-            ModApi.Config.Normalize(); // drops assignments outside the new range
-            ModApi.PersistConfigField("BotTeamCount", n);
+            // Clamp + assignment pruning live in BotConfig.SetTeamCount (shared
+            // with the web `teamCount` action).
+            ModApi.PersistConfigField(ModApi.Config.SetTeamCount(n), ModApi.Config.BotTeamCount);
             ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
-            SdtdConsole.Instance.Output("Team count set to " + n + (n == 0 ? " - free-for-all only." : "."));
+            SdtdConsole.Instance.Output("Team count set to " + ModApi.Config.BotTeamCount + (ModApi.Config.BotTeamCount == 0 ? " - free-for-all only." : "."));
         }
         static bool ParseOnOff(string v, out bool on)
         {

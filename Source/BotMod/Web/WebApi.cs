@@ -212,11 +212,13 @@ namespace BotMod.Web
                     case "skill":
                         {
                             // {"action":"skill","level":0-4} - same as `bot skill`.
-                            int level = Math.Max(0, Math.Min(4, GetInt(_jsonInput, "level", ModApi.Config.Difficulty)));
-                            ModApi.Config.Difficulty = level;
-                            ModApi.Config.Normalize();
-                            ModApi.PersistConfigField("Difficulty", level);
-                            respBody = RespondJson("difficulty", level);
+                            // Clamp/Normalize live in BotConfig.SetDifficulty (shared
+                            // with the console command); the persisted value is the
+                            // post-clamp property.
+                            int level = GetInt(_jsonInput, "level", ModApi.Config.Difficulty);
+                            string field = ModApi.Config.SetDifficulty(level);
+                            ModApi.PersistConfigField(field, ModApi.Config.Difficulty);
+                            respBody = RespondJson("difficulty", ModApi.Config.Difficulty);
                         }
                         break;
                     case "team":
@@ -267,13 +269,14 @@ namespace BotMod.Web
                     case "teamcount":
                         {
                             // {"action":"teamCount","count":N} - number of team
-                            // buckets (0 = free-for-all only). Persisted.
-                            int count = Math.Max(0, Math.Min(8, GetInt(_jsonInput, "count", ModApi.Config.BotTeamCount)));
-                            ModApi.Config.BotTeamCount = count;
-                            ModApi.Config.Normalize(); // drops assignments outside the range
-                            ModApi.PersistConfigField("BotTeamCount", count);
+                            // buckets (0 = free-for-all only). Persisted. Clamp +
+                            // assignment pruning live in BotConfig.SetTeamCount
+                            // (shared with the console command).
+                            int count = GetInt(_jsonInput, "count", ModApi.Config.BotTeamCount);
+                            string field = ModApi.Config.SetTeamCount(count);
+                            ModApi.PersistConfigField(field, ModApi.Config.BotTeamCount);
                             ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
-                            respBody = RespondJson("teamCount", count);
+                            respBody = RespondJson("teamCount", ModApi.Config.BotTeamCount);
                         }
                         break;
                     case "clearteams":
