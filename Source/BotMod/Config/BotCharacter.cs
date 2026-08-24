@@ -38,6 +38,64 @@ namespace BotMod.Config
         public bool ChallengeAim { get; set; } = false; // Q3 bot_challenge cvar: true=clamped smooth, false=spring
 
         public static BotCharacter Defaults(string name = "Grunt") => new BotCharacter { Name = name };
+
+        /// <summary>Clamp every characteristic into its documented range,
+        /// replacing non-finite values with the built-in defaults. Run on
+        /// every entry deserialized from characters.json: that file is
+        /// operator-authored hand-edited text, and Newtonsoft parses bare
+        /// NaN/Infinity/-Infinity number literals straight into float
+        /// properties. These floats feed the neural observation vector, the
+        /// per-engagement aim-bias window ((1-AimAccuracy)*0.45 rotated into
+        /// the aim direction each shot) and the camp/retreat gates, so one
+        /// NaN literal would poison the whole forward pass (every
+        /// sigmoid/tanh of NaN stays NaN, so the fire gate silently holds
+        /// fire forever) and rotate aim by NaN. Same boundary convention as
+        /// BotConfig.Normalize.</summary>
+        public void Normalize()
+        {
+            Name = Name ?? "Grunt";
+            // Probability/skill traits: [0, 1]
+            AttackSkill = Clamp01(AttackSkill, 0.7f);
+            AimAccuracy = Clamp01(AimAccuracy, 0.75f);
+            AimSkill = Clamp01(AimSkill, 0.75f);
+            Croucher = Clamp01(Croucher, 0.2f);
+            Jumper = Clamp01(Jumper, 0.5f);
+            Walker = Clamp01(Walker, 0.2f);
+            WeaponJumping = Clamp01(WeaponJumping, 0f);
+            Aggression = Clamp01(Aggression, 0.6f);
+            SelfPreservation = Clamp01(SelfPreservation, 0.5f);
+            Vengefulness = Clamp01(Vengefulness, 0.6f);
+            Camper = Clamp01(Camper, 0.2f);
+            EasyFragger = Clamp01(EasyFragger, 0.3f);
+            Alertness = Clamp01(Alertness, 0.5f);
+            FireThrottle = Clamp01(FireThrottle, 0.7f);
+            ChatInsult = Clamp01(ChatInsult, 0.3f);
+            ViewFactor = Clamp01(ViewFactor, 0.35f);
+            // Magnitude traits: finite and positive
+            ViewMaxChange = FinitePositive(ViewMaxChange, 600f);
+            ReactionTime = FinitePositive(ReactionTime, 0.35f);
+            if (AimAccuracyWeapon != null)
+                foreach (string k in new List<string>(AimAccuracyWeapon.Keys))
+                    AimAccuracyWeapon[k] = Clamp01(AimAccuracyWeapon[k], 0.75f);
+            if (AimSkillWeapon != null)
+                foreach (string k in new List<string>(AimSkillWeapon.Keys))
+                    AimSkillWeapon[k] = Clamp01(AimSkillWeapon[k], 0.75f);
+        }
+
+        /// <summary>v clamped to [0,1]; NaN/Infinite v replaced by fallback.</summary>
+        static float Clamp01(float v, float fallback)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v)) return fallback;
+            return Math.Max(0f, Math.Min(1f, v));
+        }
+
+        /// <summary>v clamped to > 0; NaN/Infinite/non-positive v replaced by fallback.</summary>
+        static float FinitePositive(float v, float fallback)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v) || v <= 0f) return fallback;
+            return v;
+        }
+
         // Q3-style camp decision (BotWantsToCamp helper) - used by BotBrain
         // Deterministic overload: caller supplies a 0..1 roll from the bot's per-slot LCG (zdtd parity).
         public bool WantsToCamp(float healthFrac, float roll01) { return Camper > 0.45f && healthFrac > 0.55f && roll01 < Camper * 0.4f; }
@@ -62,13 +120,19 @@ namespace BotMod.Config
                     var loaded = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
                     if (loaded != null)
                     {
-                        // Canonical IdentityKeys (NFC, no control/invisible
-                        // characters): file keys are operator-authored text
-                        // (possibly NFD or carrying paste noise), lookups go
-                        // through BotText.BaseName which yields the same form;
-                        // keep one form on both sides of the lookup.
+                        // Sanitize at ingestion, then canonicalize keys
+                        // (IdentityKey = NFC + no control/invisible
+                        // characters): file values are operator-authored text
+                        // that may carry NaN/Infinity literals or out-of-range
+                        // traits; file keys may be NFD or carry paste noise.
+                        // Keep one sane, canonical form on both sides of the
+                        // lookup.
                         var canon = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var kv in loaded) canon[BotText.IdentityKey(kv.Key)] = kv.Value;
+                        foreach (var kv in loaded)
+                        {
+                            kv.Value.Normalize();
+                            canon[BotText.IdentityKey(kv.Key)] = kv.Value;
+                        }
                         Characters = canon;
                     }
                 }

@@ -101,6 +101,19 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
     "$root/Source/BotMod/Config/AtomicTextFile.cs" \
     "$root/tests/BotMod.Web.Tests/BotConfigFuzzTests.cs" > /dev/null
   mono "$work/configfuzz.exe" "$root"
+
+  # Character-file ingestion pins: NaN/Infinity literals and out-of-range
+  # traits in hand-edited characters.json must land finite and in range
+  # (BotCharacter.Normalize) instead of reaching the neural obs vector and
+  # the aim-bias rotation.
+  mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
+    -out:"$work/botchararith.exe" \
+    "$root/Source/BotMod/Config/BotCharacter.cs" \
+    "$root/Source/BotMod/Config/BotConfig.cs" \
+    "$root/Source/BotMod/Config/BotText.cs" \
+    "$root/Source/BotMod/Config/AtomicTextFile.cs" \
+    "$root/tests/BotMod.Web.Tests/BotCharacterArithTests.cs" > /dev/null
+  mono "$work/botchararith.exe"
 else
   echo "skip neuralfuzz (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
 fi
