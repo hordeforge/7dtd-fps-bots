@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace BotMod.Web
 {
@@ -29,14 +30,31 @@ namespace BotMod.Web
         /// <summary>Replay window. Must exceed the retry horizon callers use.</summary>
         internal static TimeSpan Retention = TimeSpan.FromMinutes(10);
 
-        /// <summary>Clock for retention/pruning decisions. Production reads wall
-        /// time; deterministic tests substitute a virtual clock so replay-window
+        /// <summary>Monotonic elapsed-time source for retention/pruning
+        /// decisions. Retention is a pure duration, so it must not ride the
+        /// wall clock: an NTP step or manual change forward by more than the
+        /// window would prune every entry at once (a retried POST would then
+        /// execute again instead of replaying) and a backward step would
+        /// stretch the window arbitrarily. Production reads Stopwatch time;
+        /// deterministic tests substitute a virtual clock so replay-window
         /// boundaries are exercised exactly, with no sleeps.</summary>
-        internal static Func<DateTime> UtcNow = () => DateTime.UtcNow;
+        internal static Func<TimeSpan> ElapsedNow = DefaultElapsedNow;
+
+        static readonly long StartStamp = Stopwatch.GetTimestamp();
+
+        static TimeSpan DefaultElapsedNow()
+        {
+            long delta = Stopwatch.GetTimestamp() - StartStamp;
+            // When no high-resolution counter exists GetTimestamp counts
+            // DateTime ticks, so convert like-for-like per mode.
+            return Stopwatch.IsHighResolution
+                ? TimeSpan.FromSeconds(delta / (double)Stopwatch.Frequency)
+                : TimeSpan.FromTicks(delta);
+        }
 
         sealed class Entry
         {
-            public DateTime StartedUtc;
+            public TimeSpan StartedAt;
             public string Body;
             public bool Done;
         }
@@ -59,14 +77,15 @@ namespace BotMod.Web
         {
             lock (Gate)
             {
-                PruneLocked(UtcNow() - Retention);
+                TimeSpan now = ElapsedNow();
+                PruneLocked(now - Retention);
                 Entry e;
                 if (Entries.TryGetValue(key, out e))
                 {
                     cachedBody = e.Body;
                     return e.Done ? BeginResult.Replay : BeginResult.InProgress;
                 }
-                Entries[key] = new Entry { StartedUtc = UtcNow() };
+                Entries[key] = new Entry { StartedAt = now };
                 cachedBody = null;
                 return BeginResult.Fresh;
             }
@@ -81,7 +100,7 @@ namespace BotMod.Web
                 if (!Entries.TryGetValue(key, out e)) return;
                 e.Done = true;
                 e.Body = body ?? "";
-                e.StartedUtc = UtcNow(); // replay window counts from completion
+                e.StartedAt = ElapsedNow(); // replay window counts from completion
             }
         }
 
@@ -91,12 +110,12 @@ namespace BotMod.Web
             lock (Gate) { Entries.Remove(key); }
         }
 
-        static void PruneLocked(DateTime cutoff)
+        static void PruneLocked(TimeSpan cutoff)
         {
             List<string> dead = null;
             foreach (var kv in Entries)
             {
-                if (kv.Value.StartedUtc < cutoff)
+                if (kv.Value.StartedAt < cutoff)
                 {
                     if (dead == null) dead = new List<string>();
                     dead.Add(kv.Key);
@@ -107,10 +126,10 @@ namespace BotMod.Web
             while (Entries.Count >= Capacity)
             {
                 string oldestKey = null;
-                DateTime oldest = DateTime.MaxValue;
+                TimeSpan oldest = TimeSpan.MaxValue;
                 foreach (var kv in Entries)
                 {
-                    if (kv.Value.StartedUtc < oldest) { oldest = kv.Value.StartedUtc; oldestKey = kv.Key; }
+                    if (kv.Value.StartedAt < oldest) { oldest = kv.Value.StartedAt; oldestKey = kv.Key; }
                 }
                 if (oldestKey == null) break;
                 Entries.Remove(oldestKey);
