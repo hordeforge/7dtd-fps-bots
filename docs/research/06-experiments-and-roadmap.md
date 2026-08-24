@@ -54,6 +54,13 @@ Dashboard: `tools/ga/plot runs/<ts>/fitness.csv --out runs/<ts>/plot.png` — be
 
 No date is on R3/R5 — they are conditional branches, not deadlines.
 
+> Status (2026-08-21): R0-R1 shipped (`evolved/best.json` gen 199 champion,
+> GOAL MET on the canonical gate), R4 shipped via R10/R12 —
+> `UseNeuralBrain` defaults true in `config/botmod.json` since R13. Of R2,
+> Hall-of-Fame and the curriculum flag ship; zstd'd match logs do not.
+> NEAT (R3) and the online evolver (R5) remain unstarted. See `INDEX.md`
+> for the authoritative current state.
+
 ## 5. Risks and open questions
 
 | Risk | Mitigation | When to decide |

@@ -216,7 +216,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     "curriculum": curriculum,
                     "islands": islands,
                 }
-                (run_dir / f"gen_{g:03d}.json").write_text(json.dumps(ckpt, indent=2))
+                (run_dir / f"gen_{g:03d}.json").write_text(json.dumps(ckpt, indent=2), encoding="utf-8")
             else:
                 plateau += 1
             stagnant = plateau >= 8
@@ -288,14 +288,17 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
         current_held = float("-inf")
         if best_path.exists():
             try:
-                current = json.loads(best_path.read_text())
+                current = json.loads(best_path.read_text(encoding="utf-8"))
                 current_held = _held_probe(np.array(current["weights"], dtype=float))
             except Exception as ex:
                 print(f"current champion (evolved/best.json) unreadable or unevaluable "
                       f"({ex.__class__.__name__}: {ex}); promotion gate treats it as unmatched",
                       file=sys.stderr)
                 current_held = float("-inf")
-        if candidate_held >= current_held or current_held == float("-inf"):
+        # A failed probe scores -inf and must never promote, even against a
+        # champion that is itself unreadable (-inf): -inf >= -inf is True, so
+        # gate on the candidate being finite first.
+        if candidate_held > float("-inf") and (candidate_held >= current_held or current_held == float("-inf")):
             ga.save_best(best_path, best_w, generation=gens - 1, fitness=best_f, config=config)
             print(f"best -> {best_path}  gen {gens-1}  train {best_f:+.4f}  held40 {candidate_held:+.4f} (promoted, beats {current_held:+.4f})")
         else:

@@ -21,10 +21,11 @@ static class IdempotencyLedgerFuzzTests
     static int _failures;
     static int _ops;
 
-    // Virtual clock shared with the ledger via IdempotencyLedger.UtcNow; the
-    // driver moves it between operations (forward, sometimes backward, to
-    // exercise retention expiry, completion-refresh and clock-skew paths).
-    static DateTime _now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    // Virtual clock shared with the ledger via IdempotencyLedger.ElapsedNow;
+    // the driver moves it between operations (forward, occasionally backward,
+    // to exercise retention expiry, completion-refresh and stamp-order paths
+    // in both implementation and model).
+    static TimeSpan _t = TimeSpan.Zero;
 
     static void Check(bool ok, string detail)
     {
@@ -37,19 +38,19 @@ static class IdempotencyLedgerFuzzTests
 
     // ---- spec model: an exact, independent restatement of the ledger ----
 
-    sealed class EntryModel { public DateTime StartedUtc; public bool Done; public string Body; }
+    sealed class EntryModel { public TimeSpan StartedAt; public bool Done; public string Body; }
 
     sealed class LedgerModel
     {
         public readonly Dictionary<string, EntryModel> Entries =
             new Dictionary<string, EntryModel>(StringComparer.Ordinal);
 
-        public void Prune(DateTime cutoff, int capacity)
+        public void Prune(TimeSpan cutoff, int capacity)
         {
             List<string> dead = null;
             foreach (var kv in Entries)
             {
-                if (kv.Value.StartedUtc < cutoff)
+                if (kv.Value.StartedAt < cutoff)
                 {
                     if (dead == null) dead = new List<string>();
                     dead.Add(kv.Key);
@@ -59,16 +60,16 @@ static class IdempotencyLedgerFuzzTests
             while (Entries.Count >= capacity)
             {
                 string oldestKey = null;
-                DateTime oldest = DateTime.MaxValue;
+                TimeSpan oldest = TimeSpan.MaxValue;
                 foreach (var kv in Entries)
-                    if (kv.Value.StartedUtc < oldest) { oldest = kv.Value.StartedUtc; oldestKey = kv.Key; }
+                    if (kv.Value.StartedAt < oldest) { oldest = kv.Value.StartedAt; oldestKey = kv.Key; }
                 if (oldestKey == null) break;
                 Entries.Remove(oldestKey);
             }
         }
 
         public IdempotencyLedger.BeginResult TryBegin(
-            string key, DateTime now, TimeSpan retention, int capacity, out string body)
+            string key, TimeSpan now, TimeSpan retention, int capacity, out string body)
         {
             body = null;
             Prune(now - retention, capacity);
@@ -78,17 +79,17 @@ static class IdempotencyLedgerFuzzTests
                 body = e.Body;
                 return e.Done ? IdempotencyLedger.BeginResult.Replay : IdempotencyLedger.BeginResult.InProgress;
             }
-            Entries[key] = new EntryModel { StartedUtc = now };
+            Entries[key] = new EntryModel { StartedAt = now };
             return IdempotencyLedger.BeginResult.Fresh;
         }
 
-        public void Complete(string key, string body, DateTime now)
+        public void Complete(string key, string body, TimeSpan now)
         {
             EntryModel e;
             if (!Entries.TryGetValue(key, out e)) return;
             e.Done = true;
             e.Body = body ?? "";
-            e.StartedUtc = now;
+            e.StartedAt = now;
         }
 
         public void Fail(string key) { Entries.Remove(key); }
@@ -131,19 +132,21 @@ static class IdempotencyLedgerFuzzTests
     }
 
     /// <summary>Move the virtual clock: mostly small forward steps, sometimes
-    /// minutes ahead (expiry) or backward (host clock skew). Backward steps
-    /// give fresh entries older stamps than survivors, which flips capacity
-    /// eviction order; the model mirrors every transition, so any divergence
-    /// between the two is a real ledger bug.</summary>
-    static DateTime NextInstant(Random rng)
+    /// minutes ahead (expiry), occasionally backward. Production stamps are
+    /// monotonic, but keeping backward moves in the driver pins that the
+    /// prune/eviction logic and the model agree for any stamp order, not just
+    /// well-ordered ones; both sides see every transition.</summary>
+    static TimeSpan NextInstant(Random rng)
     {
         double roll = rng.NextDouble();
         TimeSpan step;
         if (roll < 0.70) step = TimeSpan.FromMilliseconds(rng.Next(0, 500));
         else if (roll < 0.85) step = TimeSpan.FromSeconds(rng.Next(1, 60));
         else if (roll < 0.95) step = TimeSpan.FromMinutes(rng.Next(1, 30));       // expire things
-        else step = -TimeSpan.FromSeconds(rng.Next(1, 600));                      // skew backward
-        return _now + step;
+        else step = -TimeSpan.FromSeconds(rng.Next(1, 600));                      // stamp-order jitter
+        _t += step;
+        if (_t < TimeSpan.Zero) _t = TimeSpan.Zero;
+        return _t;
     }
 
     static void CheckCounts(LedgerModel model, int seed, int op, string what)
@@ -174,17 +177,17 @@ static class IdempotencyLedgerFuzzTests
                 TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)
             }[rng.Next(3)];
             IdempotencyLedger.Retention = retention;
-            IdempotencyLedger.UtcNow = delegate { return _now; };
+            IdempotencyLedger.ElapsedNow = delegate { return _t; };
 
             // Drain the previous seed: jump past its retention window; the
             // mandatory leading Begin then prunes everything stale on both
             // sides, so each seed starts from a matched near-empty state.
-            _now += TimeSpan.FromDays(2);
+            _t += TimeSpan.FromDays(2);
             var model = new LedgerModel();
 
             for (int op = 0; op < OpsPerSeed; op++)
             {
-                _now = NextInstant(rng);
+                _t = NextInstant(rng);
                 string key = PickKey(rng, keys);
                 _ops++;
 
@@ -201,7 +204,7 @@ static class IdempotencyLedgerFuzzTests
                 {
                     string realBody, modelBody;
                     var real = IdempotencyLedger.TryBegin(key, out realBody);
-                    var expected = model.TryBegin(key, _now, retention, IdempotencyLedger.Capacity, out modelBody);
+                    var expected = model.TryBegin(key, _t, retention, IdempotencyLedger.Capacity, out modelBody);
                     Check(real == expected && string.Equals(realBody, modelBody, StringComparison.Ordinal),
                         "seed=" + seed + " op=" + op + " begin " + Show(key)
                         + ": expected " + expected + "/" + Show(modelBody)
@@ -211,7 +214,7 @@ static class IdempotencyLedgerFuzzTests
                 {
                     string body = bodies[rng.Next(bodies.Length)];
                     IdempotencyLedger.Complete(key, body);
-                    model.Complete(key, body, _now);
+                    model.Complete(key, body, _t);
                 }
                 else
                 {

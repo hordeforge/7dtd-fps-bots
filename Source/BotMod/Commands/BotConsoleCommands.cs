@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using BotMod.Core;
 using UnityEngine;
 
@@ -98,20 +99,50 @@ namespace BotMod.Commands
         {
             if (!BotArgParser.TryParseSpawn(p, 1, out int count, out float x, out float z, out bool hasPos, out string weapon, out string error))
             { SdtdConsole.Instance.Output(error); return; }
-            Vector3? pos = hasPos ? new Vector3(x, 60f, z) : (Vector3?)null;
+            Vector3? pos = null;
+            if (hasPos)
+            {
+                // Ground the requested column on the terrain (same helper as every
+                // generated spawn path); a raw "x, 60, z" buries bots in hills or
+                // drops them from the sky wherever the surface is not at y≈60.
+                var world = GameManager.Instance?.World;
+                Vector3 raw = new Vector3(x, 60f, z);
+                pos = world != null ? BotSpawner.GroundPosition(world, raw) : raw;
+            }
             int spawned = 0;
             for (int i = 0; i < count; i++) if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots" + (weapon != null ? $" weapon={weapon}" : "") + "." + (spawned < count ? " (max or spawn failed)" : ""));
         }
         void DoRemove(List<string> p)
         {
-            if (p.Count >= 2 && p[1].ToLowerInvariant() == "all") { int n = BotManager.Instance.RemoveAllBots("command"); SdtdConsole.Instance.Output($"Removed {n} bots."); return; }
-            if (p.Count >= 2 && int.TryParse(p[1], out int id)) { bool ok = BotManager.Instance.RemoveBot(id); SdtdConsole.Instance.Output(ok ? $"Removed bot {id}." : $"No bot with id {id}. Try: bot list"); return; }
+            // Documented grammar (see `bot help`): bot remove all | bot remove
+            // <id>. Bare `bot remove` keeps its remove-all shortcut; any other
+            // token is a named usage error - a typo like `bot remove al` must
+            // not silently wipe every live bot. Invariant parse: entity ids are
+            // protocol tokens, not locale text.
+            if (p.Count >= 2)
+            {
+                string arg = p[1];
+                if (arg.Equals("all", StringComparison.OrdinalIgnoreCase))
+                {
+                    int n = BotManager.Instance.RemoveAllBots("command");
+                    SdtdConsole.Instance.Output($"Removed {n} bots.");
+                    return;
+                }
+                if (int.TryParse(arg, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
+                {
+                    bool ok = BotManager.Instance.RemoveBot(id);
+                    SdtdConsole.Instance.Output(ok ? $"Removed bot {id}." : $"No bot with id {id}. Try: bot list");
+                    return;
+                }
+                SdtdConsole.Instance.Output($"Unrecognized argument '{arg}'.\n  Usage: bot remove all | bot remove <id>");
+                return;
+            }
             int n2 = BotManager.Instance.RemoveAllBots("command"); SdtdConsole.Instance.Output($"Removed {n2} bots.");
         }
         void DoCount(List<string> p)
         {
-            if (p.Count < 2 || !int.TryParse(p[1], out int n)) { SdtdConsole.Instance.Output("Usage: bot count <n>  (0..16)"); return; }
+            if (p.Count < 2 || !int.TryParse(p[1], out int n)) { SdtdConsole.Instance.Output($"Usage: bot count <n>  (0..{ModApi.Config.MaxBots})"); return; }
             n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n; ModApi.PersistConfigField("TargetBotCount", n); SdtdConsole.Instance.Output($"Target bot count set to {n} (persisted). Will converge within a few seconds.");
         }
         void DoPlayer(List<string> p, CommandSenderInfo sender)
@@ -159,6 +190,11 @@ namespace BotMod.Commands
         void DoWeapon(List<string> p)
         {
             if (p.Count < 2) { SdtdConsole.Instance.Output("Usage: bot weapon <gunId|mixed>  e.g. bot weapon gunMGT1AK47  (also: bot spawn 2 gunShotgunT1DoubleBarrel)"); return; }
+            // Same grammar as the spawn tails and the web API's spawnNear: an
+            // off-grammar id used to persist silently and every later spawn held
+            // no item (ItemClass lookup misses) while running pistol stats.
+            if (!BotArgParser.LooksLikeWeapon(p[1]))
+            { SdtdConsole.Instance.Output($"Unknown weapon '{p[1]}'. Weapon ids start with 'gun' (or use 'mixed').\n  Usage: bot weapon <gunId|mixed>"); return; }
             ModApi.Config.BotWeapon = p[1]; ModApi.PersistConfigField("BotWeapon", p[1]); SdtdConsole.Instance.Output($"Default weapon set to {p[1]} (persisted). Next spawns use it; existing bots keep theirs.");
         }
         void DoSkill(List<string> p)

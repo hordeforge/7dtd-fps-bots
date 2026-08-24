@@ -145,6 +145,67 @@ static class AtomicTextFileTests
             Check("no staging tmp left after concurrent writes", !File.Exists(AtomicTextFile.TmpPath(path)));
         }
 
+        // 8. Concurrency: readers must never observe Write's delete-then-move
+        //    swap mid-flight. Without the WriteGate around TryRead, a reader
+        //    could pass File.Exists(primary) just before the Delete and hit
+        //    FileNotFoundException, then find the .bak momentarily being
+        //    overwritten by the next Write's Copy -> IOException -> TryRead
+        //    returns false even though a complete file exists, which Load
+        //    would turn into "restore from defaults" (silent operator-state
+        //    loss). One writer alternates two full payloads while readers
+        //    hammer TryRead: every read must succeed with one of the exact
+        //    payloads, never false, never partial.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            const string pa = "{\"phase\":\"a\",\"pad\":\"0123456789\"}";
+            const string pb = "{\"phase\":\"b\",\"pad\":\"0123456789\"}";
+            AtomicTextFile.Write(path, pa);
+            var errors = new List<string>();
+            var doneWriters = new System.Threading.ManualResetEvent(false);
+            var stopReaders = new System.Threading.ManualResetEvent(false);
+            int reads = 0;
+            const int rewrites = 200;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    for (int i = 0; i < rewrites; i++)
+                        AtomicTextFile.Write(path, i % 2 == 0 ? pb : pa);
+                }
+                catch (Exception ex) { lock (errors) errors.Add("writer: " + ex.Message); }
+                finally { doneWriters.Set(); }
+            });
+            for (int r = 0; r < 4; r++)
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        while (!stopReaders.WaitOne(0))
+                        {
+                            string s;
+                            if (!AtomicTextFile.TryRead(path, out s))
+                                lock (errors) errors.Add("read failed during swap window");
+                            else if (s != pa && s != pb)
+                                lock (errors) errors.Add("torn or stale read: " + s);
+                            System.Threading.Interlocked.Increment(ref reads);
+                        }
+                    }
+                    catch (Exception ex) { lock (errors) errors.Add("reader: " + ex.Message); }
+                });
+            }
+            bool finished = doneWriters.WaitOne(30000);
+            stopReaders.Set();
+            Check("writer finished within timeout", finished);
+            string final;
+            bool ok = AtomicTextFile.TryRead(path, out final);
+            Check("final primary is the last written payload",
+                ok && final == pa); // 200 rewrites ending on an odd index rewrite pa last
+            Check("reads during concurrent writes all saw a complete payload (" + reads + " reads)",
+                errors.Count == 0);
+            foreach (string e in errors) Console.WriteLine("     " + e);
+        }
+
         foreach (string dir in Directory.GetDirectories(Path.GetTempPath(), "botmod-atomictest-*"))
             try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
 

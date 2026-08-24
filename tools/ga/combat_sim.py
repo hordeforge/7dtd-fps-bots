@@ -187,7 +187,7 @@ def trait_jitter(net_id):
     return (v - 0.5) * 0.06
 
 
-@numba.njit
+@numba.njit(nogil=True)
 def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_opp, n_evolved,
               spawn_gap, env_pin, wep_pin, relu):
     """One headless match. Returns a struct of stats for fitness.
@@ -196,6 +196,8 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
     compositions; fitness aggregates across arenas in harness.py.
     `relu` picks the hidden activation: False = tanh (canonical, what ships),
     True = relu (activation sweeps; harness.ACTIVATION selects the wrapper).
+    nogil=True: harness.evaluate_population fans genomes across OS threads, so
+    the kernel must not hold the GIL (pure numeric work, no Python objects).
     """
     # Per-bot state arrays below are fixed at 16 slots; a caller passing more
     # bodies must fail loudly here instead of corrupting memory in njit.
@@ -340,13 +342,22 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
             else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
             # build obs (14) — normalized
             # mirrors docs/research/01 §2: keep order frozen
+            # Slots 4/12 are the sustained-fire spread and rounds-left fractions.
+            # The live mod feeds matching semantics (Bot._fireSpread with the
+            # same ADD/DECAY constants; magazine fill from its zdtd ammo pacing),
+            # so champions evolved here observe the same distributions in-game.
+            # Never change one side of this contract alone.
             # 0 hpFrac
             x_obs[0] = bhp[bi] / 100.0
             x_obs[1] = thp / 100.0
             x_obs[2] = min(1.0, dist / 70.0)
             x_obs[3] = 1.0 if can_see else 0.0
-            x_obs[4] = spread[bi]  # fire spread 0..1 (was loseTimer placeholder)
-            x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0
+            x_obs[4] = spread[bi]  # fire spread 0..1 (runtime: Bot._fireSpread)
+            # Clamped like the runtime: docs/research/01 §2 freezes slot 5 Norm
+            # [0,1] and Bot.BuildNeuralInputs wraps the ratio in Clamp01, so the
+            # unclamped sniper (2.0) / AK (1.22) values trained hidden units on
+            # inputs that never occur at deployment.
+            x_obs[5] = min(1.0, WEAPON_RANGE[bweapon[bi]] / 45.0)
             x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0
             # aim acc/skill derived from weapon + skill
             x_obs[7] = 0.55 + bskill[bi] * 0.10  # 0.55..0.95
@@ -354,7 +365,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
             x_obs[9] = 0.6   # aggr
             x_obs[10] = 0.5  # selfPres
             x_obs[11] = 0.2  # camper
-            x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (was vel placeholder)
+            x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (runtime: magazine fill)
             x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
 
             # forward

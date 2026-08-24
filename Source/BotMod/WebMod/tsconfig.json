@@ -6,6 +6,17 @@
     // rules (strict-boolean-expressions, no-floating-promises) refuse to run
     // without strictNullChecks.
     "strict": true,
+    // Defect-class check-only flags the tree already passes (2026-08-24).
+    // noFallthroughCasesInSwitch is the goto-fail guard; the other two keep
+    // control flow and subclassing explicit. Check-only: emit (and the
+    // bundle.js freshness gate) is unaffected. noUnusedLocals/noUnusedParameters
+    // stay off on purpose: every render row helper takes the same state bundle
+    // (`busy` included) even where a helper ignores part of it, so per-param
+    // pruning would fight that signature convention.
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
     "outDir": ".",
     "rootDir": ".",
     "sourceMap": false,

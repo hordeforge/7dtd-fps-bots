@@ -88,6 +88,16 @@ fails on drift between them.
 - `evolved/best.json` files whose `inputs` differs from the frozen v1
   observation layout (14) are rejected at load with a clear reason instead of
   loading successfully and then silently failing every bot tick.
+- Null or empty entries in `LoadoutPool`/`BotNames` (hand-edited JSON) are
+  dropped at load; previously a `"LoadoutPool": ["gunX", null]` made every
+  `mixed` weapon pick throw a NullReferenceException, so spawning and the
+  auto-respawn loop failed every second until the config was fixed by hand.
+- `bot remove <anything-not-all-or-an-id>` now prints a usage error instead
+  of silently removing ALL live bots (a typo like `bot remove al` used to
+  wipe the roster).
+- The web API's `spawnNear` action rejects an off-grammar `weapon` value with
+  `400 INVALID_WEAPON` instead of silently ignoring it and spawning bots with
+  random loadouts (same grammar as `bot player ... [weapon]`).
 
 ## [0.4.0] - 2026-08-23
 

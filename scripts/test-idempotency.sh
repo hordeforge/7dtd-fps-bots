@@ -4,7 +4,8 @@
 # game DLL references are needed. The BotNeuralBrain weights-file fuzzer also
 # parses JSON, so it additionally needs Newtonsoft.Json.dll from the game
 # install (probed like scripts/build.sh) and is skipped when that is absent.
-# Not part of `make check` (CI runners have no mono); run locally:
+# Not a `make check` target; CI installs mono and runs this script directly
+# after `make check`. Run locally:
 #
 #   bash scripts/test-idempotency.sh
 set -euo pipefail
@@ -41,7 +42,7 @@ run_suite mainthreaddispatch \
 # Log-injection guard: request-supplied requestId/action must reach server log
 # lines with control characters (CRLF, ANSI escapes) scrubbed.
 run_suite logsanitize \
-  "$root/Source/BotMod/Web/LogSanitizer.cs" \
+  "$root/Source/BotMod/Config/LogSanitizer.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
 
 # Unicode identity contract: NFC canonicalization and ordinal case folding
@@ -81,6 +82,15 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
   # Repo root as argv[1] so the fuzzer can find evolved/best.json.
   mono "$work/neuralfuzz.exe" "$root"
 
+  # Forward-pass correctness pins for the same brain (needs Newtonsoft only,
+  # plus a ModApi.ModPath stub compiled into the test): input packing order,
+  # sigmoid/tanh head math, decision thresholds, eval purity.
+  mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
+    -out:"$work/neuraleval.exe" \
+    "$root/Source/BotMod/AI/BotNeuralBrain.cs" \
+    "$root/tests/BotMod.Web.Tests/BotNeuralBrainEvalTests.cs" > /dev/null
+  mono "$work/neuraleval.exe"
+
   # Config-file parser fuzzer: mutated botmod.json documents must never throw
   # and always land inside Normalize's documented ranges (same Newtonsoft
   # gate as above; compiles only the engine-free Config sources).
@@ -91,6 +101,19 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
     "$root/Source/BotMod/Config/AtomicTextFile.cs" \
     "$root/tests/BotMod.Web.Tests/BotConfigFuzzTests.cs" > /dev/null
   mono "$work/configfuzz.exe" "$root"
+
+  # Character-file ingestion pins: NaN/Infinity literals and out-of-range
+  # traits in hand-edited characters.json must land finite and in range
+  # (BotCharacter.Normalize) instead of reaching the neural obs vector and
+  # the aim-bias rotation.
+  mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
+    -out:"$work/botchararith.exe" \
+    "$root/Source/BotMod/Config/BotCharacter.cs" \
+    "$root/Source/BotMod/Config/BotConfig.cs" \
+    "$root/Source/BotMod/Config/BotText.cs" \
+    "$root/Source/BotMod/Config/AtomicTextFile.cs" \
+    "$root/tests/BotMod.Web.Tests/BotCharacterArithTests.cs" > /dev/null
+  mono "$work/botchararith.exe"
 else
   echo "skip neuralfuzz (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
 fi

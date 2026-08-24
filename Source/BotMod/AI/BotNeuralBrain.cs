@@ -65,7 +65,8 @@ namespace BotMod.AI
             public float EnemyHpFrac;
             public float DistNorm;
             public float CanSee;
-            public float LoseTimerNorm;
+            // Sustained-fire spread fraction [0,1] (trainer: combat_sim.py spread[]).
+            public float SpreadFrac;
             public float WeaponRangeNorm;
             public float PelletsNorm;
             public float AimAcc;
@@ -73,7 +74,8 @@ namespace BotMod.AI
             public float Aggression;
             public float SelfPreservation;
             public float Camper;
-            public float EnemyVelMagNorm;
+            // Rounds-left fraction [0,1] (trainer: ammo+reserve over the pool).
+            public float AmmoLeftFrac;
             public float StuckFrac;
             // ctor packs in order for Forward; keeps call sites greppable
         }
@@ -94,12 +96,17 @@ namespace BotMod.AI
             {
                 // Pack inputs in canonical order matching docs/research/01 §2.
                 // Keep this order frozen — Python trainer and C# loader share it.
+                // Slot semantics are aligned on both sides of the contract:
+                // slot 4 is the sustained-fire spread fraction (Bot._fireSpread,
+                // same ADD/DECAY constants as tools/ga/combat_sim.py) and slot
+                // 12 the rounds-left fraction (Bot magazine fill vs the sim's
+                // ammo+reserve pool). Never change one side alone.
                 float[] x = _scratchX;
                 x[0] = inp.HpFrac;
                 x[1] = inp.EnemyHpFrac;
                 x[2] = inp.DistNorm;
                 x[3] = inp.CanSee;
-                x[4] = inp.LoseTimerNorm;
+                x[4] = inp.SpreadFrac;
                 x[5] = inp.WeaponRangeNorm;
                 x[6] = inp.PelletsNorm;
                 x[7] = inp.AimAcc;
@@ -107,7 +114,7 @@ namespace BotMod.AI
                 x[9] = inp.Aggression;
                 x[10] = inp.SelfPreservation;
                 x[11] = inp.Camper;
-                x[12] = inp.EnemyVelMagNorm;
+                x[12] = inp.AmmoLeftFrac;
                 x[13] = inp.StuckFrac;
 
                 // hidden = tanh(W1*x + b1)

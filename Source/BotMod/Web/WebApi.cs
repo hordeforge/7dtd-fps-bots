@@ -6,6 +6,7 @@ using System.Text;
 using Utf8Json;
 using Webserver;
 using Webserver.WebAPI;
+using BotMod.Config;
 using BotMod.Core;
 using UnityEngine;
 
@@ -18,6 +19,11 @@ namespace BotMod.Web
     /// spawnNear, remove (alias clear), removeOne, skill, neural, team, vs,
     /// setTeam, teamCount, clearTeams.
     /// The menu entry and data are admin-only (permission level 0).
+    ///
+    /// Threading: handlers run on web thread pool threads, but every action
+    /// body (config mutation included) executes via RunOnMain on the game's
+    /// main thread, serialized with console commands and the tick loop; see
+    /// HandleRestPost.
     ///
     /// Duplicate semantics: POST bodies accept an optional client-generated
     /// "requestId" idempotency key. Retries reusing a key within the ledger
@@ -95,8 +101,21 @@ namespace BotMod.Web
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                switch (action)
+                // Every action body runs on the game's main thread, not just
+                // the world-touching ones: config mutations (skill/vs/team/
+                // teamCount also call Normalize(), which rewrites ~30 fields
+                // non-atomically) previously executed directly on this web
+                // thread pool thread, racing each other and the console's
+                // `bot reload` instance swap (a handler could mutate the
+                // config object ReloadConfig had just replaced and report
+                // success while the live config never changed). Dispatching
+                // serializes all mutations with console commands and ticks by
+                // construction; nested RunOnMain calls below short-circuit
+                // via ThreadManager.IsMainThread().
+                RunOnMain<object>(() =>
                 {
+                    switch (action)
+                    {
                     case "enable":
                         ModApi.Config.Enabled = true;
                         ModApi.PersistConfigField("Enabled", true);
@@ -134,8 +153,16 @@ namespace BotMod.Web
                             string weapon = null;
                             {
                                 string wv = GetString(_jsonInput, "weapon");
-                                if (!string.IsNullOrEmpty(wv) && (wv.StartsWith("gun", StringComparison.OrdinalIgnoreCase) || wv == "mixed"))
+                                if (!string.IsNullOrEmpty(wv))
+                                {
+                                    // Same grammar as `bot player <name> [count]
+                                    // [weapon]` (BotArgParser.LooksLikeWeapon): an
+                                    // off-grammar id used to be dropped silently and
+                                    // the bots spawned with random loadouts instead
+                                    // of the requested one.
+                                    if (!BotMod.Commands.BotArgParser.LooksLikeWeapon(wv)) { errorCode = "INVALID_WEAPON"; break; }
                                     weapon = wv;
+                                }
                             }
                             var r = RunOnMain(() =>
                             {
@@ -233,8 +260,11 @@ namespace BotMod.Web
                             string baseName = BotManager.BaseName(name);
                             var cfg = ModApi.Config;
                             team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
-                            // Locked helper + snapshot: this handler runs on a web
-                            // thread pool thread while the game tick reads the map.
+                            // Locked helper + snapshot: TeamAssignments is also
+                            // read per damage event; the lock keeps lookups and
+                            // this write from ever touching the dictionary
+                            // concurrently (this body now runs on the main
+                            // thread, but console/web surfaces share it).
                             cfg.SetTeamAssignment(baseName, team);
                             ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
                             respBody = RespondJson("name", baseName, "team", team);
@@ -262,7 +292,9 @@ namespace BotMod.Web
                     default:
                         errorCode = "INVALID_ACTION";
                         break;
-                }
+                    }
+                    return null;
+                }, "action:" + logAction);
             }
             catch (Exception ex)
             {

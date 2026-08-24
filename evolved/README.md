@@ -9,7 +9,7 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 | `best.json` | Champion weights (flat `float[W]` + meta) loaded by `BotNeuralBrain.TryLoad` | yes, when promoted |
 | `best.meta.json` | `{ generation, fitness, configHash }` (as written by `ga.save_best`) | yes, alongside `best.json` |
 | `runs/<ts>/` | One dir per training run: `config.json`, `gen_*.json`, `fitness.csv` | no (artifact) |
-| `archive/` | Old `best.json` moved here before promotion | no |
+| `archive/` | Manual holding pen for a superseded `best.json` (nothing writes here automatically; `evolve.py` overwrites `best.json` in place once its held probe beats the incumbent) | no |
 
 ## Contract
 

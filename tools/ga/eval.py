@@ -32,8 +32,16 @@ def main():
     if w.size != ga.W:
         raise SystemExit(f"weights size {w.size} != want {ga.W}")
 
-    # Use combat harness with held-out seed so it's not the training roll
-    scores = [harness.evaluate(w, 999, m, run_seed=999) for m in range(args.matches)]
+    # Use combat harness with held-out seed so it's not the training roll.
+    # Pin DRAWS_PER_CONFIG=1 (F=18): the canonical measuring stick shared by
+    # evolve's promotion gate and eval_static_vs_neural; the harness default
+    # (2) would print numbers not comparable with either.
+    saved_draws = harness.DRAWS_PER_CONFIG
+    harness.DRAWS_PER_CONFIG = 1
+    try:
+        scores = [harness.evaluate(w, 999, m, run_seed=999) for m in range(args.matches)]
+    finally:
+        harness.DRAWS_PER_CONFIG = saved_draws
     print(f"best gen {meta.get('generation')} fitness {meta.get('fitness'):+.4f}")
     print(f"held-out re-eval {len(scores)} matches  mean {np.mean(scores):+.4f}  stdev {np.std(scores):.4f}")
 

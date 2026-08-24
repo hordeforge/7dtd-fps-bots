@@ -5,9 +5,12 @@ using UnityEngine;
 
 namespace BotMod.Core
 {
-    public sealed class BotManager
+    public sealed class BotManager : BotMod.AI.IBotRegistry
     {
         public static BotManager Instance { get; } = new BotManager();
+        // Field initializers run before this static ctor, so Instance is
+        // fully built when AI's query bridge starts resolving to it.
+        static BotManager() { BotMod.AI.BotRegistry.Install(Instance); }
         readonly List<Bot> _bots = new List<Bot>();
         readonly HashSet<int> _botEntityIds = new HashSet<int>();
         // O(1) id lookup for the per-damage-event / per-shot ally checks; a linear

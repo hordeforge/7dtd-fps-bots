@@ -7,7 +7,14 @@
 //   - an unreadable primary with a good .bak recovers the .bak (with
 //     AtomicTextFile), and a missing file yields defaults,
 //   - TeamAssignments keys are canonicalized to NFC at load and at
-//     SetTeamAssignment so NFD hand-edited spellings match NFC lookups.
+//     SetTeamAssignment so NFD hand-edited spellings match NFC lookups,
+//   - SetVsTarget maps the admin "vs" aliases onto the config flag AND the
+//     exact JSON field name PersistConfigField must write (a wrong name
+//     silently drops the toggle on the next reload),
+//   - WeaponProfile.ForGun classifies gun ids into combat profiles (fire
+//     rate, burst, damage, range, pellets) - the numbers every bot shoots
+//     with; a misclassification silently retunes all combat,
+//   - BotCharacter.WantsToCamp keeps its Q3 boundary semantics.
 // BotConfig pulls ModApi -> engine types, so this compiles the FULL mod
 // source against the game DLLs; scripts/test-idempotency.sh gates it on a
 // game install being present.
@@ -31,6 +38,14 @@ static class BotConfigLoadTests
         string dir = Path.Combine(Path.GetTempPath(), "botmod-configtest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         return dir;
+    }
+
+    // SetVsTarget's field output is written verbatim into botmod.json by
+    // PersistConfigField, so it must name a real config property or the
+    // setting silently drops on the next load (unknown-key warning).
+    static bool IsConfigProperty(string name)
+    {
+        return name != null && typeof(BotConfig).GetProperty(name) != null;
     }
 
     static int Main()
@@ -148,6 +163,36 @@ static class BotConfigLoadTests
             Check("ZWSP config key found via clean lookup", cfg.GetTeamAssignment("Grunt") == 1);
         }
 
+        // Null/empty entries in the name/loadout arrays (hand-edited JSON
+        // tolerates them) must not survive Normalize: ForGun's mixed pick
+        // dereferences a null pool entry (every mixed spawn throws and the
+        // auto-respawn loop dies) and PickName mints tagless "_NN" names.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            AtomicTextFile.Write(path,
+                "{ \"LoadoutPool\": [\"gunHandgunT1Pistol\", null], \"BotNames\": [\"Grunt\", null] }");
+            BotConfig cfg = BotConfig.Load(path);
+            cfg.Normalize();
+            Check("null pool entry dropped at load",
+                cfg.LoadoutPool.Length == 1 && cfg.LoadoutPool[0] == "gunHandgunT1Pistol");
+            Check("null name entry dropped at load",
+                cfg.BotNames.Length == 1 && cfg.BotNames[0] == "Grunt");
+            bool picked = true;
+            for (int i = 0; i < 64; i++)
+                if (WeaponProfile.ForGun("mixed", cfg).GunId == null) { picked = false; break; }
+            Check("mixed pick never yields a null gun after filtering", picked);
+        }
+
+        // Everything dropped: an all-null array falls back to the documented
+        // defaults instead of an empty list (which would re-crash the picker).
+        {
+            var cfg = new BotConfig { LoadoutPool = new string[] { null, "" }, BotNames = new string[] { null } };
+            cfg.Normalize();
+            Check("all-null pool falls back to default rifle",
+                cfg.LoadoutPool.Length == 1 && cfg.LoadoutPool[0] == "gunMGT1AK47");
+            Check("all-null names fall back to default", cfg.BotNames.Length == 1 && cfg.BotNames[0] == "Bot");
+        }
+
 
         // Recovery: torn primary + good .bak restores the last-known-good
         // values instead of silently resetting to defaults.
@@ -160,12 +205,153 @@ static class BotConfigLoadTests
             Check("torn primary recovers from .bak", cfg.TargetBotCount == 8);
         }
 
+        // A primary holding bare JSON null (hand-edit gone wrong) deserializes
+        // to a null object WITHOUT throwing, so it must hit the same
+        // fall-through-to-.bak branch as any other unreadable primary instead
+        // of escaping Load as a null config (every caller would NRE).
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            AtomicTextFile.Write(path, "{ \"TargetBotCount\": 8 }");
+            AtomicTextFile.Write(path, "{ \"TargetBotCount\": 12 }"); // snapshots 8 into .bak
+            File.WriteAllText(path, "null");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("null-body primary recovers from .bak", cfg != null && cfg.TargetBotCount == 8);
+        }
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "null");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("null-body primary without .bak yields clean defaults",
+                cfg != null && cfg.TargetBotCount == 6 && !cfg.AllowSyntheticAuthBypass);
+        }
+
         // Nothing on disk (fresh install): clean defaults, no throw.
         {
             string dir = TempDir();
             BotConfig cfg = BotConfig.Load(Path.Combine(dir, "absent.json"));
             Check("missing file -> defaults", cfg.Enabled && cfg.DedicatedOnly && !cfg.AllowSyntheticAuthBypass);
             Check("auth bypass stays off by default", !cfg.AllowSyntheticAuthBypass);
+        }
+
+        // SetVsTarget: the admin alias surface shared by `bot vs` and the web
+        // "vs" action. Each accepted alias must flip exactly its flag AND
+        // name the JSON field that persists it; the field name is part of the
+        // contract because PersistConfigField writes it verbatim into
+        // botmod.json - a rename here would silently drop the setting on
+        // reload. Unknown targets must be rejected, not guessed.
+        {
+            var cfg = new BotConfig();
+            string f;
+            Check("singular alias 'bot' flips BotVsBot",
+                cfg.SetVsTarget("bot", false, out f) && !cfg.BotVsBot && IsConfigProperty(f));
+            Check("plural alias 'zombies' flips BotVsZombie",
+                cfg.SetVsTarget("zombies", false, out f) && !cfg.BotVsZombie && IsConfigProperty(f));
+            Check("'human' aliases players",
+                cfg.SetVsTarget("human", false, out f) && !cfg.BotVsPlayer && IsConfigProperty(f));
+            Check("plural alias 'players' aliases same flag",
+                cfg.SetVsTarget("players", true, out f) && cfg.BotVsPlayer && IsConfigProperty(f));
+            // Rejection leaves every flag at its value before the call.
+            bool vsBot = cfg.BotVsBot, vsZombie = cfg.BotVsZombie, vsPlayer = cfg.BotVsPlayer;
+            Check("unknown target rejected without touching flags",
+                !cfg.SetVsTarget("trader", true, out f) && f == null
+                && cfg.BotVsBot == vsBot && cfg.BotVsZombie == vsZombie && cfg.BotVsPlayer == vsPlayer);
+        }
+
+        // WeaponProfile.ForGun: gun-id classification driving fire rate,
+        // burst shape, damage, range and pellet count for every bot.
+        {
+            var cfg = new BotConfig();
+            WeaponProfile p;
+
+            p = WeaponProfile.ForGun("gunShotgunT1DoubleBarrel", cfg);
+            Check("pump shotgun: single shots, pellet spread, short range",
+                p.GunId == "gunShotgunT1DoubleBarrel" && p.BurstMin == 1 && p.BurstMax == 1
+                && p.Pellets == 8 && p.Range == 22f && p.MagSize == 2);
+
+            p = WeaponProfile.ForGun("gunShotgunT3AutoShotgun", cfg);
+            Check("auto shotgun keeps shotgun class but faster, 6 pellets, bigger mag",
+                p.Pellets == 6 && p.MagSize == 16 && p.FireRate < 0.55f && p.Range == 22f);
+
+            p = WeaponProfile.ForGun("gunRifleT3SniperRifle", cfg);
+            Check("sniper: long range, high damage, tight spread, no burst",
+                p.Range == 90f && p.Damage == 42f && p.SpreadDeg == 0.35f
+                && p.BurstMin == 1 && p.BurstMax == 1);
+
+            p = WeaponProfile.ForGun("gunHandgunT3SMG5", cfg);
+            Check("smg: long burst, fast fire rate",
+                p.BurstMin >= 5 && p.BurstMax >= p.BurstMin && p.FireRate == 0.09f);
+
+            p = WeaponProfile.ForGun("gunMGT1AK47", cfg);
+            Check("ak family: mid burst, mid range",
+                p.BurstMin == 3 && p.BurstMax == 6 && p.Range == 55f && p.Damage == 16);
+
+            p = WeaponProfile.ForGun("gunHandgunT6Magnum", cfg);
+            Check("magnum: small mag, heavy shots",
+                p.MagSize == 6 && p.Damage == 34 && p.BurstMax <= 2);
+
+            // Class membership by substring: the web spawnNear action accepts
+            // any "gun..." token, so every alias branch must land on its
+            // class's exact profile (the numbers pinned above), never fall
+            // through to the pistol default.
+            p = WeaponProfile.ForGun("gunHuntingRifleT0", cfg);
+            Check("hunting rifle joins sniper class",
+                p.Range == 90f && p.Damage == 42f && p.SpreadDeg == 0.35f && p.BurstMin == 1);
+            p = WeaponProfile.ForGun("gunLeverActionT1", cfg);
+            Check("lever action joins sniper class", p.Range == 90f && p.MagSize == 12);
+            p = WeaponProfile.ForGun("gunMGT1M60", cfg);
+            Check("m60 joins ak family class",
+                p.BurstMin == 3 && p.BurstMax == 6 && p.Range == 55f && p.FireRate == 0.11f);
+            p = WeaponProfile.ForGun("gunHandgunT3TacticalPistol", cfg);
+            Check("tactical joins ak family class", p.Range == 55f && p.Damage == 16);
+            p = WeaponProfile.ForGun("gunHandgunT0PipeMachinegun", cfg);
+            Check("pipe machinegun joins smg class",
+                p.BurstMin >= 5 && p.FireRate == 0.09f && p.Range == 35f);
+            p = WeaponProfile.ForGun("gunHandgunDesertEagle", cfg);
+            Check("desert joins magnum class", p.MagSize == 6 && p.Damage == 34 && p.Range == 45f);
+
+            p = WeaponProfile.ForGun("gunHandgunT1Pistol", cfg);
+            Check("unclassified gun falls back to pistol profile",
+                p.Damage == 16 && p.Range == 40f && p.MagSize == 15);
+
+            // Classification is case-insensitive on the id but preserves the
+            // original casing in GunId (the id goes back to item lookups).
+            p = WeaponProfile.ForGun("GUNMGT1AK47", cfg);
+            Check("classification case-insensitive, GunId verbatim",
+                p.GunId == "GUNMGT1AK47" && p.Range == 55f);
+
+            // "mixed" resolves through LoadoutPool to the exact profile of the
+            // picked entry; an empty pool falls back to the documented default
+            // rifle (same pinned id as the all-null array case above).
+            cfg.LoadoutPool = new[] { "gunRifleT3SniperRifle", "gunHandgunT1Pistol" };
+            WeaponProfile mixedPick = WeaponProfile.ForGun("mixed", cfg);
+            bool matchesDirect = false;
+            foreach (string gun in cfg.LoadoutPool)
+            {
+                WeaponProfile direct = WeaponProfile.ForGun(gun, cfg);
+                if (mixedPick.GunId == direct.GunId)
+                    matchesDirect = direct.FireRate == mixedPick.FireRate && direct.Range == mixedPick.Range
+                        && direct.Damage == mixedPick.Damage && direct.Pellets == mixedPick.Pellets;
+            }
+            Check("mixed pick equals the direct profile of a pooled gun", matchesDirect);
+
+            cfg.LoadoutPool = new string[0];
+            Check("empty loadout pool falls back to the default rifle",
+                WeaponProfile.ForGun("mixed", cfg).GunId == "gunMGT1AK47"
+                && WeaponProfile.ForGun(null, cfg).GunId == "gunMGT1AK47");
+        }
+
+        // WantsToCamp: Q3-style camp roll with strict boundaries. Camps only
+        // above the camper threshold, only when healthy (retreating is the
+        // low-health path), and strictly below the camper-scaled roll.
+        {
+            var ch = new BotCharacter { Camper = 0.8f };
+            Check("camper at threshold 0.45 never camps", !new BotCharacter { Camper = 0.45f }.WantsToCamp(0.9f, 0f));
+            Check("camper just past threshold can camp", new BotCharacter { Camper = 0.46f }.WantsToCamp(0.9f, 0f));
+            Check("wounded bot does not camp (retreat instead)", !ch.WantsToCamp(0.5f, 0f));
+            Check("health at boundary 0.55 does not camp", !ch.WantsToCamp(0.55f, 0f));
+            Check("healthy bot below roll camps", ch.WantsToCamp(0.56f, 0.1f));
+            Check("roll equal to camper*0.4 does not camp", !ch.WantsToCamp(0.9f, 0.8f * 0.4f));
+            Check("non-camper personality never camps", !new BotCharacter { Camper = 0.2f }.WantsToCamp(1f, 0f));
         }
 
         foreach (string d in Directory.GetDirectories(Path.GetTempPath(), "botmod-configtest-*"))

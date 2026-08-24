@@ -49,6 +49,11 @@ static class BotArgParserTests
         Check("negative count clamps to 1", c4 == 1);
         Spawn(new[] { "99" }, out int c5, out _, out _, out _, out _, out _);
         Check("count 99 clamps to 16", c5 == 16);
+        // Exact clamp edges: 16 is the last accepted count, 17 is clamped.
+        Spawn(new[] { "16" }, out int c5a, out _, out _, out _, out _, out _);
+        Check("count 16 kept at max", c5a == 16);
+        Spawn(new[] { "17" }, out int c5b, out _, out _, out _, out _, out _);
+        Check("count 17 clamps to 16", c5b == 16);
 
         // The documented coordinate form: two numbers are x z with count 1,
         // never "count plus dangling junk".
@@ -60,6 +65,12 @@ static class BotArgParserTests
         Check("count + coords", ok7 && c7 == 2 && p7 && x7 == 10f && z7 == 20f);
         bool ok8 = Spawn(new[] { "2", "10.25", "-20.75" }, out _, out float x8, out float z8, out bool p8, out _, out _);
         Check("invariant dot-decimal coords", ok8 && p8 && x8 == 10.25f && z8 == -20.75f);
+        // The complete advertised usage line: [count] [x z] [weapon] together,
+        // and the shorter [x z] [weapon] tail.
+        bool okFull = Spawn(new[] { "2", "10", "20", "gunMGT1AK47" }, out int cFull, out float xFull, out float zFull, out bool pFull, out string wFull, out _);
+        Check("count + coords + weapon", okFull && cFull == 2 && pFull && xFull == 10f && zFull == 20f && wFull == "gunMGT1AK47");
+        bool okCW = Spawn(new[] { "-5.5", "300", "mixed" }, out int cCW, out float xCW, out float zCW, out bool pCW, out string wCW, out _);
+        Check("coords + weapon", okCW && pCW && cCW == 1 && xCW == -5.5f && zCW == 300f && wCW == "mixed");
         // mono's float.TryParse accepts "NaN"/"Infinity" spellings that
         // desktop .NET rejects; a non-finite coordinate would place a bot at
         // an unusable position, so the grammar must reject them (found by

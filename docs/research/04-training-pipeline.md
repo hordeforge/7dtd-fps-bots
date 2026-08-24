@@ -35,7 +35,7 @@ Either way the *protocol* between trainer and harness is the same: send `bot <ve
 
 ## 3. Disk layout
 
-Everything in `7dtd-fps-bots/evolved/` (git-ignored except `best.json` when promoted):
+Everything in `7dtd-fps-bots/evolved/` (per `evolved/.gitignore`: `runs/`, `archive/` and raw `*.bin`/`*.csv`/`*.jsonl` are git-ignored; the promoted champion pair and docs stay tracked):
 
 ```
 evolved/
@@ -82,6 +82,12 @@ For each genome `i` in generation `g`:
 
 ## 6. Curriculum
 
+> Status (2026-08-21): the shipped curriculum is coarser than this 3-stage
+> plan. `evolve.py --curriculum mixed|pvp_first|horde_first` gates the arena
+> mix for roughly the first third of generations (`harness.CURRICULUM`,
+> default `mixed`); there is no weapon-pinned stage A and no
+> fitness-gated stage promotion. Kept as the design target.
+
 Naive from-scratch DM is unstable early (random bots die instantly, no gradient signal). Use a 3-stage curriculum:
 
 | Stage | Generations | Description |
@@ -95,10 +101,20 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
 ## 7. Checkpointing and resumability
 
 - Every generation writes `gen_*.json` + appends `fitness.csv`. On crash, rerun from the last generation's checkpoint (pop is deterministic from checkpoint + seeds).
-- `best.meta.json` records `configHash = sha256(config.json)` so a stale `best.json` is never loaded if config drifted.
+- `best.meta.json` records `configHash = sha256(config.json)`. The loader does
+  not enforce it (`configHash` never affects loadability, see `05` §4); it is
+  informational, surfaced by `bot neural status`, so an operator can spot a
+  champion trained under a different hyperparam table.
 - A detached `evolve --resume runs/<ts>` flag replays the run without resetting generation 0.
 
 ## 8. Validation (not just "loss went down")
+
+> Status (2026-08-21): shipped gates are held-seed based. `evolve.py`
+> promotes only when the candidate's held40 probe beats the current
+> champion's; the canonical promotion gate is
+> `tools/ga/eval_static_vs_neural.py --seeds 999 1234 4242 --matches 40`
+> (GOAL MET = champion beats static by >= +0.5 on every seed). The
+> fresh-opponent-pool and human blind-test steps below remain design intent.
 
 Each `best.json` is validated before it can be promoted:
 

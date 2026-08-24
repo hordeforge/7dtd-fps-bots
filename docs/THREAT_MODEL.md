@@ -85,7 +85,7 @@ not reviewed here), the host OS, and the dev-side GA training tools
   timeout, which the error path handles by keeping the idempotency claim
   (`WebApi.cs:268-277`).
 - **TB6 Mod <-> server log.** Request-derived strings are scrubbed before
-  logging (`LogSanitizer.Clean`, `Source/BotMod/Web/LogSanitizer.cs:40-53`,
+  logging (`LogSanitizer.Clean`, `Source/BotMod/Config/LogSanitizer.cs:40-53`,
   applied at `WebApi.cs:73-74`); see G3 for what escapes it.
 - **TB7 Server data <-> admin browser.** Status JSON renders player/bot names in
   the dashboard (React default escaping, asset A6).

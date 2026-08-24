@@ -73,7 +73,7 @@ def img_tag(data: bytes, alt: str) -> str:
 
 def load_csv(path: Path):
     gens, best, mean, median, q25, q75 = [], [], [], [], [], []
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         r = csv.DictReader(f)
         for row in r:
             gens.append(int(row["gen"]))
@@ -107,7 +107,7 @@ def weight_hist(run_dir: Path) -> str | None:
     if not cand:
         return None
     # pick the best genome of the last generation file
-    last = json.loads(cand[-1].read_text())
+    last = json.loads(cand[-1].read_text(encoding="utf-8"))
     # top3 is [w, ...] flat arrays
     w = None
     if "top3" in last and last["top3"]:
@@ -133,7 +133,7 @@ def best_net(run_dir: Path) -> str | None:
     cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
     if not cand:
         return None
-    last = json.loads(cand[-1].read_text())
+    last = json.loads(cand[-1].read_text(encoding="utf-8"))
     if "top3" not in last or not last["top3"]:
         return None
     import math
@@ -171,7 +171,7 @@ def build(runs: list[Path], out: Path):
         cfg = {}
         cfg_path = run_dir / "config.json"
         if cfg_path.exists():
-            try: cfg = json.loads(cfg_path.read_text())
+            try: cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
             except Exception: pass
 
         # headline stats
@@ -214,7 +214,7 @@ def build(runs: list[Path], out: Path):
 <footer class="muted" style="margin-top:22px">Charts score the headless combat sim (tools/ga/harness.py).</footer>
 """
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html)
+    out.write_text(html, encoding="utf-8")
     print(f"report -> {out}")
     return out
 
