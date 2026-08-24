@@ -46,6 +46,22 @@ static class CombatGatesTests
             !CombatGates.ClassGateBlocks(false, true, false, vsPlayers: true, vsZombies: true) &&
             !CombatGates.ClassGateBlocks(false, false, true, vsPlayers: true, vsZombies: true));
 
+        // 4. Exhaustive bot-victim exemption: for every body-class and toggle
+        //    combination, a bot victim is never class-blocked (the ally rule
+        //    answers on top). Guards against a future early-return reorder
+        //    that re-exposes the regression in some combo the samples above
+        //    do not name.
+        {
+            bool exempt = true;
+            foreach (bool playerBody in new[] { false, true })
+                foreach (bool zombieBody in new[] { false, true })
+                    foreach (bool vsPlayers in new[] { false, true })
+                        foreach (bool vsZombies in new[] { false, true })
+                            if (CombatGates.ClassGateBlocks(true, playerBody, zombieBody, vsPlayers, vsZombies))
+                                exempt = false;
+            Check("bot victim exempt in every one of the 16 toggle combos", exempt);
+        }
+
         if (_failures > 0)
         {
             Console.WriteLine(_failures + " combat gates test(s) failed");

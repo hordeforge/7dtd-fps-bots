@@ -73,6 +73,14 @@ run_suite bottext \
   "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/BotTextTests.cs"
 
+# Deterministic LCG parity pins: the tap constants are mirrored by hand in
+# tools/ga (combat_sim.py, replay.py), so a changed multiplier/shift/mask
+# would silently desync the GA simulation from in-game rolls. Exact
+# sequences from the documented formula plus Index/Range boundaries.
+run_suite lcg \
+  "$root/Source/BotMod/Config/Lcg.cs" \
+  "$root/tests/BotMod.Web.Tests/LcgTests.cs"
+
 # Positional grammar of `bot spawn` / `bot player`: strict parse, named
 # errors for leftover tokens (see Source/BotMod/Commands/BotArgParser.cs).
 run_suite botargparser \

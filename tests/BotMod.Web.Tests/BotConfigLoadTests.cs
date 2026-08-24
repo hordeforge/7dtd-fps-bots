@@ -79,6 +79,33 @@ static class BotConfigLoadTests
             Check("probability clamped to 0-1", cfg.HeadshotChance == 1f);
         }
 
+        // Bare NaN/Infinity literals (Newtonsoft parses them straight into
+        // float properties) must land on each field's documented default via
+        // Normalize's Finite guards: Math.Max/Math.Min propagate NaN, so an
+        // unguarded clamp chain would let NaN into hp-fraction divisors and
+        // RoundToInt(dmg*HeadshotMultiplier). Pinned at Difficulty 2 (the
+        // default), where ApplyDifficulty leaves these tunables untouched.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path,
+                "{ \"BotHealth\": NaN, \"VisionRange\": Infinity, \"AttackRange\": -Infinity,"
+                + " \"HeadshotMultiplier\": NaN, \"VisionAngle\": Infinity, \"SpawnProtectionSec\": NaN }");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("NaN bot health falls back to 100", cfg.BotHealth == 100f);
+            Check("Infinite vision range falls back to 70", cfg.VisionRange == 70f);
+            Check("-Infinite attack range falls back to 45", cfg.AttackRange == 45f);
+            Check("NaN headshot multiplier falls back to 2", cfg.HeadshotMultiplier == 2f);
+            Check("Infinite vision angle falls back to 190", cfg.VisionAngle == 190f);
+            Check("NaN spawn protection falls back to 1.2", cfg.SpawnProtectionSec == 1.2f);
+            Check("relations hold after finite fallbacks",
+                cfg.LoseTargetRange >= cfg.VisionRange && cfg.AttackRange <= cfg.VisionRange);
+            Check("all float tunables finite after NaN/Infinity load",
+                !float.IsNaN(cfg.BotHealth) && !float.IsInfinity(cfg.BotHealth)
+                && !float.IsNaN(cfg.VisionRange) && !float.IsInfinity(cfg.VisionRange)
+                && !float.IsNaN(cfg.AttackRange) && !float.IsInfinity(cfg.AttackRange)
+                && !float.IsNaN(cfg.HeadshotMultiplier) && !float.IsInfinity(cfg.HeadshotMultiplier));
+        }
+
         // The difficulty preset raises VisionRange after the relational
         // clamps run; LoseTargetRange must be re-raised with it or bots lose
         // targets closer than they can see (found by BotConfigFuzzTests on
