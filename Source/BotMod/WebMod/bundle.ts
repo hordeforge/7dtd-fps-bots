@@ -126,11 +126,11 @@ function unwrapSnap(o: unknown): BotStatus {
   return data2;
 }
 
-const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-
 function numOr(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
+
+const num = (v: unknown): number => numOr(v, 0);
 
 function strOrEmpty(v: unknown): string {
   return typeof v === "string" ? v : "";

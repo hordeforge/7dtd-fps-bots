@@ -35,6 +35,31 @@ FIT_CAMP = 1.0  # multiplier on camp_pen (already 1.6/0; 0 disables)
 # to 1 (F=18) so the measuring stick is stable.
 DRAWS_PER_CONFIG = 2
 
+# Canonical held-out measuring stick (docs/research/03/04): tanh forward,
+# default scalarization, mixed curriculum, DRAWS_PER_CONFIG=1 (F=18).
+# Snapshot at import so training-time mutations of the module knobs above
+# cannot leak into held-out scoring; canonical_scores() pins these values for
+# the duration of its evaluation and restores the caller's knobs afterwards.
+_CANONICAL_STICK = (0, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, "mixed", 1)
+
+
+def canonical_scores(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -> List[float]:
+    """Score `w` on the shared held-out measuring stick: canonical tanh +
+    default scalarization + DRAWS_PER_CONFIG=1 (F=18), `matches` draws keyed
+    by (gen_key, m, run_seed). One definition for every consumer of held-out
+    numbers (evolve's promotion gate, eval.py, eval_static_vs_neural.py,
+    fitness_sweep.py), so they cannot drift apart again; training knobs set by
+    a caller are pinned to the canonical values for the duration and restored
+    afterwards."""
+    global ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG
+    saved = (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG)
+    (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG) = _CANONICAL_STICK
+    try:
+        return [evaluate(w, gen_key, m, run_seed) for m in range(matches)]
+    finally:
+        (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG) = saved
+
+
 # Thread cap for evaluate_population: one worker per genome up to the core
 # count (each sim is CPU-bound; oversubscribing only adds context switches).
 _MAX_WORKERS = max(1, os.cpu_count() or 1)

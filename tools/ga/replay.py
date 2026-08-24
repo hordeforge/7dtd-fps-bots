@@ -282,9 +282,13 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                 v, rng = _lcg01(rng)
                 fired = True
                 if v > hc2:
-                    burst_left[bi] -= 1
-                    if burst_left[bi] <= 0:
-                        burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
+                    # Miss still burns burst; reaction pause only when the
+                    # burst was already empty (same accounting as combat_sim
+                    # and this file's hit path below).
+                    if burst_left[bi] > 0:
+                        burst_left[bi] -= 1
+                        if burst_left[bi] <= 0:
+                            burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
                     else:
                         reaction_cd[bi] = 0.28
                 else:

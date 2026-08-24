@@ -19,10 +19,10 @@
         }
         return data2;
     }
-    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
     function numOr(v, fallback) {
         return typeof v === "number" && Number.isFinite(v) ? v : fallback;
     }
+    const num = (v) => numOr(v, 0);
     function strOrEmpty(v) {
         return typeof v === "string" ? v : "";
     }

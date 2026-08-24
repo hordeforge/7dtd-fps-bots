@@ -74,13 +74,13 @@ namespace BotMod.Core
         int _dodgeTicks;      // ticks left in the dodge
         int _dodgeBackRemain; // ticks of backpedal still left (then flip strafe)
         // Per-bot deterministic LCG seeded from entityId (like zdtd_bot per-slot RNG).
-        Config.Lcg _rng;
+        Lcg _rng;
         // Per-tick memoization: one neural forward pass and one CanSee raycast max.
         // Retreat, fire-gate and movement all consumed separate evals (each with its
         // own LOS raycast inside BuildNeuralInputs) for identical inputs within a tick.
         bool _neuralEvalDone;
         bool _neuralOk;
-        BotMod.AI.BotNeuralBrain.NeuralOutputs _neuralOuts;
+        BotNeuralBrain.NeuralOutputs _neuralOuts;
         bool _canSeeDone;
         bool _canSeeVal;
         // Squad flanking scan cadence: FlankAway walks every bot's entity each call,
@@ -92,7 +92,7 @@ namespace BotMod.Core
             EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
             TeamKey = BotManager.BaseName(name); // frozen: names never change after spawn
             _burstLeft = weapon.BurstMin;
-            _rng = Config.Lcg.Seeded((uint)entityId * 2654435761u + 97u);
+            _rng = Lcg.Seeded((uint)entityId * 2654435761u + 97u);
             _ammo = weapon.MagSize; // zdtd_bot ammo pacing, ported
         }
 
@@ -269,7 +269,7 @@ namespace BotMod.Core
         void RetreatToCover(EntityAlive me, World world, BotConfig cfg, BotCharacter ch)
         {
             bool doRetreat;
-            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
+            if (TryNeuralOnce(me, world, cfg))
             {
                 doRetreat = _neuralOuts.WantRetreat;
             }
@@ -335,7 +335,7 @@ namespace BotMod.Core
             // Neural aimBias advisory drives every engagement (bot-vs-bot, bot-vs-zombie,
             // bot-vs-player) so the evolved brain is exercised live. Classic is fallback.
             // Reuses the tick's cached eval (see TryNeuralOnce).
-            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
+            if (TryNeuralOnce(me, world, cfg))
             {
                 float window = Mathf.Max(0.03f, (1f - AimAcc) * 0.45f);
                 _aimBiasYaw = _neuralOuts.AimBiasYaw * window; // outs already tanh in [-1,1]
@@ -351,14 +351,14 @@ namespace BotMod.Core
             // evolved brain's fire decision actually matters against bots and zombies.
             // Reuses the tick's cached eval (see TryNeuralOnce).
             bool wantToFire = true;
-            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg)) wantToFire = _neuralOuts.ShouldFire;
+            if (TryNeuralOnce(me, world, cfg)) wantToFire = _neuralOuts.ShouldFire;
             TryShootBurst(me, _target, world, cfg, wantToFire);
             // R10 neural movement: when the evolved brain is loaded it drives the
             // 2D velocity directly (retreat -> forward, strafe -> lateral, camp ->
             // hold), matching combat_sim. The hardcoded Q3 strafe/dodge logic below
             // is the fallback when the brain is off or broken.
             bool neuralMoved = false;
-            if (UseNeuralGate() && TryNeuralOnce(me, world, cfg))
+            if (TryNeuralOnce(me, world, cfg))
             {
                 float retreat = _neuralOuts.RetreatLogit;
                 float strafe = _neuralOuts.StrafeLogit;
@@ -527,7 +527,7 @@ namespace BotMod.Core
                     _campHoldUntil = Time.time + 4f + Rng01() * 3f; // hold ~4-7 s
                     _campYaw = 0f;
                     _wanderTarget = BotBrain.FindCover(me, me, world);
-                    if (_wanderTarget == UnityEngine.Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
+                    if (_wanderTarget == Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
                     BotBrain.MoveTo(me, _wanderTarget);
                 }
                 else if (Vector3.Distance(me.position, _wanderTarget) < 3f || _campHoldUntil > Time.time)
@@ -758,7 +758,7 @@ namespace BotMod.Core
 
         bool UseNeuralGate()
         {
-            try { return ModApi.Config != null && ModApi.Config.UseNeuralBrain && BotMod.AI.BotNeuralBrain.Loaded; }
+            try { return ModApi.Config != null && ModApi.Config.UseNeuralBrain && BotNeuralBrain.Loaded; }
             catch { return false; }
         }
 
@@ -784,15 +784,16 @@ namespace BotMod.Core
         {
             if (_neuralEvalDone) return _neuralOk;
             _neuralEvalDone = true;
+            if (!UseNeuralGate()) { _neuralOk = false; return false; }
             try
             {
-                _neuralOk = BotMod.AI.BotNeuralBrain.TryEval(BuildNeuralInputs(me, world, cfg), out _neuralOuts);
+                _neuralOk = BotNeuralBrain.TryEval(BuildNeuralInputs(me, world, cfg), out _neuralOuts);
                 return _neuralOk;
             }
             catch { _neuralOk = false; return false; }
         }
 
-        BotMod.AI.BotNeuralBrain.NeuralInputs BuildNeuralInputs(EntityAlive me, World world, BotConfig cfg)
+        BotNeuralBrain.NeuralInputs BuildNeuralInputs(EntityAlive me, World world, BotConfig cfg)
         {
             float hpFrac = 0f;
             try { hpFrac = Mathf.Clamp01(me.Health / Mathf.Max(1f, cfg.BotHealth)); } catch { }
@@ -821,7 +822,7 @@ namespace BotMod.Core
             try { ammoFrac = Mathf.Clamp01(_ammo / (float)System.Math.Max(1, Weapon.MagSize)); } catch { }
             float stuck = 0f;
             try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); } catch { }
-            return new BotMod.AI.BotNeuralBrain.NeuralInputs
+            return new BotNeuralBrain.NeuralInputs
             {
                 HpFrac = hpFrac, EnemyHpFrac = enemyHp, DistNorm = distNorm, CanSee = canSee,
                 SpreadFrac = spreadFrac, WeaponRangeNorm = wpRange, PelletsNorm = pellets,

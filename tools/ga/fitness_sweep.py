@@ -33,17 +33,12 @@ def one_mix(mix):
         ranked=np.empty(len(fit),dtype=float)
         ranked[order]=np.arange(len(fit))/max(1,len(fit)-1)
         pop_w=ga.next_generation(pop_w, ranked, order, rng, generation=g, total_gens=GENS)
-    # held scoring always on canonical weights (apples-to-apples) AND the
-    # canonical measuring stick: DRAWS_PER_CONFIG pinned to 1 (F=18) like
-    # evolve._held_probe / eval_static_vs_neural; leaving the training value
-    # (2) in scored held60 on a different sample than every other tool.
-    saved_draws = harness.DRAWS_PER_CONFIG
-    harness.FIT_ELO=0.55; harness.FIT_ECON=0.25; harness.FIT_SURV=0.15; harness.FIT_STUCK=0.05
-    harness.DRAWS_PER_CONFIG=1
-    try:
-        scores=[harness.evaluate(best_w, 999, m, HOLD_SEED) for m in range(60)]
-    finally:
-        harness.DRAWS_PER_CONFIG=saved_draws
+    # Held scoring always on the canonical measuring stick (apples-to-apples):
+    # harness.canonical_scores pins FIT_*/DRAWS=1 (F=18) like evolve._held_probe
+    # / eval_static_vs_neural and restores the training mix afterwards; leaving
+    # the training values in scored held60 on a different sample than every
+    # other tool.
+    scores = harness.canonical_scores(best_w, 999, HOLD_SEED, 60)
     held=float(np.mean(scores)); std=float(np.std(scores))
     return best_f, held, std, mix["tag"]
 

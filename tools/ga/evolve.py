@@ -83,34 +83,19 @@ def _load_resume(resume: str, seed: int, pop: int):
 
 
 def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
-    """Held-out score on HELD_SEED under canonical tanh + DEFAULT_FITNESS
-    scalarization + the F=18 gate (docs/research/03: "eval gate pins F=18").
-    Training knobs (activation, curriculum phase, draw regularization) must
-    not leak into the promotion measuring stick. Harness globals are restored
-    afterwards; any failure scores -inf so the run can never promote — and
-    says why on stderr, so a broken probe is visible instead of silently
-    gating or silently waving every candidate through (-inf >= -inf)."""
-    saved = (harness.ACTIVATION, harness.FIT_ELO, harness.FIT_ECON,
-             harness.FIT_SURV, harness.FIT_STUCK, harness.CURRICULUM,
-             harness.DRAWS_PER_CONFIG)
+    """Held-out score on HELD_SEED under the shared canonical measuring stick
+    (harness.canonical_scores: tanh + DEFAULT_FITNESS scalarization + the
+    F=18 gate; docs/research/03: "eval gate pins F=18"). Training knobs are
+    pinned inside canonical_scores and restored afterwards. Any failure scores
+    -inf so the run can never promote — and says why on stderr, so a broken
+    probe is visible instead of silently gating or silently waving every
+    candidate through (-inf >= -inf)."""
     try:
-        harness.ACTIVATION = 0
-        harness.FIT_ELO = DEFAULT_FITNESS["elo"]
-        harness.FIT_ECON = DEFAULT_FITNESS["econ"]
-        harness.FIT_SURV = DEFAULT_FITNESS["survival"]
-        harness.FIT_STUCK = DEFAULT_FITNESS["stuck"]
-        harness.CURRICULUM = "mixed"
-        harness.DRAWS_PER_CONFIG = 1
-        return float(np.mean([harness.evaluate(weights, HELD_SEED, m, HELD_SEED)
-                              for m in range(matches)]))
+        return float(np.mean(harness.canonical_scores(weights, HELD_SEED, HELD_SEED, matches)))
     except Exception as ex:
         print(f"held probe failed ({ex.__class__.__name__}: {ex}); scored -inf",
               file=sys.stderr)
         return float("-inf")
-    finally:
-        (harness.ACTIVATION, harness.FIT_ELO, harness.FIT_ECON,
-         harness.FIT_SURV, harness.FIT_STUCK, harness.CURRICULUM,
-         harness.DRAWS_PER_CONFIG) = saved
 
 
 def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed"):
@@ -275,8 +260,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
 
             # HOF ring — freshness gated (don't re-inject a genome already in the live pop)
             global_elites = [all_pops_flat[int(i)].copy() for i in order[-2:][::-1]] if len(all_pops_flat) >= 2 else []
-            hof = (hof + global_elites)[:8] if hof else global_elites[:]
-            hof = hof[:8]
+            hof = (hof + global_elites)[:8]
             if g % 12 == 11 and len(hof) >= 2:
                 # pick a HOF entry not equal to current best (weight-hash dedup)
                 cand = random.choice(hof)

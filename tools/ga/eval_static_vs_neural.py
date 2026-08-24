@@ -33,14 +33,9 @@ DEFAULT_SEEDS = [999, 1234, 4242]
 
 
 def held(w: np.ndarray, seed: int, matches: int) -> tuple[float, float]:
-    harness.FIT_ELO = 0.55
-    harness.FIT_ECON = 0.25
-    harness.FIT_SURV = 0.15
-    harness.FIT_STUCK = 0.05
-    harness.ACTIVATION = 0
-    harness.CURRICULUM = "mixed"
-    harness.DRAWS_PER_CONFIG = 1  # pin the measuring stick to the canonical F=18 sample
-    sc = [harness.evaluate(w, 999, m, seed) for m in range(matches)]
+    # Shared canonical measuring stick (tanh + default scalarization, F=18);
+    # the pin lives in harness.canonical_scores so every consumer stays equal.
+    sc = harness.canonical_scores(w, 999, seed, matches)
     return float(np.mean(sc)), float(np.std(sc))
 
 
