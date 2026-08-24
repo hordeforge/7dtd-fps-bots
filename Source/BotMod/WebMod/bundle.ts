@@ -432,7 +432,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
               onDragEnd: (): void => setDragName(null)
             }, b.name)))),
     h("button", {
-      className: "botmod-btn", title: "Fewer teams", disabled: busy !== "" || teamCount <= 1,
+      className: "botmod-btn", title: "Fewer teams", disabled: busy !== "" || teamCount <= 0,
       onClick: (): void => post({ action: "teamCount", count: teamCount - 1 })
     }, "− teams"),
     h("button", {

@@ -234,7 +234,7 @@
                 onDragStart: () => setDragName(b.name),
                 onDragEnd: () => setDragName(null)
             }, b.name)))), h("button", {
-            className: "botmod-btn", title: "Fewer teams", disabled: busy !== "" || teamCount <= 1,
+            className: "botmod-btn", title: "Fewer teams", disabled: busy !== "" || teamCount <= 0,
             onClick: () => post({ action: "teamCount", count: teamCount - 1 })
         }, "− teams"), h("button", {
             className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= 8,

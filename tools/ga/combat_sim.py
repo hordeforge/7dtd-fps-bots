@@ -351,7 +351,11 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
             x_obs[2] = min(1.0, dist / 70.0)
             x_obs[3] = 1.0 if can_see else 0.0
             x_obs[4] = spread[bi]  # fire spread 0..1 (runtime: Bot._fireSpread)
-            x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0
+            # Clamped like the runtime: docs/research/01 §2 freezes slot 5 Norm
+            # [0,1] and Bot.BuildNeuralInputs wraps the ratio in Clamp01, so the
+            # unclamped sniper (2.0) / AK (1.22) values trained hidden units on
+            # inputs that never occur at deployment.
+            x_obs[5] = min(1.0, WEAPON_RANGE[bweapon[bi]] / 45.0)
             x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0
             # aim acc/skill derived from weapon + skill
             x_obs[7] = 0.55 + bskill[bi] * 0.10  # 0.55..0.95
