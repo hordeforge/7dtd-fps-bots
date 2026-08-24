@@ -29,6 +29,11 @@ namespace BotMod.Config
         // Callers that read-modify-write (PersistConfigField) take their own
         // gate first; acquisition order is always caller-gate -> WriteGate, so
         // no deadlock. Pure in-memory/FS work under the lock, no callbacks.
+        // Readers (TryRead) take this gate too: between Delete and Move the
+        // primary does not exist, and an unlocked reader hitting that window
+        // would silently fall back to the stale .bak even though the new
+        // content was about to land. WriteGate stays a leaf lock, so read
+        // serialization cannot close a cycle.
         internal static readonly object WriteGate = new object();
 
         /// <summary>Replace path with contents atomically, keeping the previous
@@ -62,17 +67,22 @@ namespace BotMod.Config
 
         /// <summary>Read the best available copy: the primary, else the .bak
         /// written by the last successful Write. Returns false when neither is
-        /// readable; parse errors are the caller's problem.</summary>
+        /// readable; parse errors are the caller's problem. Serialized against
+        /// Write so a concurrent swap is never observed mid-flight (see
+        /// WriteGate above).</summary>
         public static bool TryRead(string path, out string contents)
         {
             contents = null;
-            foreach (string candidate in new[] { path, BackupPath(path) })
+            lock (WriteGate)
             {
-                if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
-                // Explicit UTF-8: Write() stages Encoding.UTF8 bytes, so reads
-                // must not depend on the platform default codepage to round-trip.
-                try { contents = File.ReadAllText(candidate, Encoding.UTF8); return true; }
-                catch (Exception) { }
+                foreach (string candidate in new[] { path, BackupPath(path) })
+                {
+                    if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
+                    // Explicit UTF-8: Write() stages Encoding.UTF8 bytes, so reads
+                    // must not depend on the platform default codepage to round-trip.
+                    try { contents = File.ReadAllText(candidate, Encoding.UTF8); return true; }
+                    catch (Exception) { }
+                }
             }
             return false;
         }
