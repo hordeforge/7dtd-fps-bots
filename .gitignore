@@ -12,3 +12,4 @@ __pycache__/
 
 .scratch/
 *.lock
+coverage.cobertura.xml

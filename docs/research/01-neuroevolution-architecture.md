@@ -25,8 +25,9 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 > `inputs: 14`). Rows 14-15 below were never wired and stay reserved. Since R8,
 > the trainer fills slot 4 with fire-spread fraction and slot 12 with
 > rounds-left fraction (they were dead placeholders,
-> `tools/ga/combat_sim.py`); the live mod keeps the original lose-timer /
-> enemy-velocity semantics for those slots (`Bot.BuildNeuralInputs`).
+> `tools/ga/combat_sim.py`). Since R13 the runtime matches those semantics
+> (`Bot.BuildNeuralInputs`: slot 4 reads `_fireSpread`, slot 12 reads
+> magazine fill), so sim and live brain see the same vector.
 
 | # | Feature | Source | Norm |
 |---|---|---|---|
@@ -34,13 +35,13 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 | 1 | `enemyHpFrac` (target or 1 if none) | `FindTarget` | [0,1] |
 | 2 | `dist / VisionRange` | `Vector3.Distance` | [0,1] clipped |
 | 3 | `canSee` | `BotBrain.CanSee` | {0,1} |
-| 4 | `loseTimer / LoseTargetTimeSec` | `_loseTargetTimer` | [0,1] |
+| 4 | `fireSpreadFrac = _fireSpread` (clamp 01) | `_fireSpread` accumulator | [0,1] |
 | 5 | `weaponRange / AttackRange` | `WeaponProfile.Range` | [0,1] |
 | 6 | `weaponPellets / 8` | `WeaponProfile.Pellets` | [0,1] |
 | 7 | `aimAcc` | `Character.AimAccuracy` | [0,1] |
 | 8 | `aimSkill` | `Character.AimSkill` | [0,1] |
 | 9 | `aggression`, `selfPreservation`, `camper` | `BotCharacter` | [0,1] each but packed → 3 dims here: indices 9,10,11 |
-| 12 | `enemyVelMag / 12` | `_targetVel.magnitude` | [0,1] |
+| 12 | `magFill = _ammo / Weapon.MagSize` | `_ammo` (magazine fill) | [0,1] |
 | 13 | `stuckFrac = min(stuckSince / StuckTimeoutSec, 1)` | `_stuckSince` | [0,1] |
 | 14 | `burstLeft / BurstMax` | `_burstLeft` | reserved, not shipped |
 | 15 | `inAttackRange` | `dist <= Weapon.Range` | reserved, not shipped |
