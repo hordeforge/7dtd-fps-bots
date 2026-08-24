@@ -7,7 +7,7 @@
   // WebDashboard loads. env browser + es2024; the emitted target is ES2017,
   // which is why the ES2022+ array APIs (at, toSorted, toReversed) are off.
   //
-  // Rule set: identical to ../7dtd-apm/.oxlintrc.jsonc (the two webmod
+  // Rule set: based on ../7dtd-apm/.oxlintrc.jsonc (the two webmod
   // bundles share the same architecture: IIFE classic script, dashboard-
   // injected React, untyped JSON payload boundary): the Rika-Labs/oxlint-
   // standards v0.8.1 anti-slop baseline plus the strict-core subset applicable
@@ -125,6 +125,17 @@
     "typescript/array-type": ["error", { "default": "generic" }],
     "typescript/explicit-function-return-type": "error",
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "as" }],
+    // ---- typescript/* restriction guards (2026-08-24): ban the escape
+    //      hatches outright instead of relying on review to catch them ----
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-confusing-non-null-assertion": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/triple-slash-reference": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/non-nullable-type-assertion-style": "error",
+    "typescript/no-unnecessary-type-parameters": "error",
     // ---- type-aware typescript/* (options.typeAware + oxlint-tsgolint; the
     //      shape-guard boundary casts carry documented disables in bundle.ts) ----
     "typescript/no-unsafe-member-access": "error",
@@ -151,6 +162,12 @@
     "unicorn/explicit-length-check": "error",
     "unicorn/numeric-separators-style": "error",
     "unicorn/no-nested-ternary": "error",
+    // ---- unicorn restriction/style guards the source passes (2026-08-24) ----
+    "unicorn/throw-new-error": "error",
+    "unicorn/no-useless-promise-resolve-reject": "error",
+    "unicorn/no-useless-spread": "error",
+    "unicorn/no-await-expression-member": "error",
+    "unicorn/prefer-string-raw": "error",
     // unicorn/consistent-function-scoping off: the whole bundle is one IIFE
     // (plain-script global collision guard, see the bundle.ts header), so
     // module-level helpers cannot hoist past the wrapper.
