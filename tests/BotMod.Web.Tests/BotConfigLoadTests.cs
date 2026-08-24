@@ -289,6 +289,26 @@ static class BotConfigLoadTests
             Check("magnum: small mag, heavy shots",
                 p.MagSize == 6 && p.Damage == 34 && p.BurstMax <= 2);
 
+            // Class membership by substring: the web spawnNear action accepts
+            // any "gun..." token, so every alias branch must land on its
+            // class's exact profile (the numbers pinned above), never fall
+            // through to the pistol default.
+            p = WeaponProfile.ForGun("gunHuntingRifleT0", cfg);
+            Check("hunting rifle joins sniper class",
+                p.Range == 90f && p.Damage == 42f && p.SpreadDeg == 0.35f && p.BurstMin == 1);
+            p = WeaponProfile.ForGun("gunLeverActionT1", cfg);
+            Check("lever action joins sniper class", p.Range == 90f && p.MagSize == 12);
+            p = WeaponProfile.ForGun("gunMGT1M60", cfg);
+            Check("m60 joins ak family class",
+                p.BurstMin == 3 && p.BurstMax == 6 && p.Range == 55f && p.FireRate == 0.11f);
+            p = WeaponProfile.ForGun("gunHandgunT3TacticalPistol", cfg);
+            Check("tactical joins ak family class", p.Range == 55f && p.Damage == 16);
+            p = WeaponProfile.ForGun("gunHandgunT0PipeMachinegun", cfg);
+            Check("pipe machinegun joins smg class",
+                p.BurstMin >= 5 && p.FireRate == 0.09f && p.Range == 35f);
+            p = WeaponProfile.ForGun("gunHandgunDesertEagle", cfg);
+            Check("desert joins magnum class", p.MagSize == 6 && p.Damage == 34 && p.Range == 45f);
+
             p = WeaponProfile.ForGun("gunHandgunT1Pistol", cfg);
             Check("unclassified gun falls back to pistol profile",
                 p.Damage == 16 && p.Range == 40f && p.MagSize == 15);

@@ -49,6 +49,11 @@ static class BotArgParserTests
         Check("negative count clamps to 1", c4 == 1);
         Spawn(new[] { "99" }, out int c5, out _, out _, out _, out _, out _);
         Check("count 99 clamps to 16", c5 == 16);
+        // Exact clamp edges: 16 is the last accepted count, 17 is clamped.
+        Spawn(new[] { "16" }, out int c5a, out _, out _, out _, out _, out _);
+        Check("count 16 kept at max", c5a == 16);
+        Spawn(new[] { "17" }, out int c5b, out _, out _, out _, out _, out _);
+        Check("count 17 clamps to 16", c5b == 16);
 
         // The documented coordinate form: two numbers are x z with count 1,
         // never "count plus dangling junk".
