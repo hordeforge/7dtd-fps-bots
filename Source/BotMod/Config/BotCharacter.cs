@@ -111,7 +111,7 @@ namespace BotMod.Config
             {
                 string path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json");
                 if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine(".", "config", "characters.json");
-                if (!System.IO.File.Exists(path)) path = "config/characters.json";
+                if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine("config", "characters.json");
                 if (System.IO.File.Exists(path))
                 {
                     // Explicit UTF-8: characters.json is our own artifact and is

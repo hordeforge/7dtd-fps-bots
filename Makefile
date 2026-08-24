@@ -30,23 +30,23 @@ export HELP
 help:
 	@echo "$$HELP"
 build:
-	bash $(SCRIPTS)/build.sh
+	bash "$(SCRIPTS)/build.sh"
 build-mcs:
-	SEVENDTD_BUILD_BACKEND=mcs bash $(SCRIPTS)/build.sh
+	SEVENDTD_BUILD_BACKEND=mcs bash "$(SCRIPTS)/build.sh"
 test:
-	bash $(SCRIPTS)/test-idempotency.sh
+	bash "$(SCRIPTS)/test-idempotency.sh"
 package:
-	bash $(SCRIPTS)/package.sh
+	bash "$(SCRIPTS)/package.sh"
 lint-html:
-	bash $(SCRIPTS)/lint-html.sh
+	bash "$(SCRIPTS)/lint-html.sh"
 lint-webui:
-	bash $(SCRIPTS)/lint-webui.sh
+	bash "$(SCRIPTS)/lint-webui.sh"
 lint-shell:
-	shellcheck $(SCRIPTS)/*.sh
+	shellcheck "$(SCRIPTS)"/*.sh
 check: lint-shell lint-html lint-webui
 install:
-	bash $(SCRIPTS)/install.sh
+	bash "$(SCRIPTS)/install.sh"
 uninstall:
 	rm -rf "$(DS)/Mods/BotMod"
 clean:
-	rm -rf $(ROOT)/dist $(ROOT)/Source/BotMod/bin $(ROOT)/Source/BotMod/obj
+	rm -rf "$(ROOT)/dist" "$(ROOT)/Source/BotMod/bin" "$(ROOT)/Source/BotMod/obj"
