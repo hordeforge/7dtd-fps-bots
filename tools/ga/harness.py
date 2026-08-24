@@ -55,13 +55,14 @@ def canonical_scores(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -
     saved = (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG)
     (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG) = _CANONICAL_STICK
     try:
-        return [evaluate(w, gen_key, m, run_seed) for m in range(matches)]
+        return evaluate_many(w, gen_key, run_seed, matches)
     finally:
         (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG) = saved
 
 
-# Thread cap for evaluate_population: one worker per genome up to the core
-# count (each sim is CPU-bound; oversubscribing only adds context switches).
+# Thread cap for evaluate_population/evaluate_many: one worker per genome (or
+# per match) up to the core count (each sim is CPU-bound; oversubscribing only
+# adds context switches).
 _MAX_WORKERS = max(1, os.cpu_count() or 1)
 # fixed opponent policy for mixed arenas: all-zero weights = always-firing no-brain
 _OPP_STATIC = np.zeros(325, dtype=np.float32)
@@ -133,6 +134,22 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
                 fitness = FIT_ELO * r[0] + FIT_ECON * r[1] + FIT_SURV * r[2] - FIT_STUCK * r[3] - FIT_CAMP * r[4]
                 total += fitness; n += 1
     return total / max(1, n)
+
+
+def evaluate_many(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -> List[float]:
+    """Score one genome over `matches` draws (match index 0..matches-1), in
+    match order. Same kernel and seed chain as a sequential
+    `[evaluate(w, gen_key, m, run_seed)]` loop; threads only overlap the
+    independent sims (the numba body releases the GIL) and ex.map collects in
+    index order, so scores stay byte-identical to the sequential version.
+    This is the single definition behind canonical_scores and evolve's per-gen
+    held probe: both used to run these sims strictly sequentially on the
+    training loop's critical path."""
+    workers = min(_MAX_WORKERS, max(1, matches))
+    if workers <= 1:
+        return [evaluate(w, gen_key, m, run_seed) for m in range(matches)]
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return list(ex.map(lambda m: evaluate(w, gen_key, m, run_seed), range(matches)))
 
 
 def evaluate_population(pop: List[np.ndarray], generation: int, run_seed: int = 42) -> List[float]:

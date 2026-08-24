@@ -225,7 +225,10 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             held_m = float("nan")
             if not dry_run and (g % 5 == 0 or g == gens - 1):
                 cand = best_w if best_w is not None else all_pops_flat[best_idx]
-                held_m = float(np.mean([harness.evaluate(cand, HELD_SEED, m, HELD_SEED) for m in range(20)]))
+                # evaluate_many fans the 20 matches across cores (the numba sim
+                # releases the GIL) and returns them in match order, so the
+                # mean is identical to the old sequential list comprehension.
+                held_m = float(np.mean(harness.evaluate_many(cand, HELD_SEED, HELD_SEED, 20)))
 
             # log per-gen CSV
             arr = np.array(all_fitness, dtype=float)
