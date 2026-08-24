@@ -57,9 +57,9 @@ static class BotNeuralBrainFuzzTests
         return new BotMod.AI.BotNeuralBrain.NeuralInputs
         {
             HpFrac = r(), EnemyHpFrac = r(), DistNorm = r(), CanSee = r(),
-            LoseTimerNorm = r(), WeaponRangeNorm = r(), PelletsNorm = r(), AimAcc = r(),
+            SpreadFrac = r(), WeaponRangeNorm = r(), PelletsNorm = r(), AimAcc = r(),
             AimSkill = r(), Aggression = r(), SelfPreservation = r(), Camper = r(),
-            EnemyVelMagNorm = r(), StuckFrac = r()
+            AmmoLeftFrac = r(), StuckFrac = r()
         };
     }
 
@@ -68,9 +68,9 @@ static class BotNeuralBrainFuzzTests
         return new BotMod.AI.BotNeuralBrain.NeuralInputs
         {
             HpFrac = v, EnemyHpFrac = v, DistNorm = v, CanSee = v,
-            LoseTimerNorm = v, WeaponRangeNorm = v, PelletsNorm = v, AimAcc = v,
+            SpreadFrac = v, WeaponRangeNorm = v, PelletsNorm = v, AimAcc = v,
             AimSkill = v, Aggression = v, SelfPreservation = v, Camper = v,
-            EnemyVelMagNorm = v, StuckFrac = v
+            AmmoLeftFrac = v, StuckFrac = v
         };
     }
 

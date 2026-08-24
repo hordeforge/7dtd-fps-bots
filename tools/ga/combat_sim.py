@@ -340,17 +340,17 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
             else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
             # build obs (14) — normalized
             # mirrors docs/research/01 §2: keep order frozen
-            # NOTE slots 4/12 diverge from the live mod on purpose: the runtime
-            # (Bot.BuildNeuralInputs) still packs lose-timer / enemy-velocity into
-            # them, so champions evolved here see different values for these two
-            # slots in-game. Aligning needs a retrain or runtime spread/ammo
-            # state; never change one side of the contract alone.
+            # Slots 4/12 are the sustained-fire spread and rounds-left fractions.
+            # The live mod feeds matching semantics (Bot._fireSpread with the
+            # same ADD/DECAY constants; magazine fill from its zdtd ammo pacing),
+            # so champions evolved here observe the same distributions in-game.
+            # Never change one side of this contract alone.
             # 0 hpFrac
             x_obs[0] = bhp[bi] / 100.0
             x_obs[1] = thp / 100.0
             x_obs[2] = min(1.0, dist / 70.0)
             x_obs[3] = 1.0 if can_see else 0.0
-            x_obs[4] = spread[bi]  # fire spread 0..1 (live mod sends loseTimer here)
+            x_obs[4] = spread[bi]  # fire spread 0..1 (runtime: Bot._fireSpread)
             x_obs[5] = WEAPON_RANGE[bweapon[bi]] / 45.0
             x_obs[6] = float(WEAPON_PELLETS[bweapon[bi]]) / 8.0
             # aim acc/skill derived from weapon + skill
@@ -359,7 +359,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, bot_weapon, w_op
             x_obs[9] = 0.6   # aggr
             x_obs[10] = 0.5  # selfPres
             x_obs[11] = 0.2  # camper
-            x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (live mod sends enemy vel here)
+            x_obs[12] = min(1.0, (ammo[bi] + reserve[bi]) / (WEAPON_MAG[bweapon[bi]] * (1.0 + AMMO_RESERVE_MULT)))  # rounds-left frac (runtime: magazine fill)
             x_obs[13] = min(1.0, float(stuck[bi]) / 40.0)
 
             # forward

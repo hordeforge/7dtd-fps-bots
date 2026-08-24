@@ -79,7 +79,7 @@ static class BotNeuralBrainEvalTests
             case 1: inp.EnemyHpFrac = value; break;
             case 2: inp.DistNorm = value; break;
             case 3: inp.CanSee = value; break;
-            case 4: inp.LoseTimerNorm = value; break;
+            case 4: inp.SpreadFrac = value; break;
             case 5: inp.WeaponRangeNorm = value; break;
             case 6: inp.PelletsNorm = value; break;
             case 7: inp.AimAcc = value; break;
@@ -87,7 +87,7 @@ static class BotNeuralBrainEvalTests
             case 9: inp.Aggression = value; break;
             case 10: inp.SelfPreservation = value; break;
             case 11: inp.Camper = value; break;
-            case 12: inp.EnemyVelMagNorm = value; break;
+            case 12: inp.AmmoLeftFrac = value; break;
             case 13: inp.StuckFrac = value; break;
         }
         return inp;
@@ -95,9 +95,9 @@ static class BotNeuralBrainEvalTests
 
     static readonly string[] SlotNames =
     {
-        "HpFrac", "EnemyHpFrac", "DistNorm", "CanSee", "LoseTimerNorm",
+        "HpFrac", "EnemyHpFrac", "DistNorm", "CanSee", "SpreadFrac",
         "WeaponRangeNorm", "PelletsNorm", "AimAcc", "AimSkill", "Aggression",
-        "SelfPreservation", "Camper", "EnemyVelMagNorm", "StuckFrac"
+        "SelfPreservation", "Camper", "AmmoLeftFrac", "StuckFrac"
     };
 
     static int Main()

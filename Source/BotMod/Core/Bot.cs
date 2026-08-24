@@ -55,6 +55,14 @@ namespace BotMod.Core
         // reload window (WeaponProfile.MagSize/ReloadSec).
         int _ammo;
         float _reloadUntil = -10f;
+        // Sustained-fire spread accumulator feeding neural obs slot 4 (v1
+        // layout): +0.25 per trigger pull, decays 1.0/s, capped at 1. Same
+        // constants as tools/ga/combat_sim.py SPREAD_ADD_PER_SHOT/_DECAY_PER_SEC,
+        // so the runtime observation matches the distribution champions are
+        // evolved on (the R8 fire-cost pacing task shape).
+        const float kSpreadAddPerShot = 0.25f;
+        const float kSpreadDecayPerSec = 1.0f;
+        float _fireSpread;
         // zdtd_bot camp hold, ported back: when a camper decides to camp, hold
         // position for a few seconds and slowly sweep the facing (Q3/Doom3 LTG)
         // instead of just standing still or drifting. `_campHoldUntil` is when the
@@ -165,6 +173,9 @@ namespace BotMod.Core
         {
             _neuralEvalDone = false;
             _canSeeDone = false;
+            // Spread recovery runs before any shot this tick can add to it,
+            // matching the sim's decay-then-maybe-fire ordering per tick.
+            if (_fireSpread > 0f) _fireSpread = Mathf.Max(0f, _fireSpread - kSpreadDecayPerSec * dt);
             var me = GetEntity(world);
             if (me == null) return;
             var cfg = ModApi.Config;
@@ -733,6 +744,7 @@ namespace BotMod.Core
             }
             _burstLeft--;
             _ammo--; // one round per trigger pull (zdtd_bot ammo pacing parity)
+            _fireSpread = Mathf.Min(1f, _fireSpread + kSpreadAddPerShot);
             // Fire-rate gate: spacing inside a burst is the next-shot pause set
             // here (FireRate); BurstPause only separates bursts (±15% roll,
             // zdtd parity jitter).
@@ -797,8 +809,9 @@ namespace BotMod.Core
             try { distNorm = Mathf.Clamp01(Vector3.Distance(me.position, _target != null ? _target.position : me.position) / Mathf.Max(1f, cfg.VisionRange)); } catch { }
             float canSee = 0f;
             try { canSee = TargetVisible(me, world, cfg) ? 1f : 0f; } catch { }
-            float loseNorm = 0f;
-            try { loseNorm = Mathf.Clamp01(_loseTargetTimer / Mathf.Max(0.01f, cfg.LoseTargetTimeSec)); } catch { }
+            // Slot 4: sustained-fire spread fraction, same accumulator the sim
+            // trains against (+per shot, decay per second).
+            float spreadFrac = Mathf.Clamp01(_fireSpread);
             float wpRange = 0f;
             try { wpRange = Mathf.Clamp01(Weapon.Range / Mathf.Max(1f, cfg.AttackRange)); } catch { }
             float pellets = 0f;
@@ -809,16 +822,20 @@ namespace BotMod.Core
             try { skill = Character != null ? Character.AimSkill : 0.75f; } catch { }
             float aggr = 0.5f, selfPres = 0.5f, camper = 0.2f;
             try { if (Character != null) { aggr = Character.Aggression; selfPres = Character.SelfPreservation; camper = Character.Camper; } } catch { }
-            float velNorm = 0f;
-            try { velNorm = Mathf.Clamp01(_targetVel.magnitude / 12f); } catch { }
+            // Slot 12: rounds-left fraction. The sim divides ammo+reserve by the
+            // 2x-mag pool; the runtime has no finite reserve (BotAmmoCount is
+            // decorative bag ammo and never runs dry), so the honest equivalent
+            // is magazine fill: full after each reload, draining per shot.
+            float ammoFrac = 0f;
+            try { ammoFrac = Mathf.Clamp01(_ammo / Mathf.Max(1, Weapon.MagSize)); } catch { }
             float stuck = 0f;
             try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); } catch { }
             return new BotMod.AI.BotNeuralBrain.NeuralInputs
             {
                 HpFrac = hpFrac, EnemyHpFrac = enemyHp, DistNorm = distNorm, CanSee = canSee,
-                LoseTimerNorm = loseNorm, WeaponRangeNorm = wpRange, PelletsNorm = pellets,
+                SpreadFrac = spreadFrac, WeaponRangeNorm = wpRange, PelletsNorm = pellets,
                 AimAcc = acc, AimSkill = skill, Aggression = aggr, SelfPreservation = selfPres, Camper = camper,
-                EnemyVelMagNorm = velNorm, StuckFrac = stuck
+                AmmoLeftFrac = ammoFrac, StuckFrac = stuck
             };
         }
 
