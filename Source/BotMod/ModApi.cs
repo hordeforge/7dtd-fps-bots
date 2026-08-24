@@ -198,6 +198,7 @@ namespace BotMod
         {
             lock (PersistGate)
             {
+                bool wrote = false;
                 foreach (string path in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
                 {
                     try
@@ -207,9 +208,15 @@ namespace BotMod
                         var root = JObject.Parse(File.ReadAllText(path, System.Text.Encoding.UTF8));
                         root[key] = JToken.FromObject(value);
                         AtomicTextFile.Write(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                        wrote = true;
                     }
                     catch (Exception ex) { Warn("bot config persist failed (" + path + "): " + ex.Message); }
                 }
+                // The audit line below claims the mutation survived to disk, so a
+                // run with no config file present must say so instead of logging a
+                // persist that never happened (the toggle would silently revert on
+                // restart despite the log).
+                if (!wrote) Warn("bot config persist skipped for '" + key + "': no botmod.json found (expected /mods/BotMod/Config or beside the assembly)");
                 // One audit line per persisted mutation, covering both surfaces
                 // (web API handlers log their own request outcome; console
                 // commands only echo to the issuing telnet/console session,

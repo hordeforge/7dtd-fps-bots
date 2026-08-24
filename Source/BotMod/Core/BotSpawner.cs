@@ -196,6 +196,20 @@ namespace BotMod.Core
             return new Vector3(RngInt(-20, 20), 61f, RngInt(-20, 20));
         }
 
+        /// <summary>Snap an explicit spawn coordinate (from `bot spawn x z`) to the
+        /// terrain surface. Every generated spawn path runs through FindGround; the
+        /// console's raw "x, 60, z" triple skipped it, burying bots inside hills or
+        /// dropping them from the air wherever the ground is not at y≈60. FindGround
+        /// probes downward from the supplied y, so the column is raised first to also
+        /// reach terrain above the caller's fallback height; when nothing walkable is
+        /// found the original position is returned unchanged.</summary>
+        internal static Vector3 GroundPosition(World world, Vector3 pos)
+        {
+            Vector3 probe = new Vector3(pos.x, Mathf.Max(pos.y, 90f), pos.z);
+            Vector3 grounded = FindGround(world, probe);
+            return grounded != Vector3.zero ? grounded : pos;
+        }
+
         static bool IsSpawnClear(World world, Vector3 pos, Vector3 avoid, BotConfig cfg)
         {
             if (Vector3.Distance(pos, avoid) < 8f) return false;

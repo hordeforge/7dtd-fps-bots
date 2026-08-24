@@ -53,7 +53,9 @@ namespace BotMod.Patches
                         var ent = world.GetEntity(bot.EntityId) as EntityAlive;
                         if (ent == null) continue;
                         string pos = ent.GetPosition().ToString();
-                        string line = $"[Bot] {bot.Name} id={bot.EntityId} pos={pos} health={ent.Health} deaths={ent.Died} zombies={ent.KilledZombies} players={ent.KilledPlayers} score={ent.Score} level={(ent.Progression!=null?ent.Progression.GetLevel():1)}";
+                        // bot.Name already carries the "[Bot] " tag (BotSpawner.PickName
+                        // guarantees it); prefixing again printed "[Bot] [Bot] Grunt_42".
+                        string line = $"{bot.Name} id={bot.EntityId} pos={pos} health={ent.Health} deaths={ent.Died} zombies={ent.KilledZombies} players={ent.KilledPlayers} score={ent.Score} level={(ent.Progression!=null?ent.Progression.GetLevel():1)}";
                         SdtdConsole.Instance.Output(line);
                     }
                     catch { }
