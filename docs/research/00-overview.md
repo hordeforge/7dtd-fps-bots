@@ -15,7 +15,7 @@ Replace the hand-tuned heuristic loop (`Bot.Tick` → `BotBrain.FindTarget` / `L
 | **No differentiable simulator.** The "environment step" is `7DaysToDieServer` tick + physics + raycasts + `DamageEntity`. No gradient flows through it. | GA only needs a fitness scalar, not a gradient. |
 | **Sparse, delayed reward.** Kills happen seconds after decisions; credit assignment is messy. | Tournament fitness (K/D, survival time) is a clean scalar even when per-tick rewards are sparse. |
 | **Small net, cheap eval.** Target is ~200-600 weights, not a deep conv net. | Gaussian mutation + uniform crossover on flat vectors is trivial on a dedi box, no PyTorch needed at runtime. |
-| **Determinism.** Clanker already proved per-bot LCG (`RngNext 1103515245`) makes fights replayable. | Determinism makes fitness stable generation-over-generation; same seed → same outcome. |
+| **Determinism.** Clanker already proved per-bot LCG (`Config.Lcg`, multiplier 1103515245) makes fights replayable. | Determinism makes fitness stable generation-over-generation; same seed → same outcome. |
 | **No client mod, EAC-off dedi.** We cannot ship a Python training loop into the mod. | Trainer can run *out-of-process* (Python or Zig harness) and export only `float[] weights` into the mod. |
 
 Gradient RL (PPO/SAC) is still viable *offline* with a surrogate simulator, but for a first self-improving loop GA is simpler, debuggable, and fits the C# mod's constraints (no native libs, `netstandard` only). NEAT (evolving topology) and OpenAI-ES / CMA-ES are natural upgrades — see `01-neuroevolution-architecture.md`.

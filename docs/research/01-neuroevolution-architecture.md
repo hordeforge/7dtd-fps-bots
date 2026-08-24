@@ -5,8 +5,8 @@
 Today `Bot.Tick(dt, world)` does:
 
 ```
-sense (FindTarget / CanSee / BotCharacter) → decisions (DecideGoal / WantsToCamp)
-→ move intent (MoveTo / Strafe / Backpedal) → aim (LeadAimPoint + _aimBiasYaw)
+sense (FindTarget / CanSee / BotCharacter) → decisions (BotCharacter.WantsToCamp /
+WantsIdleCamp) → move intent (MoveTo / Strafe / Backpedal) → aim (LeadAimPoint + _aimBiasYaw)
 → shoot gate (TryShootBurst)
 ```
 
@@ -14,7 +14,7 @@ The neural controller replaces the **decision + aim-bias + throttle** slice, not
 
 | Shape | Net replaces | Fallback if net fails |
 |---|---|---|
-| **A — policy head** (chosen) | `WantsToCamp/Retreat/DecideGoal`, `_aimBiasYaw`, `TryShootBurst` gate, `_strafeDir` flip | Heuristic runs if `BotNeuralBrain` throws or weights missing |
+| **A — policy head** (chosen) | `WantsToCamp/Retreat`, `_aimBiasYaw`, `TryShootBurst` gate, `_strafeDir` flip | Heuristic runs if `BotNeuralBrain` throws or weights missing |
 | **B — full motor** | Also `MoveTo` vector | Riskier; needs safety clamp |
 
 ## 2. Observation vector (14 inputs, frozen)
@@ -61,7 +61,7 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 
 | # | Output | Interpretation | Host clamp |
 |---|---|---|---|
-| 0 | `campLogit` | Sigmoid → `wantCamp` (replaces `WantsToCamp` roll) | Threshold 0.5; still needs `DecideGoal==Camp` |
+| 0 | `campLogit` | Sigmoid → `wantCamp` | Threshold 0.5; damps attack movement when healthy and far (see status above) |
 | 1 | `retreatLogit` | Sigmoid → `wantRetreat` (replaces hp check) | Distance gate `dist<22 \|\| !hasBetterWeapon` stays |
 | 2 | `aimBiasYaw` | Tanh → ±0.45*(1-acc) rad (replaces `_aimBiasYaw`) | Clamped to same interval as heuristic |
 | 3 | `fireGate` | Sigmoid → shoot? | Still gated by `ReactionTime`, `BurstPause`, LOS, range |
@@ -97,7 +97,7 @@ If we want *gradient-free but smoother* than GA, OpenAI-ES (Salimans et al. 2017
 
 ## 5. Determinism contract
 
-- Net forward pass is pure math (no RNG). RNG only touches **genetic operators** and falls back to the existing per-bot LCG (`Bot.RngNext`) if we ever randomize inside the brain.
+- Net forward pass is pure math (no RNG). RNG only touches **genetic operators** and falls back to the existing per-bot LCG (`Config.Lcg`, held as `Bot._rng`) if we ever randomize inside the brain.
 - Evaluation harness seeds every match from `generation × genomeIdx × matchIdx` via the same LCG tap (`2654435761 / 1103515245`). Same genome → same record → same fitness. This is what makes evolution stable and debuggable.
 
 ## 6. Warm-start (behavioral cloning from heuristic)

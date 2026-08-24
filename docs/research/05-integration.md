@@ -70,7 +70,7 @@ public static void Forward(in float[] w, in float[] x, ref float[] hidden, ref f
 }
 ```
 
-Binary blob (`Float32LE`) is also accepted as `best.bin` for smaller IO, but JSON is canonical because it diffs and commits cleanly. Both go through the same validator (`weights.length == W`).
+JSON is the only format `TryLoad` accepts today (it parses the file as JSON text and validates `weights.length == W`). A binary `Float32LE` blob (`best.bin`) remains an option if weight-file IO ever matters; it would go through the same validator.
 
 ## 4. Fallback and feature flags
 

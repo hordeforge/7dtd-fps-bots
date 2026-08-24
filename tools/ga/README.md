@@ -23,7 +23,8 @@ tools/ga/
                          seeds/matches on the CLI, prints GOAL MET)
   clone.py               behavioural-cloning warm-start stub (heuristic
                          traces -> cloned net)
-  sweep.py               net-layout sweeps (writes tools/ga/sweeps/)
+  sweep.py               net-layout sweeps (default output evolved/runs/;
+                         committed copies live in tools/ga/sweeps/)
   fitness_sweep.py       scalarization-weight sweep over harness.FIT_*
   plot.py                fitness.csv -> plot.png (best/mean per generation)
   replay.py              match recorder + HTML renderer

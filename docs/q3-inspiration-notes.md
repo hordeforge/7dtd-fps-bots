@@ -35,14 +35,16 @@ See `chars.h`, `ai_main.c:BotChangeViewAngles/BotAimAtEnemy/BotCheckAttack`,
 - **Decisions**: `BotWantsToRetreat/Chase/Help/Camp` based on health/weapon vs
   `aggression/selfpreservation/camper/alertness/easy_fragger`.
 
-These are the references for `BotCharacter`, `WeaponProfile`, `Bot.AimModel`,
-`BotBrain` goal selection and the AAS shims.
+These are the references for `BotCharacter`, `WeaponProfile`, `BotBrain.LeadAimPoint`
+(the aim model, plus the per-engagement `_aimBiasYaw` roll), `BotBrain` goal
+selection and the AAS shims (`FindCover`, voxel LOS).
 
 ## Cross-pollinated with zdtd_bot (the sibling Zig Wasm server)
 
 Improvements travel both ways with `../zdtd-server-server`'s `mods/zdtd_bot` Wasm brain
 (`docs/q3-inspiration-notes.md` there). Everything stays deterministic via the
-per-bot LCG (`Bot.RngNext/Rng01/RngSym`, seeded from entity id).
+per-bot LCG (`Config.Lcg`, held as `Bot._rng` and drawn through `Rng01()`/
+`RngSym()`, seeded from entity id).
 
 - **Lost-sight combat memory (from zdtd_bot).** While a target stays retained
   but out of sight, chase where it was last SEEN instead of its live position

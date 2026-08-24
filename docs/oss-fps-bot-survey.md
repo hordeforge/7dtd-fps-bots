@@ -19,8 +19,8 @@ confirmations:
   already have an equivalent camp-hold; nothing new to port there.
 - Q3 has no reload (infinite ammo), so "cover while reloading" is NOT a Q3
   behavior; it comes from the CS-bot lineage (Podbot's task stack covers
-  reload + reposition). It is still a genuine gap in our bots, which reload
-  standing in the open.
+  reload + reposition). It was a genuine gap in our bots at survey time
+  (they reloaded standing in the open); the executed port below closed it.
 - Unvanquished confirmed: `src/shared/navgen/navgen.h` includes `Recast.h`,
   `DetourNavMesh.h`, `DetourTileCache.h` — the industry-standard OSS navmesh
   is the real-map navigation model to follow.

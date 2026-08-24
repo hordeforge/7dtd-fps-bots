@@ -87,7 +87,7 @@ This makes fitness scale-invariant and prevents a lucky map from exploding weigh
 The current `zdtd` passes already rely on this (stuck, LOS, wander hash). Evolution inherits it:
 
 - Per-match seed: `hash(generation, genomeIdx, matchIdx, arenaKind)`.
-- That seed drives: spawn assignment, weapon draw, initial facing, any `Rng01()` that the net might use (it shouldn't, but the fallback is already deterministic via `Bot._rngState`).
+- That seed drives: spawn assignment, weapon draw, initial facing, any `Rng01()` that the net might use (it shouldn't, but the fallback is already deterministic via the per-bot LCG `Bot._rng`).
 - The forward pass itself is pure.
 
 *Result:* rerunning the same generation on the same build replays byte-for-bit. Debugging a "why did genome 7 beat 12" is a matter of diffing traces.
