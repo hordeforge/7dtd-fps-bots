@@ -39,7 +39,7 @@ Per `best.json` promotion candidate (30-match validation):
 - `Δfit vs heuristic`, `ΔdamageEff`, `headshotRate`, `campFrac`, `stuckTicks`.
 - Human note: one-line operator impression after a live DM watch (the only subjective signal).
 
-Dashboard: `tools/ga/plot runs/<ts>/fitness.csv --out runs/<ts>/plot.png` — best/mean envelope + diversity sparkline. Commit the PNG alongside the report.
+Dashboard: `python tools/ga/plot.py evolved/runs/<ts>/fitness.csv` writes `plot.png` next to the csv — best/mean curves only (no diversity sparkline; that metric is not logged, see `02` §7). Commit the PNG alongside the report.
 
 ## 4. Roadmap (calendar-agnostic)
 
@@ -73,7 +73,7 @@ No date is on R3/R5 — they are conditional branches, not deadlines.
 
 ## 6. What "self-improving" will look like when it's real
 
-An operator runs `make ga-evolve` overnight, gets a `best.json` in the morning with a Slack/Discord note:
+An operator runs `python tools/ga/evolve.py --pop 32 --gens 40 --seed 42` overnight, gets a `best.json` in the morning with a Slack/Discord note:
 
 ```
 gen 47 champ:  fit 0.83 (+0.11 vs heu), kd 1.4×, camp 0.18

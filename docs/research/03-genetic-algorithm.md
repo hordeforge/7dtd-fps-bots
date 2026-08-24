@@ -74,7 +74,9 @@ Sweeping should touch at most 2 knobs per experiment; evolution is slow to evalu
 
 ## 5. Seeding and generation count
 
-- **Generation 0:** behavior-cloned net + σ=0.02 jitter (see `01` §6). One exact clone is the initial champion.
+- **Generation 0:** He init + σ=0.02 jitter (`ga.clone_heuristic` stub; the
+  behavior-cloned warm-start of `01` §6 is not implemented yet). One exact
+  clone is the initial champion.
 - **Generations 1..G:** full loop. Checkpoints: `gen_*.json` (top 3) is written
   when the generation improved on the best-so-far, not unconditionally;
   `fitness.csv` is appended every generation.

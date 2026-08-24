@@ -45,7 +45,7 @@ evolved/
     config.json             # full hyperparam table (03 §4) + run_seed
     gen_000.json            # top-3 genomes of that gen (weights + fitness)
     gen_001.json ...
-    fitness.csv             # per-gen best/mean/median/diversity, append-only
+    fitness.csv             # per-gen best/mean/median/q25/q75/held-probe, append-only
     innovations.json        # NEAT only
     traces/<gen>_<idx>.bin  # optional: obs→action log for debugging
   archive/                  # old bests moved here before promoting a new one
@@ -100,7 +100,10 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
 
 ## 7. Checkpointing and resumability
 
-- Every generation writes `gen_*.json` + appends `fitness.csv`. On crash, rerun from the last generation's checkpoint (pop is deterministic from checkpoint + seeds).
+- `fitness.csv` is appended every generation; `gen_*.json` checkpoints are
+  written only when a generation improves on the best-so-far (`evolve.py`,
+  see `03` §5). On crash, rerun from the last generation's checkpoint
+  (pop is deterministic from checkpoint + seeds).
 - `best.meta.json` records `configHash = sha256(config.json)`. The loader does
   not enforce it (`configHash` never affects loadability, see `05` §4); it is
   informational, surfaced by `bot neural status`, so an operator can spot a
@@ -139,12 +142,16 @@ No Python ships, no extra DLL, no native module — just JSON.
 | Disk with obs traces | ~400 MiB (optional; prune) |
 | Mod runtime overhead | ~0 (forward pass is already benchmarked < 1 µs/bot) |
 
-## 11. Tools to build
+## 11. Tools
+
+> Status (2026-08-25): all three ship as Python CLIs under `tools/ga/`
+> (`evolve.py`, `eval.py`, `plot.py`) with the shapes below; the Zig variant
+> was never needed.
 
 | Tool | Shape |
 |---|---|
-| `tools/ga/evolve` (Zig or Python) | CLI that owns the loop; flags: `--pop 32 --gens 80 --seed 42 --resume` |
-| `tools/ga/eval` | Re-evaluates a single `best.json` on the validation pool, prints report |
-| `tools/ga/plot` | Plots `fitness.csv` + Pareto fronts (Python) |
+| `tools/ga/evolve.py` | CLI that owns the loop; flags: `--pop 32 --gens 80 --seed 42 --resume` |
+| `tools/ga/eval.py` | Re-evaluates a single `best.json` on the validation pool, prints report |
+| `tools/ga/plot.py` | Plots `fitness.csv` best/mean curves (Python) |
 
-All live under `7dtd-fps-bots/tools/` so they ship with the mod's research and do not pollute the clean-room `zdtd` tree.
+All live under `7dtd-fps-bots/tools/ga/` so they ship with the mod's research and do not pollute the clean-room `zdtd` tree.

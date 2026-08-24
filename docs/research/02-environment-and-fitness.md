@@ -121,6 +121,12 @@ The current `zdtd` passes already rely on this (stuck, LOS, wander hash). Evolut
 
 Per genome per match: `genomeId, matchSeed, kills, deaths, damageDealt/Received, shots, hits, headshots, timeAlive, distanceTravelled, stuckTicks, campFrac, weaponId, mapSample`. Per generation: best/mean/median fitness, diversity (mean pairwise Hamming/Euclid in weight space), and the 10 best genomes' weights. See `04-training-pipeline.md` for disk layout.
 
+> Status (2026-08-25): shipped logging is coarser than this list. `fitness.csv`
+> carries per-gen best/mean/median/q25/q75 plus the held-probe column, and the
+> top-3 checkpoint `gen_*.json` files are the only per-genome weights on disk;
+> no tool writes per-match stat rows, a diversity metric, or a 10-best dump.
+> The list above stays the design target.
+
 ## 8. Ablation to run before freezing
 
 1. Fitness with/without `stuckFrac` penalty (does it actually prevent wall-hugging?).
