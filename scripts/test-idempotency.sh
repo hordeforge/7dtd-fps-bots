@@ -20,6 +20,19 @@ run_suite() { # <name> <sources...>
   mono "$work/$name.exe"
 }
 
+# Engine-free Config sources shared by every suite that compiles the config
+# layer headless (one list so a new Config dependency is added once).
+config_src=(
+  "$root/Source/BotMod/Config/BotConfig.cs"
+  "$root/Source/BotMod/Config/BotText.cs"
+  "$root/Source/BotMod/Config/AtomicTextFile.cs"
+  "$root/Source/BotMod/Config/Lcg.cs"
+)
+character_src=(
+  "$root/Source/BotMod/Config/BotCharacter.cs"
+  "${config_src[@]}"
+)
+
 run_suite idempotency \
   "$root/Source/BotMod/Web/IdempotencyLedger.cs" \
   "$root/tests/BotMod.Web.Tests/IdempotencyLedgerTests.cs"
@@ -96,9 +109,7 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
   # gate as above; compiles only the engine-free Config sources).
   mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
     -out:"$work/configfuzz.exe" \
-    "$root/Source/BotMod/Config/BotConfig.cs" \
-    "$root/Source/BotMod/Config/BotText.cs" \
-    "$root/Source/BotMod/Config/AtomicTextFile.cs" \
+    "${config_src[@]}" \
     "$root/tests/BotMod.Web.Tests/BotConfigFuzzTests.cs" > /dev/null
   mono "$work/configfuzz.exe" "$root"
 
@@ -108,10 +119,7 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
   # the aim-bias rotation.
   mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
     -out:"$work/botchararith.exe" \
-    "$root/Source/BotMod/Config/BotCharacter.cs" \
-    "$root/Source/BotMod/Config/BotConfig.cs" \
-    "$root/Source/BotMod/Config/BotText.cs" \
-    "$root/Source/BotMod/Config/AtomicTextFile.cs" \
+    "${character_src[@]}" \
     "$root/tests/BotMod.Web.Tests/BotCharacterArithTests.cs" > /dev/null
   mono "$work/botchararith.exe"
 else

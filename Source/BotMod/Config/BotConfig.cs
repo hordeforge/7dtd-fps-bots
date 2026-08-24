@@ -338,7 +338,7 @@ namespace BotMod.Config
         public int Pellets; // shotgun
         public int MagSize; // rounds per magazine (zdtd_bot ammo pacing parity)
         public float ReloadSec; // reload pause on empty (zdtd_bot parity)
-        static uint _pickCtr = 0x5A17B243u;
+        static Lcg _pickCtr = Lcg.Seeded(0x5A17B243u);
         public static WeaponProfile ForGun(string gunId, BotConfig cfg)
         {
             if (string.IsNullOrEmpty(gunId) || gunId == "mixed")
@@ -347,9 +347,7 @@ namespace BotMod.Config
                 {
                     // Deterministic per-call LCG counter (zdtd parity: no wall-clock noise)
                     // so mixed spawns in the same tick still pick distinct entries.
-                    _pickCtr = _pickCtr * 1103515245u + 12345u;
-                    int idx = (int)((_pickCtr >> 8 & 0x00ffffffu) % (uint)cfg.LoadoutPool.Length);
-                    gunId = cfg.LoadoutPool[idx];
+                    gunId = cfg.LoadoutPool[_pickCtr.Index(cfg.LoadoutPool.Length)];
                 }
                 else gunId = "gunMGT1AK47";
             }

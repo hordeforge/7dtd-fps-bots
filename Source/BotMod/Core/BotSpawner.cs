@@ -12,11 +12,10 @@ namespace BotMod.Core
         // Deterministic LCG (zdtd parity: no wall-clock noise). Spawn helpers advance this
         // monotonically so consecutive `bot spawn` in the same tick still pick distinct
         // names/weapons/spots. Not per-bot (no entity yet) — global is fine for spawns.
-        static uint _rng = 0xC0FFEEu;
-        static uint RngNext() { _rng = _rng * 1103515245u + 12345u; return _rng; }
-        static float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
-        static int RngInt(int lo, int hi) { if (hi <= lo) return lo; return lo + (int)((RngNext() >> 8 & 0x00ffffffu) % (uint)(hi - lo)); }
-        static int RngPick(int n) { if (n <= 0) return 0; return (int)((RngNext() >> 8 & 0x00ffffffu) % (uint)n); }
+        static Lcg _rng = Lcg.Seeded(0xC0FFEEu);
+        static float Rng01() { return _rng.Next01(); }
+        static int RngInt(int lo, int hi) { return _rng.Range(lo, hi); }
+        static int RngPick(int n) { return _rng.Index(n); }
         static List<Vector3> _dmSpawns;
         static string _dmSpawnsWorld;
 

@@ -64,12 +64,7 @@ namespace BotMod
                 BotManager.Instance.OnGameStartDone();
                 Log("GameStartDone -> BotManager started.");
                 if (Config.UseNeuralBrain)
-                {
-                    string why;
-                    bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
-                    if (ok) Log("BotNeuralBrain: loaded " + why);
-                    else Warn("BotNeuralBrain not loaded (" + why + "), using heuristic.");
-                }
+                    LoadNeuralWeights("loaded", ", using heuristic.");
             }
             catch (Exception ex) { Error("OnGameStartDone failed: " + ex); }
         }
@@ -108,12 +103,21 @@ namespace BotMod
             catch (Exception ex) { Warn("characters.json load failed, keeping previous characters: " + ex); }
             Log($"Config reloaded: Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
             if (Config.UseNeuralBrain)
-            {
-                string why;
-                bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
-                if (ok) Log("BotNeuralBrain: reloaded " + why);
-                else Warn("BotNeuralBrain not loaded (" + why + "), keeping heuristic.");
-            }
+                LoadNeuralWeights("reloaded", ", keeping heuristic.");
+        }
+
+        /// <summary>TryLoad the configured weights file and log the outcome once
+        /// (server log; console/web surfaces add their own user-facing echo).
+        /// <paramref name="failTail"/> completes the "BotNeuralBrain not loaded
+        /// (reason)" line with the caller's consequence ("using heuristic.").
+        /// Returns true when the brain is loaded.</summary>
+        public static bool LoadNeuralWeights(string verb, string failTail)
+        {
+            string why;
+            bool ok = BotMod.AI.BotNeuralBrain.TryLoad(Config.BotNeuralWeightPath, out why);
+            if (ok) Log("BotNeuralBrain: " + verb + " " + why);
+            else Warn("BotNeuralBrain not loaded (" + why + ")" + failTail);
+            return ok;
         }
 
         public static void Log(string msg)

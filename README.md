@@ -135,7 +135,9 @@ make check         # what CI runs (shellcheck, vnu HTML lint, tsc/oxlint/bundle 
 `make package` output is byte-stable: entry order is sorted, every archive
 timestamp is `SOURCE_DATE_EPOCH` (default: the HEAD commit time), and uid/gid
 and permissions are normalized. Two packages of the same commit compare equal
-with `sha256sum`, regardless of build machine or directory.
+with `sha256sum`, regardless of build machine or directory. The zip carries a
+`MANIFEST.sha256` covering every payload file; run `sha256sum -c
+MANIFEST.sha256` inside the extracted directory to verify it offline.
 
 Released versions and upgrade notes are documented in `CHANGELOG.md`.
 

@@ -8,6 +8,10 @@
 #   - permissions are normalized (dirs 755, files 644); uid/gid and extended
 #     attributes are stripped via zip -X
 #   - compression level fixed (-9) so deflate output is stable
+# The zip also carries MANIFEST.sha256 (sha256 of every payload file except
+# itself, `sha256sum -c` format), so an extracted package can be verified
+# offline. Its content depends only on payload bytes in sorted order, which
+# keeps the archive byte-stable.
 set -euo pipefail
 export LC_ALL=C TZ=UTC
 
@@ -39,6 +43,17 @@ fi
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp -r "$SRC" "$STAGE/BotMod"
+
+# Integrity manifest inside the archive: sha256 of every payload file except
+# itself, in `sha256sum -c` format (run it inside the extracted directory).
+(
+  cd "$STAGE/BotMod"
+  mapfile -d '' files < <(find . -type f ! -name MANIFEST.sha256 -print0 | sort -z)
+  : > MANIFEST.sha256
+  for f in "${files[@]}"; do
+    sha256sum "${f#./}" >> MANIFEST.sha256
+  done
+)
 
 # zip -@ splits names on whitespace; refuse anything it would mangle.
 while IFS= read -r -d '' f; do

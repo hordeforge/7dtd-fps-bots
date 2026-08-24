@@ -121,7 +121,7 @@ namespace BotMod.AI
         /// previous inline form ((me.entityId * 2654435761u) % 100) went negative
         /// for every negative entity id and compared true against the unsigned
         /// threshold unconditionally - fallback spawn classes camped every idle
-        /// tick instead of rolling. Same convention as Bot._rngState/WanderHash01.</summary>
+        /// tick instead of rolling. Same tap as Config.Lcg.</summary>
         internal static bool CampHashGate(int entityId, float camper)
         {
             if (float.IsNaN(camper) || float.IsInfinity(camper) || camper <= 0f) return false;
@@ -344,7 +344,7 @@ namespace BotMod.AI
             }
             catch { }
         }
-        static float WanderHash01(int entityId, int salt) { uint h = (uint)entityId * 2654435761u + (uint)salt * 97u + 1u; h = h * 1103515245u + 12345u; return (h >> 8 & 0x00ffffffu) / 16777216f; }
+        static float WanderHash01(int entityId, int salt) { return Lcg.Seeded((uint)entityId * 2654435761u + (uint)salt * 97u + 1u).Next01(); }
         public static Vector3 PickWanderTarget(EntityAlive me, World world, float radius, float rollAng01 = -1f, float rollDist01 = -1f)
         {
             // Deterministic when rolls are supplied (from the bot's per-slot LCG, zdtd parity);

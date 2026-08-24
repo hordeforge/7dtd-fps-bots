@@ -106,25 +106,24 @@ namespace BotMod.Patches
                 {
                     int attackerId = dse.CreatorEntityId;
                     if (attackerId == 0) attackerId = dse.ownerEntityId;
+                    var cfg = ModApi.Config;
                     if (BotMod.Core.BotManager.Instance.IsBotEntity(attackerId))
                     {
-                        var cfg = ModApi.Config;
                         if (__instance is EntityPlayer && !cfg.BotVsPlayer) return false;
                         if (__instance is EntityZombie && !cfg.BotVsZombie) return false;
                         // Squad mode, vsBot-off and same-team block bot-on-bot damage.
                         if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && BotMod.Core.BotManager.Instance.AreAllies(attackerId, __instance.entityId)) return false;
                     }
-                }
-                // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)
-                if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && _damageSource is DamageSourceEntity ds2)
-                {
-                    int aid = ds2.CreatorEntityId != 0 ? ds2.CreatorEntityId : ds2.ownerEntityId;
-                    var world = GameManager.Instance?.World;
-                    if (world != null)
+                    // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)
+                    if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId))
                     {
-                        var attacker = world.GetEntity(aid) as EntityAlive;
-                        var victim = BotMod.Core.BotManager.Instance.GetBot(__instance.entityId);
-                        if (victim != null) try { victim.OnDamaged(attacker, _strength); } catch { }
+                        var world = GameManager.Instance?.World;
+                        if (world != null)
+                        {
+                            var attacker = world.GetEntity(attackerId) as EntityAlive;
+                            var victim = BotMod.Core.BotManager.Instance.GetBot(__instance.entityId);
+                            if (victim != null) try { victim.OnDamaged(attacker, _strength); } catch { }
+                        }
                     }
                 }
             }

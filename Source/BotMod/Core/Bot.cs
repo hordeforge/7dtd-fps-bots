@@ -35,7 +35,6 @@ namespace BotMod.Core
         float _burstPauseUntil;
         float _strafeUntil;
         int _strafeDir = 1;
-        uint _rngState; // deterministic LCG seeded from entityId (like zdtd_bot per-slot RNG)
         Vector3 _lastTargetPos = Vector3.zero;
         Vector3 _targetVel = Vector3.zero;
         // zdtd_bot lost-sight combat memory, ported: keep the last position we SAW
@@ -74,6 +73,8 @@ namespace BotMod.Core
         // evasive dodge), rather than a flat strafe-only window.
         int _dodgeTicks;      // ticks left in the dodge
         int _dodgeBackRemain; // ticks of backpedal still left (then flip strafe)
+        // Per-bot deterministic LCG seeded from entityId (like zdtd_bot per-slot RNG).
+        Config.Lcg _rng;
         // Per-tick memoization: one neural forward pass and one CanSee raycast max.
         // Retreat, fire-gate and movement all consumed separate evals (each with its
         // own LOS raycast inside BuildNeuralInputs) for identical inputs within a tick.
@@ -90,17 +91,14 @@ namespace BotMod.Core
         {
             EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
             TeamKey = BotManager.BaseName(name); // frozen: names never change after spawn
-            _lastPos = Vector3.zero;
             _burstLeft = weapon.BurstMin;
-            _rngState = (uint)entityId * 2654435761u + 97u;
-            _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
+            _rng = Config.Lcg.Seeded((uint)entityId * 2654435761u + 97u);
             _ammo = weapon.MagSize; // zdtd_bot ammo pacing, ported
         }
 
         public void MarkDead() { _dead = true; }
-        uint RngNext() { _rngState = _rngState * 1103515245u + 12345u; return _rngState; }
-        float Rng01() { return (RngNext() >> 8 & 0x00ffffffu) / 16777216f; }
-        float RngSym() { return 2f * Rng01() - 1f; }
+        float Rng01() { return _rng.Next01(); }
+        float RngSym() { return _rng.NextSymmetric(); }
         public bool IsDeadOrUnloaded(World world)
         {
             if (_dead) return true;
@@ -227,7 +225,8 @@ namespace BotMod.Core
             {
                 _loseTargetTimer += scanPeriod;
                 float dist = Vector3.Distance(me.position, _target.position);
-                if (_target.IsDead() || !IsValidTarget(_target, cfg) || dist > cfg.LoseTargetRange || _loseTargetTimer > cfg.LoseTargetTimeSec || !TargetVisible(me, world, cfg) && dist > 18f)
+                if (_target.IsDead() || !IsValidTarget(_target, cfg) || dist > cfg.LoseTargetRange || _loseTargetTimer > cfg.LoseTargetTimeSec
+                    || (!TargetVisible(me, world, cfg) && dist > 18f))
                 {
                     _target = null; _state = BotBrain.State.Wander;
                     _hasLastKnownTarget = false; // zdtd_bot lost-sight combat memory, ported
@@ -349,7 +348,7 @@ namespace BotMod.Core
             // Reuses the tick's cached eval (see TryNeuralOnce).
             bool wantToFire = true;
             if (UseNeuralGate() && TryNeuralOnce(me, world, cfg)) wantToFire = _neuralOuts.ShouldFire;
-            TryShootBurst(me, _target, aim, world, cfg, wantToFire);
+            TryShootBurst(me, _target, world, cfg, wantToFire);
             // R10 neural movement: when the evolved brain is loaded it drives the
             // 2D velocity directly (retreat -> forward, strafe -> lateral, camp ->
             // hold), matching combat_sim. The hardcoded Q3 strafe/dodge logic below
@@ -644,7 +643,7 @@ namespace BotMod.Core
             catch { return false; }
         }
 
-        void TryShootBurst(EntityAlive me, EntityAlive target, Vector3 aimPos, World world, BotConfig cfg, bool wantToFire)
+        void TryShootBurst(EntityAlive me, EntityAlive target, World world, BotConfig cfg, bool wantToFire)
         {
             // Ally guard: squad mode, vsBot-off and same-team bots never get shot.
             // FindTarget already excludes them via IsFriendly; this covers a stale
@@ -674,28 +673,15 @@ namespace BotMod.Core
                 if (Rng01() < 0.6f) _strafeDir = -_strafeDir;
                 return;
             }
-            // Pellet/shot loop with per-pellet spread
+            // Pellet/shot loop. Damage applies unconditionally per trigger pull
+            // (no ballistic miss model: DamageEntity either lands or is blocked
+            // by the engine), so there is no aim-direction math to feed here;
+            // facing is driven by the caller via FaceTowards.
             try
             {
                 int pellets = Mathf.Max(1, Weapon.Pellets);
                 for (int p = 0; p < pellets; p++)
                 {
-                    Vector3 shotAim = aimPos;
-                    float spread = Weapon.SpreadDeg + cfg.AimJitterDegrees * (1f - cfg.Difficulty * 0.16f);
-                    spread = Mathf.Max(0.2f, spread);
-                    // Difficulty reduces spread heavily
-                    float diffScale = 1f - cfg.Difficulty * 0.19f;
-                    spread *= diffScale;
-                    if (spread > 0.4f)
-                    {
-                        float yaw = RngSym() * spread * 0.5f;
-                        float pitch = RngSym() * spread * 0.5f * 0.6f;
-                        Vector3 dir = (shotAim - (me.position + Vector3.up * 1.45f)).normalized;
-                        // apply yaw/pitch
-                        Quaternion rot = Quaternion.AngleAxis(yaw, Vector3.up) * Quaternion.AngleAxis(pitch, Vector3.Cross(dir, Vector3.up).normalized);
-                        dir = rot * dir;
-                        // miss if LOS blocked to aim point - but we already checked canSee
-                    }
                     // Damage per pellet: spread damage for shotguns
                     int dmg = pellets > 1 ? Mathf.Max(3, Weapon.Damage) : Weapon.Damage;
                     bool head = pellets == 1 && Rng01() < cfg.HeadshotChance;

@@ -24,8 +24,15 @@ fails on drift between them.
   timestamps pinned to `SOURCE_DATE_EPOCH` (default: HEAD commit time),
   uid/gid stripped and permissions normalized, so two builds of the same
   commit produce identical bytes.
+- The release zip carries `MANIFEST.sha256` (sha256 of every payload file,
+  `sha256sum -c` format), so an extracted package can be verified offline.
 
 ### Changed
+- Pinned npx tool versions (typescript, oxlint + plugin packages, vnu-jar,
+  anti-slop commit) now live in `scripts/tool-versions.sh`, sourced by
+  `scripts/build.sh`, `scripts/lint-webui.sh`, and `scripts/lint-html.sh`;
+  previously the tsc pin was duplicated between build and lint with only a
+  comment keeping them equal. Local env overrides behave as before.
 - **The synthetic-id auth bypass is now opt-in** via the new config key
   `"AllowSyntheticAuthBypass"` (default `false`). In every release up to and
   including 0.4.0 this bypass was always on: offline LAN/loadgen clients with

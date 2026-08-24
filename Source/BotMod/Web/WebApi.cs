@@ -175,7 +175,7 @@ namespace BotMod.Web
                                 {
                                     UnityEngine.Vector3 pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config);
                                     if (pos == UnityEngine.Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
-                                    if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) n++;
+                                    if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) n++;
                                 }
                                 return new { spawned = n, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
                             }, "spawnNear");
@@ -417,8 +417,8 @@ namespace BotMod.Web
                         foreach (var p in plist)
                         {
                             if (p == null || p.IsDead() || !p.IsSpawned()) continue;
-                        float d = Vector3.Distance(ent.position, p.position);
-                        if (d < best) { best = d; nearName = p.EntityName ?? p.PlayerDisplayName ?? ("#" + p.entityId); }
+                            float d = Vector3.Distance(ent.position, p.position);
+                            if (d < best) { best = d; nearName = p.EntityName ?? p.PlayerDisplayName ?? ("#" + p.entityId); }
                         }
                         if (best < float.MaxValue) nearDist = best;
                     }

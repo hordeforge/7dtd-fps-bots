@@ -138,8 +138,7 @@ namespace BotMod.Core
             Vector3 pos = posOverride ?? BotSpawner.PickSpawnPosition(world, cfg);
             if (pos == Vector3.zero) pos = BotSpawner.PickSpawnPosition(world, cfg);
             string name = nameOverride ?? BotSpawner.PickName(cfg);
-            string gun = weaponOverride;
-            var wp = BotSpawner.PickWeapon(cfg, gun);
+            var wp = BotSpawner.PickWeapon(cfg, weaponOverride);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
             var character = BotMod.Config.BotCharacterDB.ForName(name);
             if (e == null) { ModApi.Warn("Spawn failed at " + pos); return false; }

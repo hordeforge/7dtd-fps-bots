@@ -11,13 +11,11 @@
 #      .ts edit that was not compiled and committed fails the gate.
 #   4. Wire budget: bundle.js must stay under BUNDLE_MAX_BYTES (default 32 KiB).
 #
-# tsc/oxlint run through npx pinned by TSC_VERSION/OXLINT_VERSION. The repo
-# deliberately does not track package.json/node_modules (.gitignore), so the
-# versions live here as the single source of truth (same policy as
-# ../7dtd-server-apm/scripts/lint-webui.sh). TSC_VERSION must stay equal to
-# TSC_VERSION in scripts/build.sh: the freshness gate below compares the
-# committed bundle.js against a compile with this exact compiler version, and
-# the shipped artifact is built with that same version.
+# tsc/oxlint run through npx pinned by the versions in scripts/tool-versions.sh
+# (sourced below; environment overrides win). That file is the single source
+# of truth, so build.sh and this freshness gate cannot drift apart: the gate
+# compares the committed bundle.js against a compile with the exact tsc that
+# built the shipped artifact.
 # Override locally: TSC_VERSION=5.9.3 OXLINT_VERSION=1.79.0 bash scripts/lint-webui.sh
 #
 # Requires: node/npm (npx).
@@ -25,17 +23,12 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-oxlint_version="${OXLINT_VERSION:-1.79.0}"
-oxlint_standards_version="${OXLINT_STANDARDS_VERSION:-0.8.1}"
-oxlint_tsgolint_version="${OXLINT_TSGOLINT_VERSION:-7.0.2001}"
-oxlint_plugins_version="${OXLINT_PLUGINS_VERSION:-1.79.0}"
-anti_slop_sha="${ANTI_SLOP_SHA:-6d538555cb151d4121ed51a27db81890eacf8ae9}"
-tsc_version="${TSC_VERSION:-5.9.3}"
+source "$root/scripts/tool-versions.sh"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/clanker/oxlint-standards"
 webmod_dir="$root/Source/BotMod/WebMod"
 
 # 1. Type check (per WebMod/tsconfig.json, strict).
-npx --yes -p "typescript@$tsc_version" tsc -p "$webmod_dir/tsconfig.json" --noEmit
+npx --yes -p "typescript@$TSC_VERSION" tsc -p "$webmod_dir/tsconfig.json" --noEmit
 
 # 2. Lint the source with oxlint. The @rikalabs plugin, the vendored
 #    dmmulroy/anti-slop plugin source (pinned by ANTI_SLOP_SHA; the project is
@@ -49,15 +42,15 @@ npx --yes -p "typescript@$tsc_version" tsc -p "$webmod_dir/tsconfig.json" --noEm
 #    imports; without it the plugin cannot load.
 mkdir -p "$cache_dir"
 if [ ! -d "$cache_dir/anti-slop-src" ]; then
-  curl -fsSL "https://github.com/dmmulroy/anti-slop/archive/$anti_slop_sha.tar.gz" -o "$cache_dir/anti-slop.tar.gz"
+  curl -fsSL "https://github.com/dmmulroy/anti-slop/archive/$ANTI_SLOP_SHA.tar.gz" -o "$cache_dir/anti-slop.tar.gz"
   mkdir -p "$cache_dir/anti-slop-src"
-  tar xzf "$cache_dir/anti-slop.tar.gz" -C "$cache_dir/anti-slop-src" --strip-components=2 "anti-slop-$anti_slop_sha/src"
+  tar xzf "$cache_dir/anti-slop.tar.gz" -C "$cache_dir/anti-slop-src" --strip-components=2 "anti-slop-$ANTI_SLOP_SHA/src"
 fi
 npm install --prefix "$cache_dir" --no-audit --no-fund --no-save --no-package-lock \
-  "@rikalabs/oxlint-standards@$oxlint_standards_version" \
-  "oxlint-tsgolint@$oxlint_tsgolint_version" \
-  "@oxlint/plugins@$oxlint_plugins_version" >/dev/null 2>&1 || {
-  echo "BotMod: lint-webui: could not install @rikalabs/oxlint-standards@$oxlint_standards_version + oxlint-tsgolint@$oxlint_tsgolint_version + @oxlint/plugins@$oxlint_plugins_version into $cache_dir (offline?)" >&2
+  "@rikalabs/oxlint-standards@$OXLINT_STANDARDS_VERSION" \
+  "oxlint-tsgolint@$OXLINT_TSGOLINT_VERSION" \
+  "@oxlint/plugins@$OXLINT_PLUGINS_VERSION" >/dev/null 2>&1 || {
+  echo "BotMod: lint-webui: could not install @rikalabs/oxlint-standards@$OXLINT_STANDARDS_VERSION + oxlint-tsgolint@$OXLINT_TSGOLINT_VERSION + @oxlint/plugins@$OXLINT_PLUGINS_VERSION into $cache_dir (offline?)" >&2
   exit 1
 }
 cp "$root/.oxlintrc.jsonc" "$cache_dir/oxlintrc.jsonc"
@@ -65,7 +58,7 @@ cp "$root/.oxlintrc.jsonc" "$cache_dir/oxlintrc.jsonc"
   cd "$cache_dir"
   # tsgolint is not on the user's PATH; oxlint finds it via PATH lookup.
   PATH="$cache_dir/node_modules/.bin:$PATH" \
-    npx --yes "oxlint@$oxlint_version" --config oxlintrc.jsonc --deny-warnings "$webmod_dir/bundle.ts"
+    npx --yes "oxlint@$OXLINT_VERSION" --config oxlintrc.jsonc --deny-warnings "$webmod_dir/bundle.ts"
 )
 
 # 3. Freshness: the committed bundle.js must equal a fresh compilation.
@@ -73,7 +66,7 @@ cp "$root/.oxlintrc.jsonc" "$cache_dir/oxlintrc.jsonc"
 #    classic script (both forms are equivalent), so the check strips it.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-npx --yes -p "typescript@$tsc_version" tsc -p "$webmod_dir/tsconfig.json" --outDir "$tmp" >/dev/null
+npx --yes -p "typescript@$TSC_VERSION" tsc -p "$webmod_dir/tsconfig.json" --outDir "$tmp" >/dev/null
 if ! diff -q <(sed '1{/^"use strict";$/d}' "$tmp/bundle.js") \
              <(sed '1{/^"use strict";$/d}' "$webmod_dir/bundle.js") >/dev/null; then
   echo "BotMod: lint-webui: committed bundle.js is stale (bundle.ts changed without regeneration). Run: make build" >&2

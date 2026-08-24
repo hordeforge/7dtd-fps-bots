@@ -1,6 +1,8 @@
 // BotCharacterArithTests — numeric-correctness pins for characters.json
-// ingestion (BotCharacter.Normalize), complementing BotConfigFuzzTests which
-// covers botmod.json ranges.
+// ingestion (BotCharacter.Normalize) plus the BotCharacterDB layer around it
+// (file resolution, IdentityKey-canonicalized file keys, ForName fallback
+// chain, difficulty lerp clamps, reload determinism), complementing
+// BotConfigFuzzTests which covers botmod.json ranges.
 //
 // Why: characters.json is operator-authored hand-edited text, and Newtonsoft
 // parses bare NaN/Infinity/-Infinity number literals straight into float
@@ -14,10 +16,13 @@
 // ShouldFire went permanently false) and made the aim rotation NaN.
 //
 // Needs Newtonsoft.Json.dll from the game install (same gate as the neural
-// suites); compiles BotCharacter.cs + BotText.cs plus a ModApi.Warn stub.
+// suites); compiles BotCharacter.cs (BotCharacter + BotCharacterDB) +
+// BotConfig.cs + BotText.cs + AtomicTextFile.cs plus a ModApi.Warn stub.
 // Run locally: bash scripts/test-idempotency.sh
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using Newtonsoft.Json;
 using BotMod.Config;
 
@@ -47,6 +52,29 @@ static class BotCharacterArithTests
 
     // The consumer math Bot.AdoptTarget / AttackInRange run per engagement.
     static float AimBiasWindow(float acc) => Math.Max(0.03f, (1f - acc) * 0.45f);
+
+    // Write characters.json into an isolated cwd (Load probes
+    // "./config/characters.json" after the assembly dir), Load with cfg,
+    // restore everything. json == null exercises the missing-file path.
+    static Dictionary<string, BotCharacter> LoadCharacters(string json, BotConfig cfg)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "botmod-chardb-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(dir, "config"));
+        if (json != null)
+            File.WriteAllText(Path.Combine(dir, "config", "characters.json"), json, Encoding.UTF8);
+        string oldCwd = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = dir;
+            BotCharacterDB.Load(cfg);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = oldCwd;
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+        }
+        return BotCharacterDB.Characters;
+    }
 
     static int Main()
     {
@@ -96,6 +124,94 @@ static class BotCharacterArithTests
             float w = AimBiasWindow(ch.AimAccuracy);
             bool ok = !float.IsNaN(w) && !float.IsInfinity(w) && w >= 0.03f && w <= 0.45f;
             Check("aim window finite in [0.03,0.45] for acc=" + ch.AimAccuracy, ok);
+        }
+
+        // ---- BotCharacterDB: the real characters.json ingestion path ----
+        //
+        // The Normalize pins above exercise the sanitizer directly; the
+        // blocks below cover the layer around it: file resolution under
+        // ./config, IdentityKey canonicalization of hand-edited file keys,
+        // default entries ensured for every configured bot name, the ForName
+        // fallback chain and the difficulty lerp. Expected behavior per the
+        // BotCharacterDB / ForName doc comments.
+
+        // 1. Canonicalization at ingestion: NFD and ZWSP-pasted file keys
+        //    must land on their clean spellings so lookups derived from
+        //    spawned names hit them.
+        {
+            var chars = LoadCharacters(
+                "{ \"Ki\u0301ra\": { \"Aggression\": 0.9 }, \"Gru\u200bnt\": { \"Aggression\": 0.1 } }",
+                new BotConfig { Difficulty = 2 });
+            Check("NFD file key stored under NFC spelling",
+                chars.ContainsKey("K\u00edra") && !chars.ContainsKey("Ki\u0301ra"));
+            Check("ZWSP file key collapses onto clean spelling", chars.ContainsKey("Grunt"));
+            Check("ForName bridges spawned name to canonical file entry",
+                ReferenceEquals(BotCharacterDB.ForName("[Bot] K\u00edra_7"), chars["K\u00edra"]));
+        }
+
+        // 2. Fallback chain: an unknown base name resolves to the Grunt entry
+        //    when one exists (documented in ForName), not to an arbitrary one.
+        {
+            var chars = LoadCharacters("{ \"Grunt\": { \"Camper\": 0.8 } }",
+                new BotConfig { Difficulty = 2 });
+            Check("unknown name falls back to the Grunt entry",
+                ReferenceEquals(BotCharacterDB.ForName("Zed_9"), chars["Grunt"]));
+        }
+
+        // 3. Empty roster + no file: nothing fabricated; on-demand lookup of
+        //    an unknown name mints Defaults keyed by its own base name.
+        {
+            var chars = LoadCharacters(null, new BotConfig { Difficulty = 0, BotNames = new string[0] });
+            Check("no file and no configured names leaves the table empty", chars.Count == 0);
+            var minted = BotCharacterDB.ForName("Zed_1");
+            Check("lookup of unknown name mints defaults for its base name",
+                minted.Name == "Zed" && minted.AimAccuracy == 0.75f);
+        }
+
+        // 4. Difficulty lerp clamps at both rails: nightmare pushes accuracy
+        //    against the ceiling, floors reaction time, and lifts sub-floor
+        //    accuracy onto its documented 0.2 rail (exact endpoint math).
+        {
+            var chars = LoadCharacters(
+                "{ \"Sniper\": { \"AimAccuracy\": 0.9, \"ReactionTime\": 0.1 },"
+                + " \"Rookie\": { \"AimAccuracy\": 0.05 } }",
+                new BotConfig { Difficulty = 4 });
+            Check("high skill saturates at the accuracy ceiling", chars["Sniper"].AimAccuracy == 1f);
+            Check("reaction floor holds at difficulty 4", chars["Sniper"].ReactionTime == 0.05f);
+            Check("low accuracy lifted onto the 0.2 floor", chars["Rookie"].AimAccuracy == 0.2f);
+        }
+
+        // 5. Reload determinism (the drift fix): every Load starts from a
+        //    fresh parse or pristine default table, so repeated loads apply
+        //    the lerp once each, never cumulatively onto shifted instances.
+        {
+            const string file = "{ \"Grunt\": { \"AimAccuracy\": 0.5 } }";
+            var a = LoadCharacters(file, new BotConfig { Difficulty = 4 })["Grunt"];
+            var b = LoadCharacters(file, new BotConfig { Difficulty = 4 })["Grunt"];
+            Check("repeated loads do not drift (lerp applied once per load)",
+                a.AimAccuracy == b.AimAccuracy && a.ReactionTime == b.ReactionTime);
+            var def = LoadCharacters(null, new BotConfig { Difficulty = 4 })["Grunt"];
+            Check("reload without file rebuilds finite in-range defaults",
+                !float.IsNaN(def.AimAccuracy) && def.AimAccuracy > 0.2f && def.AimAccuracy <= 1f);
+        }
+
+        // 6. Malformed file: Load swallows the parse failure behind Warn and
+        //    still guarantees usable default entries (a throw here would
+        //    escape into InitMod's config phase).
+        {
+            var chars = LoadCharacters("{ oops", new BotConfig { Difficulty = 2 });
+            Check("malformed characters.json falls back to default entries",
+                chars.Count > 0 && BotCharacterDB.ForName("Grunt") != null);
+        }
+
+        // 7. NaN literal through the full ingestion path (not just bare
+        //    Normalize): lands on the documented default so the neural obs
+        //    vector stays finite even when operators hand-edit NaN.
+        {
+            var chars = LoadCharacters("{ \"Grunt\": { \"Camper\": NaN } }",
+                new BotConfig { Difficulty = 2 });
+            Check("NaN camper in file becomes the documented default 0.2",
+                chars["Grunt"].Camper == 0.2f);
         }
 
         if (_failures == 0) { Console.WriteLine("all bot character arithmetic tests passed"); return 0; }

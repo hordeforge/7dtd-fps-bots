@@ -41,11 +41,9 @@ if [[ -z "$CS_VERSION" || "$CS_VERSION" != "$XML_VERSION" ]]; then
   exit 1
 fi
 
-# WebMod compiler version. Must match TSC_VERSION in scripts/lint-webui.sh,
-# whose freshness gate compares the committed bundle.js against a compile with
-# this exact version; building the shipped artifact with any other tsc makes
-# the two disagree. Override locally: TSC_VERSION=5.9.3 bash scripts/build.sh
-TSC_VERSION="${TSC_VERSION:-5.9.3}"
+# Pinned external tool versions (tsc etc.), shared with lint-webui.sh so the
+# shipped bundle and its freshness gate always compile with the same tsc.
+source "$ROOT/scripts/tool-versions.sh"
 
 # Stage from scratch: leftover files from removed/renamed sources must not
 # survive into the installed mod.

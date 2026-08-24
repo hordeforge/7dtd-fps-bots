@@ -110,7 +110,7 @@ namespace BotMod.Commands
                 pos = world != null ? BotSpawner.GroundPosition(world, raw) : raw;
             }
             int spawned = 0;
-            for (int i = 0; i < count; i++) if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;
+            for (int i = 0; i < count; i++) if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) spawned++;
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots" + (weapon != null ? $" weapon={weapon}" : "") + "." + (spawned < count ? " (max or spawn failed)" : ""));
         }
         void DoRemove(List<string> p)
@@ -167,7 +167,7 @@ namespace BotMod.Commands
             for (int i = 0; i < count; i++) {
                 UnityEngine.Vector3 pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config);
                 if (pos == UnityEngine.Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
-                if (BotManager.Instance.TrySpawnOne(pos, null, weapon)) spawned++;
+                if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) spawned++;
             }
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {target.EntityName ?? target.PlayerDisplayName ?? ident} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
         }
@@ -307,10 +307,11 @@ namespace BotMod.Commands
                     ModApi.Config.UseNeuralBrain = true;
                     ModApi.PersistConfigField("UseNeuralBrain", true);
                     {
-                        string why2; bool ok = BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why2);
-                        if (ok) ModApi.Log("BotNeuralBrain: loaded " + why2);
-                        else ModApi.Warn("BotNeuralBrain not loaded (" + why2 + "), using heuristic.");
-                        SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + why2 : "Neural ON but load failed: " + why2 + " — heuristic until reload succeeds.");
+                        // LoadNeuralWeights logs the server-side outcome; the
+                        // user-facing echo reads LastReason (TryLoad records it
+                        // on both the success and failure path).
+                        bool ok = ModApi.LoadNeuralWeights("loaded", ", using heuristic.");
+                        SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + BotMod.AI.BotNeuralBrain.LastReason : "Neural ON but load failed: " + BotMod.AI.BotNeuralBrain.LastReason + " — heuristic until reload succeeds.");
                     }
                     break;
                 case "off": case "disable": case "false": case "0":
