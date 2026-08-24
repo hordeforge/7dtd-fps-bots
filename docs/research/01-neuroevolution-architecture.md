@@ -62,7 +62,7 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 | # | Output | Interpretation | Host clamp |
 |---|---|---|---|
 | 0 | `campLogit` | Sigmoid → `wantCamp` | Threshold 0.5; damps attack movement when healthy and far (see status above) |
-| 1 | `retreatLogit` | Sigmoid → `wantRetreat` (replaces hp check) | Distance gate `dist<22 \|\| !hasBetterWeapon` stays |
+| 1 | `retreatLogit` | Sigmoid → `wantRetreat` (replaces hp check) | Fallback when no net: low HP + high SelfPreservation + low Aggression, overridden by the finish-the-kill commit (`Bot.RetreatToCover`) |
 | 2 | `aimBiasYaw` | Tanh → ±0.45*(1-acc) rad (replaces `_aimBiasYaw`) | Clamped to same interval as heuristic |
 | 3 | `fireGate` | Sigmoid → shoot? | Still gated by `ReactionTime`, `BurstPause`, LOS, range |
 | 4 | `strafeDir` | Sigmoid → left/right (replaces `Rng01()<0.5`) | Host picks direction, not speed |
