@@ -70,4 +70,7 @@ if __name__=="__main__":
         ax.grid(True, axis="y", alpha=0.15)
         for i,v in enumerate(helds): ax.text(i, v+0.02, f"{v:.2f}", ha="center", fontsize=6)
         fig.tight_layout(); fig.savefig(out_dir / "fitness_sweep_R7.png", dpi=150); plt.close(fig); print(f"plot -> {out_dir}/fitness_sweep_R7.png")
-    except Exception as ex: print(f"plot skipped: {ex}")
+    except Exception as ex:
+        # Diagnostics belong on stderr (the JSON above is the machine-readable
+        # result on stdout) with the exception class, matching evolve.py.
+        print(f"plot skipped ({ex.__class__.__name__}: {ex})", file=sys.stderr)

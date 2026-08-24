@@ -17,6 +17,7 @@ import csv
 import html
 import io
 import json
+import sys
 from pathlib import Path
 
 try:
@@ -168,8 +169,14 @@ def build(runs: list[Path], out: Path):
         cfg = {}
         cfg_path = run_dir / "config.json"
         if cfg_path.exists():
-            try: cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-            except Exception: pass
+            try:
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except Exception as ex:
+                # The headline degrades to "?" placeholders, but the reason must
+                # be visible: silently blank pop/seed are indistinguishable from
+                # a run launched without a config.json.
+                print(f"{cfg_path}: unreadable ({ex.__class__.__name__}: {ex}); "
+                      f"pop/seed shown as ?", file=sys.stderr)
 
         # headline stats
         rel = (best[-1] - best[0]) / max(1e-9, abs(best[0])) * 100 if best else 0

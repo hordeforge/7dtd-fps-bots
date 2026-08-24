@@ -54,17 +54,30 @@ def _load_resume(resume: str, seed: int, pop: int):
 
     resume_path = Path(resume)
     ckpts = sorted(resume_path.glob("gen_*.json"), key=ga.gen_ckpt_key) if resume_path.is_dir() else [resume_path]
-    try:
-        if not ckpts or not ckpts[-1].is_file():
-            return _fresh(f"resume: no checkpoints in {resume}, starting fresh")
-        last = ckpts[-1]
-        ckpt = json.loads(last.read_text(encoding="utf-8"))
-        top3_raw = ckpt.get("top3") or []
-        if not top3_raw:
-            return _fresh(f"resume: {last} has no top3, starting fresh")
-        top3 = [np.array(w, dtype=float) for w in top3_raw]
-    except Exception as ex:
-        return _fresh(f"resume failed ({ex}), starting fresh")
+    if not ckpts or not ckpts[-1].is_file():
+        return _fresh(f"resume: no checkpoints in {resume}, starting fresh")
+
+    # Newest first: an unreadable newest checkpoint (torn by a crash mid-write
+    # before atomic writes, or hand-edited) must cost generations, not the run,
+    # so walk back to the last checkpoint that parses and carries a top3.
+    top3 = None
+    ckpt = None
+    chosen = None
+    for cand in reversed(ckpts):
+        try:
+            parsed = json.loads(cand.read_text(encoding="utf-8"))
+            raw_top3 = parsed.get("top3") or []
+            if not raw_top3:
+                raise ValueError("checkpoint has no top3")
+            top3 = [np.array(w, dtype=float) for w in raw_top3]
+            ckpt = parsed
+            chosen = cand
+            break
+        except Exception as ex:
+            print(f"resume: skipping unusable checkpoint {cand.name} "
+                  f"({ex.__class__.__name__}: {ex})", file=sys.stderr)
+    if top3 is None:
+        return _fresh(f"resume: no usable checkpoint in {resume}, starting fresh")
 
     # Rebuild the population from the checkpoint's top-3; copies past the third
     # get jitter for diversity (seeded, so resumed runs stay reproducible).
@@ -78,7 +91,7 @@ def _load_resume(resume: str, seed: int, pop: int):
             pop_w.append(base + rng2.normal(0, 0.03, base.size).astype(float))
     best_f = float(ckpt.get("best_fitness", float("-inf")))
     start_gen = int(ckpt.get("gen", -1)) + 1
-    print(f"resume: loaded {last} gen {ckpt.get('gen')} fit {best_f:.3f}, seeded next gen")
+    print(f"resume: loaded {chosen} gen {ckpt.get('gen')} fit {best_f:.3f}, seeded next gen")
     return start_gen, pop_w, top3[0].copy(), best_f
 
 
@@ -99,10 +112,10 @@ def _held_probe(weights) -> float:
 
 
 def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed"):
-    try:
-        os.chdir(Path(__file__).resolve().parents[2])
-    except Exception:
-        pass
+    # Repo root anchors every relative output path below (evolved/runs/...,
+    # evolved/best.json). If the chdir fails the run must stop here with the
+    # real cause instead of scattering those paths under whatever cwd it got.
+    os.chdir(Path(__file__).resolve().parents[2])
     rng = np.random.default_rng(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -139,7 +152,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             run_dir = Path(f"evolved/runs/{stem}_{n}")
 
     config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": HELD_SEED}
-    (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+    ga.atomic_write_text(run_dir / "config.json", json.dumps(config, indent=2))
 
     start_gen = 0
     best_w = None
@@ -215,7 +228,10 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     "curriculum": curriculum,
                     "islands": islands,
                 }
-                (run_dir / f"gen_{g:03d}.json").write_text(json.dumps(ckpt, indent=2), encoding="utf-8")
+                # Atomic: --resume sorts by name and walks back only when a file
+                # fails to parse, but a torn newest checkpoint would still cost
+                # every generation after the last good one.
+                ga.atomic_write_text(run_dir / f"gen_{g:03d}.json", json.dumps(ckpt, indent=2))
             else:
                 plateau += 1
             stagnant = plateau >= 8
@@ -225,10 +241,17 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             held_m = float("nan")
             if not dry_run and (g % 5 == 0 or g == gens - 1):
                 cand = best_w if best_w is not None else all_pops_flat[best_idx]
-                # evaluate_many fans the 20 matches across cores (the numba sim
-                # releases the GIL) and returns them in match order, so the
-                # mean is identical to the old sequential list comprehension.
-                held_m = float(np.mean(harness.evaluate_many(cand, HELD_SEED, HELD_SEED, 20)))
+                # Same contract as _held_probe: a broken probe is visible (why
+                # on stderr, NaN in the CSV) instead of killing hours of
+                # training one gen before the next checkpoint. evaluate_many
+                # fans the 20 matches across cores (the numba sim releases the
+                # GIL) and returns them in match order, so the mean is
+                # identical to the old sequential list comprehension.
+                try:
+                    held_m = float(np.mean(harness.evaluate_many(cand, HELD_SEED, HELD_SEED, 20)))
+                except Exception as ex:
+                    print(f"held20 probe failed at gen {g} "
+                          f"({ex.__class__.__name__}: {ex}); logged as nan", file=sys.stderr)
 
             # log per-gen CSV
             arr = np.array(all_fitness, dtype=float)

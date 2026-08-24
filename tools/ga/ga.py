@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 from pathlib import Path
 from typing import List
@@ -137,6 +138,21 @@ def config_hash(obj: dict) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def atomic_write_text(path: Path, text: str) -> None:
+    """Replace `path` with `text` via temp file + os.replace so a crash
+    mid-write can never tear the file: readers see either the old or the new
+    complete content (same contract as the C# mod's AtomicTextFile). Consumers
+    of these files (--resume, the promotion gate, eval/report/viz/replay, and
+    BotNeuralBrain.TryLoad on the live server) would otherwise read a
+    truncated JSON and silently discard the training state it holds."""
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def gen_ckpt_key(path: Path) -> int:
     """Numeric generation for gen_NNN.json checkpoints (-1 if unparsable).
     Order checkpoints with this key: the %03d filename padding stops sorting
@@ -155,8 +171,11 @@ def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config
         "fitness": float(fitness),
         "generation": generation,
     }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    (path.parent / "best.meta.json").write_text(json.dumps({
+    # Atomic: best.json is the shipped champion. A torn write would make the
+    # next evolve's promotion gate score the current champion -inf (a weaker
+    # candidate could then clobber it) and break TryLoad on the server.
+    atomic_write_text(path, json.dumps(payload, indent=2))
+    atomic_write_text(path.parent / "best.meta.json", json.dumps({
         "generation": generation, "fitness": float(fitness),
         "configHash": config_hash(config),
-    }, indent=2), encoding="utf-8")
+    }, indent=2))

@@ -94,6 +94,18 @@ def load_run_csv(run: Path):
     return gens, best, mean, q25, q75, held
 
 
+def run_cfg(run: Path) -> dict:
+    """config.json of a run, or {} when unreadable. One corrupt or hand-edited
+    config in an old run must not kill the whole dashboard build (every section
+    degrades independently); the placeholders get a stderr reason instead."""
+    try:
+        return json.loads((run / "config.json").read_text(encoding="utf-8"))
+    except Exception as ex:
+        print(f"{run / 'config.json'}: unreadable ({ex.__class__.__name__}: {ex}); "
+              f"table fields shown as None", file=_sys.stderr)
+        return {}
+
+
 def curves_b64(runs, best_run_name: str | None):
     fig, ax = plt.subplots(figsize=(12, 5.2))
     for run in runs:
@@ -158,7 +170,7 @@ def build(runs, out: Path, replays):
     best_run_name = None
     # best.run is the run hash; we mark whichever run we think produced best.json
     for run in runs:
-        cfg = json.loads((run / "config.json").read_text(encoding="utf-8"))
+        cfg = run_cfg(run)
         if cfg.get("seed") == best_meta.get("seed"):
             best_run_name = run.name
 
@@ -232,7 +244,7 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
     # Run table
     rows = []
     for run in runs:
-        cfg = json.loads((run / "config.json").read_text(encoding="utf-8"))
+        cfg = run_cfg(run)
         _, _, _, _, _, held = load_run_csv(run)
         heldv = [v for v in held if v == v]
         rows.append((run.name.replace("evolved/runs/", ""),
