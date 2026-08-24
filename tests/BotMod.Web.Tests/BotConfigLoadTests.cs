@@ -205,6 +205,26 @@ static class BotConfigLoadTests
             Check("torn primary recovers from .bak", cfg.TargetBotCount == 8);
         }
 
+        // A primary holding bare JSON null (hand-edit gone wrong) deserializes
+        // to a null object WITHOUT throwing, so it must hit the same
+        // fall-through-to-.bak branch as any other unreadable primary instead
+        // of escaping Load as a null config (every caller would NRE).
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            AtomicTextFile.Write(path, "{ \"TargetBotCount\": 8 }");
+            AtomicTextFile.Write(path, "{ \"TargetBotCount\": 12 }"); // snapshots 8 into .bak
+            File.WriteAllText(path, "null");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("null-body primary recovers from .bak", cfg != null && cfg.TargetBotCount == 8);
+        }
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "null");
+            BotConfig cfg = BotConfig.Load(path);
+            Check("null-body primary without .bak yields clean defaults",
+                cfg != null && cfg.TargetBotCount == 6 && !cfg.AllowSyntheticAuthBypass);
+        }
+
         // Nothing on disk (fresh install): clean defaults, no throw.
         {
             string dir = TempDir();
@@ -280,7 +300,8 @@ static class BotConfigLoadTests
                 p.GunId == "GUNMGT1AK47" && p.Range == 55f);
 
             // "mixed" resolves through LoadoutPool to the exact profile of the
-            // picked entry; an empty pool falls back to a working default.
+            // picked entry; an empty pool falls back to the documented default
+            // rifle (same pinned id as the all-null array case above).
             cfg.LoadoutPool = new[] { "gunRifleT3SniperRifle", "gunHandgunT1Pistol" };
             WeaponProfile mixedPick = WeaponProfile.ForGun("mixed", cfg);
             bool matchesDirect = false;
@@ -294,9 +315,9 @@ static class BotConfigLoadTests
             Check("mixed pick equals the direct profile of a pooled gun", matchesDirect);
 
             cfg.LoadoutPool = new string[0];
-            Check("empty loadout pool falls back to a usable rifle",
-                WeaponProfile.ForGun("mixed", cfg).Range > 0f
-                && WeaponProfile.ForGun(null, cfg).Damage > 0);
+            Check("empty loadout pool falls back to the default rifle",
+                WeaponProfile.ForGun("mixed", cfg).GunId == "gunMGT1AK47"
+                && WeaponProfile.ForGun(null, cfg).GunId == "gunMGT1AK47");
         }
 
         // WantsToCamp: Q3-style camp roll with strict boundaries. Camps only

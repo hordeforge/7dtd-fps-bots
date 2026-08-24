@@ -67,6 +67,19 @@ static class IdempotencyLedgerTests
             Check("retry after failure executes again", Try(k) == IdempotencyLedger.BeginResult.Fresh);
         }
 
+        // 3b. Complete/Fail on a key that was never begun (already aged out,
+        //     evicted by the capacity cap, or released by an earlier Fail):
+        //     documented silent no-ops. The POST handler calls both on error
+        //     and client-rejection paths where the entry may be long gone, so
+        //     a throw here would turn every rejected retry into a 500.
+        {
+            string k = "never-begun-1";
+            IdempotencyLedger.Complete(k, "{\"spawned\":0}");
+            IdempotencyLedger.Fail(k);
+            Check("complete/fail on unknown key are silent no-ops",
+                Try(k) == IdempotencyLedger.BeginResult.Fresh);
+        }
+
         // 4. Key validation, including the exact boundary: max length is the
         //    last accepted length, one past it is rejected.
         {
