@@ -475,7 +475,7 @@ draw(F[0]);
             .replace("@FRAMES@", js_frames)
             .replace("@WALLS@", js_walls))
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html)
+    out.write_text(html, encoding="utf-8")
     return out
 
 
@@ -495,7 +495,7 @@ def main():
     best_path = Path(args.best)
     if not best_path.is_file():
         raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
-    w = np.array(json.loads(best_path.read_text())["weights"], dtype=float)
+    w = np.array(json.loads(best_path.read_text(encoding="utf-8"))["weights"], dtype=float)
     summary, frames = record_match(w, args.seed, args.n_bots, args.n_zombies, args.max_ticks,
                                    args.skill, args.weapon, args.env)
     walls = WALLS[args.env if args.env is not None else args.seed % 5]

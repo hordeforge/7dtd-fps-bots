@@ -82,7 +82,7 @@ def chart_card(data_b64: str, alt: str) -> str:
 
 
 def load_run_csv(run: Path):
-    rows = list(csv.DictReader(open(run / "fitness.csv")))
+    rows = list(csv.DictReader(open(run / "fitness.csv", encoding="utf-8")))
     if not rows:
         return [], [], [], [], [], []
     gens = [int(r["gen"]) for r in rows]
@@ -152,7 +152,7 @@ def held_strip_b64(runs):
 
 
 def best_net_b64():
-    best = json.loads((RUNS_DIR / "best.json").read_text())
+    best = json.loads((RUNS_DIR / "best.json").read_text(encoding="utf-8"))
     w = np.array(best["weights"], dtype=float)
     hidden = int(best.get("hidden", 16))
     png = RUNS_DIR / "sweeps" / "viz_champion_dashboard.png"
@@ -163,11 +163,11 @@ def best_net_b64():
 
 
 def build(runs, out: Path, replays):
-    best_meta = json.loads((RUNS_DIR / "best.meta.json").read_text())
+    best_meta = json.loads((RUNS_DIR / "best.meta.json").read_text(encoding="utf-8"))
     best_run_name = None
     # best.run is the run hash; we mark whichever run we think produced best.json
     for run in runs:
-        cfg = json.loads((run / "config.json").read_text())
+        cfg = json.loads((run / "config.json").read_text(encoding="utf-8"))
         if cfg.get("seed") == best_meta.get("seed"):
             best_run_name = run.name
 
@@ -238,7 +238,7 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
     # Run table
     rows = []
     for run in runs:
-        cfg = json.loads((run / "config.json").read_text())
+        cfg = json.loads((run / "config.json").read_text(encoding="utf-8"))
         _, _, _, _, _, held = load_run_csv(run)
         heldv = [v for v in held if v == v]
         rows.append((run.name.replace("evolved/runs/", ""),
@@ -254,7 +254,7 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
     chunks.append(f"""<p style="color:#94a3b8;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div></body></html>""")
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("".join(chunks))
+    out.write_text("".join(chunks), encoding="utf-8")
     return out
 
 
@@ -277,7 +277,7 @@ def main():
         if not (RUNS_DIR / req).is_file():
             raise SystemExit(f"{RUNS_DIR / req} not found (run tools/ga/evolve.py first)")
 
-    w = np.array(json.loads((RUNS_DIR / "best.json").read_text())["weights"], dtype=float)
+    w = np.array(json.loads((RUNS_DIR / "best.json").read_text(encoding="utf-8"))["weights"], dtype=float)
     replays = {}
     import replay as _rp
     if args.replays:
@@ -294,7 +294,7 @@ def main():
                 walls = _rp.WALLS[envf]
                 html_path = Path(tmp) / f"replay_seed{seed}.html"
                 render_html(summary, frames, walls, html_path, label)
-                replays[label] = html_path.read_text()
+                replays[label] = html_path.read_text(encoding="utf-8")
 
     out = build(runs, Path(args.out), replays)
     print(f"dashboard -> {out}  ({len(runs)} runs, {len(replays)} replays)")

@@ -2,8 +2,9 @@
 """viz.py — neural net topology + weight visualization.
 
 Usage:
-  python tools/ga/viz.py --best evolved/best.json --out /tmp/net.png
-  python tools/ga/viz.py --run evolved/runs/2026-08-19_011136_pop32_g30_s42 --out /tmp/net.png  # uses best of last gen
+  python tools/ga/viz.py --best evolved/best.json            # -> evolved/net.png
+  python tools/ga/viz.py --run evolved/runs/<ts>             # -> <run>/net.png
+  python tools/ga/viz.py --best evolved/best.json --out x.png
 
 Renders: layered topology (14→16→5) with edge opacity by |weight|, bias as node
 rings, and an activation trace on 3 canonical inputs (healthy duelist, wounded
@@ -167,25 +168,27 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--best", default=None)
     ap.add_argument("--run", default=None, help="evolved/runs/<ts> (uses best of last gen)")
-    ap.add_argument("--out", default="/tmp/net.png")
+    ap.add_argument("--out", default=None,
+                    help="output PNG (default: net.png beside the --best file or inside the --run dir)")
     args = ap.parse_args()
+    out = Path(args.out) if args.out else None
     if args.run:
-        cands = sorted(Path(args.run).glob("gen_*.json"), key=ga.gen_ckpt_key)
+        run_dir = Path(args.run)
+        cands = sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key)
         path = Path(cands[-1]) if cands else None
         if path is None:
             raise SystemExit(f"no gen_*.json in {args.run}")
         obj = json.loads(path.read_text(encoding="utf-8"))
         w = np.array(obj["top3"][0], dtype=float)
         hidden, inputs = 16, 14
-        meta_title = f"{Path(args.run).name} gen {obj.get('gen','?')}  best {obj.get('best_fitness',0):+.3f}"
-        out = Path(args.out)
-        draw(w, hidden, inputs, title=meta_title, out=out)
+        meta_title = f"{run_dir.name} gen {obj.get('gen','?')}  best {obj.get('best_fitness',0):+.3f}"
+        draw(w, hidden, inputs, title=meta_title, out=out or (run_dir / "net.png"))
     elif args.best:
         best_path = Path(args.best)
         if not best_path.is_file():
             raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
         w, hidden, inputs, obj = load_best(best_path)
         meta_title = f"best.json  gen {obj.get('generation','?')}  fit {obj.get('fitness',0):+.3f}"
-        draw(w, hidden, inputs, title=meta_title, out=Path(args.out))
+        draw(w, hidden, inputs, title=meta_title, out=out or (best_path.parent / "net.png"))
     else:
         ap.error("need --best or --run")
