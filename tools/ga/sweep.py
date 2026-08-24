@@ -30,28 +30,16 @@ import combat_sim as _cs
 def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
     """One evolution with `hidden` and `activation` ('tanh' or 'relu').
 
-    Note: combat_sim is the real fitness — ga.forward is NOT used by the
-    numba harness. We must flip harness.ACTIVATION (and keep HIDDEN==16
-    for now — non-16 sweeps still require a recompile; we score them via
-    placeholder until that lands).
+    combat_sim is the real fitness (ga.forward is not used by the numba
+    harness): harness.ACTIVATION selects simulate_match (canonical tanh)
+    or simulate_match_relu. Numba bakes HIDDEN as a compile-time literal,
+    so only H16 runs; every other size is skipped before any evolution.
     """
-    # Only H16 is real for now (numba HIDDEN is a literal). Larger sweeps
-    # are estimated via ga.forward path until combat_sim is templated.
     if hidden != ga.HIDDEN:
-        # short-circuit: report that non-H16 is not yet wired (don't fake a run)
         print(f"  note: H{hidden} sweep not yet wired (numba HIDDEN==16) — skipping, only H16-tanh/relu are real")
         return []
     orig_act = harness.ACTIVATION
     harness.ACTIVATION = 1 if activation == "relu" else 0
-    orig_forward = ga.forward
-    def fwd(w, x):
-        w1, b1, w2, b2 = ga.flat_to_layers(w)
-        if activation == "relu":
-            h = np.maximum(0, w1 @ x + b1)
-        else:
-            h = np.tanh(w1 @ x + b1)
-        return w2 @ h + b2
-    ga.forward = fwd
     try:
         rng = np.random.default_rng(seed)
         import random as _r
@@ -74,7 +62,6 @@ def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
         return curve
     finally:
         harness.ACTIVATION = orig_act
-        ga.forward = orig_forward
 
 
 def main():
