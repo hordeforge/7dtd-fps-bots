@@ -126,11 +126,13 @@ namespace BotMod.AI
                         var sp = cmT.GetMethod("SendPackage", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
                         if (sp != null)
                         {
+                            // Only an overload that can carry the message counts:
+                            // a bare (byte) invocation would "succeed" while
+                            // dropping msg entirely, announcing nothing and
+                            // silencing the not-delivered warn below forever.
                             var p = sp.GetParameters();
                             try
                             {
-                                if (p.Length >= 1 && p[0].ParameterType == typeof(byte))
-                                    { sp.Invoke(inst, new object[] { (byte)0 }); sent = true; return; }
                                 if (p.Length >= 2)
                                     { sp.Invoke(inst, new object[] { cts, msg, false }); sent = true; return; }
                             }

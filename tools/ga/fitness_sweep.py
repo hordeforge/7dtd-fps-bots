@@ -4,7 +4,6 @@ import sys, json
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import numpy as np, harness, ga, random
-import combat_sim as cs
 
 HOLD_SEED = 999
 POP, GENS, SEED = 24, 22, 42

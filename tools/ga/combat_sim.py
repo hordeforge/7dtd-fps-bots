@@ -529,7 +529,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             dx = bx[best_b] - zx[zi]; dy = by[best_b] - zy[zi]
             d = math.sqrt(best_d2)
             if d > 0.01:
-                zx[zi] += dx / d * 0.42  # zombie speed (buffed for PvE pressure) 1.2-ish but tick is 0.05 → 0.06? keep 0.35 for pace
+                zx[zi] += dx / d * 0.42  # zombie speed (buffed for PvE pressure)
                 zy[zi] += dy / d * 0.42
             if d < 2.0:
                 bhp[best_b] -= 10 * dt * 8  # melee pressure (buffed)

@@ -12,19 +12,14 @@ fitness), plots all runs on one chart, and prints the ranking.
 from __future__ import annotations
 
 import argparse
-import hashlib
-import csv
 import json
-import math
 from pathlib import Path
-import sys
 
 import numpy as np
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).parent))
 import ga
 import harness
-import combat_sim as _cs
 
 
 def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):

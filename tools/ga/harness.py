@@ -17,7 +17,6 @@ from typing import List
 import numpy as np
 
 import combat_sim as _cs
-import ga
 _simulate = _cs.simulate_match
 _simulate_relu = _cs.simulate_match_relu
 # harness activation flag (0 tanh, 1 relu) — set by sweep/evolve

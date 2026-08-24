@@ -136,7 +136,6 @@ def best_net(run_dir: Path) -> str | None:
     last = json.loads(cand[-1].read_text(encoding="utf-8"))
     if "top3" not in last or not last["top3"]:
         return None
-    import math
     w = np.array(last["top3"][0], dtype=float)
     H, IN, OUT = 16, 14, 5
     W1 = w[: H * IN].reshape(H, IN)

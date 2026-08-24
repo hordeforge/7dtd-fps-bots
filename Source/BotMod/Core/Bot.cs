@@ -558,12 +558,15 @@ namespace BotMod.Core
             if (e == null || e.IsDead()) return false;
             if (e.entityId == EntityId) return false;
             bool eIsBot = BotManager.Instance.IsBotEntity(e.entityId);
+            // Bot targets answer to BotVsBot alone (ally exclusion happens in
+            // FindTarget's IsFriendly): the class gates below must not see a
+            // bot body (zombieSoldier is an EntityZombie, so vsZombie=false
+            // used to disable bot-vs-bot here too).
             if (eIsBot && !cfg.BotVsBot) return false;
             // A bot can still run a trader body when the configured entity class
             // falls back to npcTraderJoel, so don't auto-reject EntityTrader for bots.
             if (!eIsBot && e is EntityTrader) return false;
-            if (e is EntityPlayer && !cfg.BotVsPlayer) return false;
-            if (e is EntityZombie && !cfg.BotVsZombie) return false;
+            if (CombatGates.ClassGateBlocks(eIsBot, e is EntityPlayer, e is EntityZombie, cfg.BotVsPlayer, cfg.BotVsZombie)) return false;
             if (e is EntitySupplyCrate) return false;
             return e.IsAlive();
         }

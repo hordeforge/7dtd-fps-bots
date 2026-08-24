@@ -19,7 +19,7 @@ import json
 import os
 import random
 import sys
-import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -135,9 +135,23 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     tag = f"_{activation}" if activation != "tanh" else ""
     if islands > 1: tag += f"_is{islands}"
     if curriculum != "mixed": tag += f"_{curriculum}"
-    ts = time.strftime("%Y-%m-%d_%H%M%S")
-    run_dir = Path(f"evolved/runs/{ts}_pop{pop}_g{gens}_s{seed}{tag}")
-    run_dir.mkdir(parents=True, exist_ok=True)
+    # UTC label: identical runs get identical names on every host/container
+    # (a laptop in UTC+2 and a CI runner in UTC must not disagree), and the
+    # fall-back hour cannot recur a label. Exclusive mkdir + numeric suffix:
+    # two launches within the same second must not share a run dir, or the
+    # second silently truncates the first's fitness.csv and overwrites its
+    # config.json mid-run.
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+    stem = f"{ts}_pop{pop}_g{gens}_s{seed}{tag}"
+    run_dir = Path(f"evolved/runs/{stem}")
+    n = 1
+    while True:
+        try:
+            run_dir.mkdir(parents=True)
+            break
+        except FileExistsError:
+            n += 1
+            run_dir = Path(f"evolved/runs/{stem}_{n}")
 
     config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": HELD_SEED}
     (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")

@@ -58,6 +58,13 @@ run_suite logsanitize \
   "$root/Source/BotMod/Config/LogSanitizer.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
 
+# vs-class combat gate: bot identity overrides body class (zombieSoldier
+# bodies are EntityZombie), so the vs-zombie/vs-player toggles must never
+# block bot targets or bot-on-bot damage.
+run_suite combatgates \
+  "$root/Source/BotMod/Config/CombatGates.cs" \
+  "$root/tests/BotMod.Web.Tests/CombatGatesTests.cs"
+
 # Unicode identity contract: NFC canonicalization and ordinal case folding
 # for bot/player name lookups and team-assignment keys.
 run_suite bottext \

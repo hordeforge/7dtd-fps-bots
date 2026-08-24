@@ -109,10 +109,15 @@ namespace BotMod.Patches
                     var cfg = ModApi.Config;
                     if (BotMod.Core.BotManager.Instance.IsBotEntity(attackerId))
                     {
-                        if (__instance is EntityPlayer && !cfg.BotVsPlayer) return false;
-                        if (__instance is EntityZombie && !cfg.BotVsZombie) return false;
+                        // Class gates describe world bodies only; a bot victim's
+                        // soldier body is an EntityZombie, so the vsZombie gate
+                        // used to block bot-on-bot damage whenever it was off
+                        // (shared rule: BotMod.Config.CombatGates). Bot victims
+                        // answer to the ally check below alone.
+                        bool victimIsBot = BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId);
+                        if (BotMod.Config.CombatGates.ClassGateBlocks(victimIsBot, __instance is EntityPlayer, __instance is EntityZombie, cfg.BotVsPlayer, cfg.BotVsZombie)) return false;
                         // Squad mode, vsBot-off and same-team block bot-on-bot damage.
-                        if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId) && BotMod.Core.BotManager.Instance.AreAllies(attackerId, __instance.entityId)) return false;
+                        if (victimIsBot && BotMod.Core.BotManager.Instance.AreAllies(attackerId, __instance.entityId)) return false;
                     }
                     // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)
                     if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId))
