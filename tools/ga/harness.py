@@ -36,9 +36,6 @@ FIT_CAMP = 1.0  # multiplier on camp_pen (already 1.6/0; 0 disables)
 # to 1 (F=18) so the measuring stick is stable.
 DRAWS_PER_CONFIG = 2
 
-# weapon sampling pool (BotConfig.LoadoutPool indices into combat_sim WEAPON_*)
-# 0 pistol, 2 AK, 3 sniper, 5 SMG — keep it mixed per match
-_POOL = [0, 2, 3, 5, 0, 2]
 # Thread cap for evaluate_population: one worker per genome up to the core
 # count (each sim is CPU-bound; oversubscribing only adds context switches).
 _MAX_WORKERS = max(1, os.cpu_count() or 1)
@@ -102,14 +99,13 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
         for m, (n_bots, n_evolved, n_zombies, max_ticks) in enumerate(configs):
             for rep in range(DRAWS_PER_CONFIG):
                 seed = _seed_for(generation, genome_idx, m * DRAWS_PER_CONFIG + rep, rs)
-                weapon = _POOL[m % len(_POOL)]
                 skill = _skill_for_match(m)
                 if n_evolved < n_bots:
                     # fixed-opponent duel arena (R11 rework): spawn gap + open env + equal AKs
-                    r = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon,
+                    r = fn(w, seed, n_bots, n_zombies, max_ticks, skill,
                            _OPP_STATIC, n_evolved, DUEL_SPAWN_GAP, DUEL_ENV, DUEL_WEAPON)
                 else:
-                    r = fn(w, seed, n_bots, n_zombies, max_ticks, skill, weapon)
+                    r = fn(w, seed, n_bots, n_zombies, max_ticks, skill)
                 fitness = FIT_ELO * r[0] + FIT_ECON * r[1] + FIT_SURV * r[2] - FIT_STUCK * r[3] - FIT_CAMP * r[4]
                 total += fitness; n += 1
     return total / max(1, n)
