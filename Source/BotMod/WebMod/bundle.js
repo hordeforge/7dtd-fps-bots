@@ -117,7 +117,7 @@
     }
     function nearLabel(b) {
         if (b.nearestPlayerDist === undefined || b.nearestPlayerDist < 0) {
-            return "—";
+            return "n/a";
         }
         return `${b.nearestPlayerDist}m${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
     }
@@ -258,11 +258,21 @@
         }
         return h("span", { key: "arrow", "aria-hidden": "true" }, sort.dir < 0 ? " ▼" : " ▲");
     }
-    function botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver) {
+    function botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver, changedSig) {
+        let rowClass = "";
+        if (changedSig !== null) {
+            rowClass = "botmod-flash";
+            if (dragName === b.name) {
+                rowClass += " botmod-drag";
+            }
+        }
+        else if (dragName === b.name) {
+            rowClass = "botmod-drag";
+        }
         return h("tr", {
-            key: b.entityId,
+            key: changedSig === null ? String(b.entityId) : `${b.entityId}:${changedSig}`,
             draggable: true,
-            className: dragName === b.name ? "botmod-drag" : "",
+            className: rowClass,
             title: "Drag onto a team bucket",
             onDragStart: (e) => {
                 e.dataTransfer.setData("text/plain", b.name);
@@ -283,6 +293,10 @@
             disabled: busy !== "", onClick: () => post({ action: "removeOne", entityId: b.entityId })
         }, "✕")));
     }
+    function rowSig(b) {
+        return `${numOr(b.health, -1)}|${b.status}|${numOr(b.team, 0)}|${numOr(b.players, 0)}|${numOr(b.zombies, 0)}|${numOr(b.deaths, 0)}|${numOr(b.score, 0)}|${numOr(b.level, 0)}`;
+    }
+    let prevRowSigs = new Map();
     function renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver) {
         const th = (label, key) => h("th", {
             key: label,
@@ -297,9 +311,21 @@
         for (let t = 0; t <= teamCount; t++) {
             teamOptions.push(h("option", { key: t, value: String(t) }, teamLabel(t)));
         }
+        const sigs = new Map();
+        for (const b of bots) {
+            sigs.set(b.entityId, rowSig(b));
+        }
+        const changed = (id) => {
+            const current = sigs.get(id);
+            if (prevRowSigs.size === 0 || current === undefined || prevRowSigs.get(id) === current) {
+                return null;
+            }
+            return current;
+        };
+        prevRowSigs = sigs;
         return h("div", { className: "botmod-scoreboard" }, h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team or use the Team column`), bots.length === 0
             ? h("p", { className: "botmod-empty" }, "No bots alive.")
-            : h("table", { className: "botmod-table" }, h("caption", { className: "botmod-sronly" }, "Bot scoreboard"), h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver)))));
+            : h("table", { className: "botmod-table" }, h("caption", { className: "botmod-sronly" }, "Bot scoreboard"), h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver, changed(b.entityId))))));
     }
     function BotPanel({ React, HTTP, useQuery }) {
         var _a, _b;

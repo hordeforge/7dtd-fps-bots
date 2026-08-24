@@ -265,7 +265,7 @@ function brainLabel(neural: boolean | undefined, neuralLoaded: boolean | undefin
 
 function nearLabel(b: BotStat): string {
   if (b.nearestPlayerDist === undefined || b.nearestPlayerDist < 0) {
-    return "—";
+    return "n/a";
   }
   return `${b.nearestPlayerDist}m${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
 }
@@ -469,11 +469,22 @@ function sortArrowNode(h: CreateElement, sort: SortState, key: string): unknown 
 // One scoreboard row: draggable for pointer users; the Team select is the
 // keyboard/screen-reader path to the same action (dragging needs an
 // alternative that does not rely on pointer precision, WCAG 2.5.7).
-function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotAction) => void, teamOptions: Array<unknown>, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void): unknown {
+// changedSig (when non-null) remounts the row with the flash class so a
+// changed bot blinks once; the class drops on the next unchanged poll.
+function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotAction) => void, teamOptions: Array<unknown>, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void, changedSig: string | null): unknown {
+  let rowClass = "";
+  if (changedSig !== null) {
+    rowClass = "botmod-flash";
+    if (dragName === b.name) {
+      rowClass += " botmod-drag";
+    }
+  } else if (dragName === b.name) {
+    rowClass = "botmod-drag";
+  }
   return h("tr", {
-    key: b.entityId,
+    key: changedSig === null ? String(b.entityId) : `${b.entityId}:${changedSig}`,
     draggable: true,
-    className: dragName === b.name ? "botmod-drag" : "",
+    className: rowClass,
     title: "Drag onto a team bucket",
     onDragStart: (e: { dataTransfer: { setData: (t: string, v: string) => void; effectAllowed: string } }): void => {
       e.dataTransfer.setData("text/plain", b.name);
@@ -512,6 +523,14 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
 // Sortable column header: a real button inside the th keeps sorting keyboard
 // operable (2.1.1); aria-sort exposes the current direction so the arrow glyph
 // can stay hidden from assistive tech.
+// Churn visibility: signature of the per-bot fields that change during play.
+// Compared against the previous poll so changed rows flash (see botRow).
+function rowSig(b: BotStat): string {
+  return `${numOr(b.health, -1)}|${b.status}|${numOr(b.team, 0)}|${numOr(b.players, 0)}|${numOr(b.zombies, 0)}|${numOr(b.deaths, 0)}|${numOr(b.score, 0)}|${numOr(b.level, 0)}`;
+}
+
+let prevRowSigs: Map<number, string> = new Map();
+
 function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: string, post: (body: BotAction) => void, sort: SortState, setSort: (v: SortState | ((prev: SortState) => SortState)) => void, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void): unknown {
   const th = (label: string, key: string): unknown =>
     h("th", {
@@ -528,6 +547,19 @@ function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, 
   for (let t = 0; t <= teamCount; t++) {
     teamOptions.push(h("option", { key: t, value: String(t) }, teamLabel(t)));
   }
+  const sigs = new Map<number, string>();
+  for (const b of bots) {
+    sigs.set(b.entityId, rowSig(b));
+  }
+  const changed = (id: number): string | null => {
+    const current = sigs.get(id);
+    // No flash on the first paint; only actual poll-to-poll changes flash.
+    if (prevRowSigs.size === 0 || current === undefined || prevRowSigs.get(id) === current) {
+      return null;
+    }
+    return current;
+  };
+  prevRowSigs = sigs;
   return h("div", { className: "botmod-scoreboard" },
     h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team or use the Team column`),
     bots.length === 0
@@ -541,7 +573,7 @@ function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, 
             th("Team", "team"),
             h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))),
           h("tbody", null, [...bots].sort(bySortKey(sort)).map((b): unknown =>
-            botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver)))));
+            botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver, changed(b.entityId))))));
 }
 
 function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {

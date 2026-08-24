@@ -58,6 +58,16 @@ a[data-for="tooltip-Bot"]::before {
 /* The remove glyph is tiny by nature; pad it out to a >= 24px square target. */
 .botmod-remove { font-size: .72rem; padding: .05rem .45rem; min-width: 24px; }
 .botmod-armed { border-color: rgba(255, 112, 112, .9); color: #ff7070; font-weight: 700; }
+/* Churn visibility: a bot whose live fields changed since the last poll
+   flashes once and fades (see botRow's changedSig remount). Uses the accent
+   hue, never the ok/warn/bad severity ramp. */
+@media (prefers-reduced-motion: no-preference) {
+  tr.botmod-flash td { animation: botmod-flash 1s ease-out; }
+}
+@keyframes botmod-flash {
+  0% { background: rgba(138, 180, 248, .26); }
+  100% { background: transparent; }
+}
 @media (prefers-reduced-motion: no-preference) {
   .botmod-armed { animation: botmod-blink 1s step-start infinite; }
 }
