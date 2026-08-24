@@ -169,7 +169,7 @@ namespace BotMod.Commands
                 if (pos == UnityEngine.Vector3.zero) pos = BotSpawner.PickSpawnNearPlayer(world, target, ModApi.Config); // retry
                 if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) spawned++;
             }
-            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {target.EntityName ?? target.PlayerDisplayName ?? ident} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
+            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {BotMod.Config.LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident)} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
         }
         static EntityPlayer FindPlayerBySender(World world, CommandSenderInfo sender)
         {
@@ -186,7 +186,7 @@ namespace BotMod.Commands
         {
             try {
                 var names = new List<string>();
-                if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{p.EntityName ?? p.PlayerDisplayName ?? "?"}#{p.entityId}");
+                if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{BotMod.Config.LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
                 return names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none online)";
             } catch { return "(unknown)"; }
         }
