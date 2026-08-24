@@ -295,7 +295,10 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                       f"({ex.__class__.__name__}: {ex}); promotion gate treats it as unmatched",
                       file=sys.stderr)
                 current_held = float("-inf")
-        if candidate_held >= current_held or current_held == float("-inf"):
+        # A failed probe scores -inf and must never promote, even against a
+        # champion that is itself unreadable (-inf): -inf >= -inf is True, so
+        # gate on the candidate being finite first.
+        if candidate_held > float("-inf") and (candidate_held >= current_held or current_held == float("-inf")):
             ga.save_best(best_path, best_w, generation=gens - 1, fitness=best_f, config=config)
             print(f"best -> {best_path}  gen {gens-1}  train {best_f:+.4f}  held40 {candidate_held:+.4f} (promoted, beats {current_held:+.4f})")
         else:

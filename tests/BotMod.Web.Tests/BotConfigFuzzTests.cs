@@ -58,6 +58,11 @@ static class BotConfigFuzzTests
         Check(cfg.AttackRange >= 3f && cfg.AttackRange <= cfg.VisionRange, ctx + ": AttackRange " + cfg.AttackRange + " vs VisionRange " + cfg.VisionRange);
         Check(cfg.AimJitterDegrees >= 0f && cfg.AimJitterDegrees <= 30f, ctx + ": AimJitterDegrees out of range: " + cfg.AimJitterDegrees);
         Check(cfg.HeadshotChance >= 0f && cfg.HeadshotChance <= 1f, ctx + ": HeadshotChance out of range: " + cfg.HeadshotChance);
+        // Multiplier feeds Mathf.RoundToInt(dmg*mult): must be clamped and
+        // finite or the int cast overflows (unspecified result can heal targets).
+        Check(!float.IsNaN(cfg.HeadshotMultiplier) && !float.IsInfinity(cfg.HeadshotMultiplier)
+            && cfg.HeadshotMultiplier >= 1f && cfg.HeadshotMultiplier <= 10f,
+            ctx + ": HeadshotMultiplier out of range: " + cfg.HeadshotMultiplier);
         Check(cfg.BurstMin >= 1 && cfg.BurstMin <= 20, ctx + ": BurstMin out of range: " + cfg.BurstMin);
         Check(cfg.BurstMax >= cfg.BurstMin && cfg.BurstMax <= 30, ctx + ": BurstMax " + cfg.BurstMax + " vs BurstMin " + cfg.BurstMin);
         Check(cfg.BotTeamCount >= 0 && cfg.BotTeamCount <= 8, ctx + ": BotTeamCount out of range: " + cfg.BotTeamCount);
@@ -66,6 +71,23 @@ static class BotConfigFuzzTests
         Check(cfg.SpawnNearPlayerChance >= 0f && cfg.SpawnNearPlayerChance <= 1f, ctx + ": SpawnNearPlayerChance out of range: " + cfg.SpawnNearPlayerChance);
         Check(cfg.BotNames != null && cfg.BotNames.Length > 0, ctx + ": BotNames empty after Normalize");
         Check(cfg.LoadoutPool != null && cfg.LoadoutPool.Length > 0, ctx + ": LoadoutPool empty after Normalize");
+
+        // Every float field is finite after load: bare NaN/Infinity literals
+        // parse cleanly (Newtonsoft) and survive Max/Min clamp chains, so
+        // Normalize replaces them with defaults instead of letting them reach
+        // divisor math and the neural obs vector.
+        float[] floats =
+        {
+            cfg.BotHealth, cfg.VisionRange, cfg.VisionAngle, cfg.LoseTargetRange,
+            cfg.LoseTargetTimeSec, cfg.AttackRange, cfg.AimJitterDegrees,
+            cfg.HeadshotChance, cfg.HeadshotMultiplier, cfg.BurstPauseSec,
+            cfg.ReactionTimeSec, cfg.PathRecalcIntervalSec, cfg.StuckTimeoutSec,
+            cfg.RandomWanderRadius, cfg.RandomWanderIntervalSec, cfg.SpawnRadius,
+            cfg.SpawnProtectionSec, cfg.SpawnNearPlayerChance, cfg.StrafeChance,
+            cfg.DodgeOnHitChance
+        };
+        for (int i = 0; i < floats.Length; i++)
+            Check(!float.IsNaN(floats[i]) && !float.IsInfinity(floats[i]), ctx + ": float field #" + i + " not finite after Normalize: " + floats[i]);
 
         // Team map: canonical keys only, values inside the loaded team range.
         Dictionary<string, int> snap = cfg.SnapshotTeamAssignments();
@@ -268,6 +290,32 @@ static class BotConfigFuzzTests
                 string p = Path.Combine(dir, "root-" + d + ".json");
                 File.WriteAllText(p, rootDocs[d]);
                 FuzzLoad(p, "root-doc<" + (rootDocs[d].Length == 0 ? "empty" : rootDocs[d]) + ">");
+            }
+
+            // 4. Bare NaN/Infinity float literals parse into float properties
+            //    (Newtonsoft) and must come out as finite defaults, not survive
+            //    the Max/Min clamp chains (NaN is absorbing for both).
+            {
+                string nan = "{\"BotHealth\": NaN, \"VisionRange\": Infinity, \"HeadshotMultiplier\": -Infinity}";
+                string p = Path.Combine(dir, "nan-literals.json");
+                File.WriteAllText(p, nan);
+                FuzzLoad(p, "nan-literals");
+                BotMod.Config.BotConfig cfg = BotMod.Config.BotConfig.Load(p);
+                Check(cfg.BotHealth == 100f && cfg.VisionRange == 70f && cfg.HeadshotMultiplier == 2f,
+                    "nan-literals: non-finite values did not fall back to defaults ("
+                    + cfg.BotHealth + "/" + cfg.VisionRange + "/" + cfg.HeadshotMultiplier + ")");
+            }
+
+            // 5. HeadshotMultiplier magnitude: an out-of-range value used to
+            //    reach Mathf.RoundToInt(dmg*mult) unclamped and overflow the
+            //    int damage cast.
+            {
+                string big = "{\"HeadshotMultiplier\": 3e8}";
+                string p = Path.Combine(dir, "headshot-mult.json");
+                File.WriteAllText(p, big);
+                BotMod.Config.BotConfig cfg = BotMod.Config.BotConfig.Load(p);
+                Check(cfg.HeadshotMultiplier >= 1f && cfg.HeadshotMultiplier <= 10f,
+                    "headshot-mult: 3e8 survived unclamped (" + cfg.HeadshotMultiplier + ")");
             }
 
             // Randomized mutants.

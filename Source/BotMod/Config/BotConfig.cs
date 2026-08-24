@@ -213,23 +213,40 @@ namespace BotMod.Config
             TargetBotCount = Math.Max(0, Math.Min(64, TargetBotCount));
             MaxBots = Math.Max(TargetBotCount, Math.Min(64, MaxBots));
             BotAmmoCount = Math.Max(0, Math.Min(10000, BotAmmoCount));
-            BotHealth = Math.Max(10f, Math.Min(10000f, BotHealth));
             Difficulty = Math.Max(0, Math.Min(4, Difficulty));
-            VisionRange = Math.Max(8f, Math.Min(300f, VisionRange));
-            LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, LoseTargetRange));
-            AttackRange = Math.Max(3f, Math.Min(VisionRange, AttackRange));
-            AimJitterDegrees = Math.Max(0f, Math.Min(30f, AimJitterDegrees));
-            HeadshotChance = Math.Max(0f, Math.Min(1f, HeadshotChance));
+            // Finite guards before every clamp below: Newtonsoft parses bare
+            // NaN/Infinity literals into float properties, and Math.Max/Math.Min
+            // return NaN when either operand is NaN, so a plain clamp chain lets
+            // NaN through into hp fractions (divisor side of Health/BotHealth),
+            // the neural obs vector and RoundToInt(dmg*HeadshotMultiplier)
+            // (same boundary convention as BotCharacter.Normalize).
+            BotHealth = Math.Max(10f, Math.Min(10000f, Finite(BotHealth, 100f)));
+            VisionRange = Math.Max(8f, Math.Min(300f, Finite(VisionRange, 70f)));
+            LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, Finite(LoseTargetRange, 85f)));
+            AttackRange = Math.Max(3f, Math.Min(VisionRange, Finite(AttackRange, 45f)));
+            AimJitterDegrees = Math.Max(0f, Math.Min(30f, Finite(AimJitterDegrees, 2f)));
+            HeadshotChance = Math.Max(0f, Math.Min(1f, Finite(HeadshotChance, 0.08f)));
+            // Multiplier feeds an int damage cast: out-of-range magnitudes would
+            // overflow Mathf.RoundToInt above ~1.3e8 (unspecified int result,
+            // negative values heal targets). Default 2.0.
+            HeadshotMultiplier = Math.Max(1f, Math.Min(10f, Finite(HeadshotMultiplier, 2f)));
             BurstMin = Math.Max(1, Math.Min(20, BurstMin));
             BurstMax = Math.Max(BurstMin, Math.Min(30, BurstMax));
-            BurstPauseSec = Math.Max(0.1f, Math.Min(3f, BurstPauseSec));
-            ReactionTimeSec = Math.Max(0f, Math.Min(1.5f, ReactionTimeSec));
-            PathRecalcIntervalSec = Math.Max(0.08f, Math.Min(5f, PathRecalcIntervalSec));
-            StuckTimeoutSec = Math.Max(0.5f, Math.Min(20f, StuckTimeoutSec));
-            SpawnRadius = Math.Max(2f, Math.Min(500f, SpawnRadius));
-            SpawnNearPlayerChance = Math.Max(0f, Math.Min(1f, SpawnNearPlayerChance));
-            StrafeChance = Math.Max(0f, Math.Min(1f, StrafeChance));
-            DodgeOnHitChance = Math.Max(0f, Math.Min(1f, DodgeOnHitChance));
+            BurstPauseSec = Math.Max(0.1f, Math.Min(3f, Finite(BurstPauseSec, 0.65f)));
+            ReactionTimeSec = Math.Max(0f, Math.Min(1.5f, Finite(ReactionTimeSec, 0.28f)));
+            PathRecalcIntervalSec = Math.Max(0.08f, Math.Min(5f, Finite(PathRecalcIntervalSec, 0.45f)));
+            StuckTimeoutSec = Math.Max(0.5f, Math.Min(20f, Finite(StuckTimeoutSec, 2f)));
+            SpawnRadius = Math.Max(2f, Math.Min(500f, Finite(SpawnRadius, 25f)));
+            SpawnNearPlayerChance = Math.Max(0f, Math.Min(1f, Finite(SpawnNearPlayerChance, 0.35f)));
+            StrafeChance = Math.Max(0f, Math.Min(1f, Finite(StrafeChance, 0.9f)));
+            DodgeOnHitChance = Math.Max(0f, Math.Min(1f, Finite(DodgeOnHitChance, 0.75f)));
+            // Consumed unclamped (FOV gate, wander pacing, spawn protection):
+            // still must be finite after load.
+            VisionAngle = Finite(VisionAngle, 190f);
+            LoseTargetTimeSec = Finite(LoseTargetTimeSec, 4.5f);
+            RandomWanderRadius = Finite(RandomWanderRadius, 60f);
+            RandomWanderIntervalSec = Finite(RandomWanderIntervalSec, 5f);
+            SpawnProtectionSec = Finite(SpawnProtectionSec, 1.2f);
             BotTeamCount = Math.Max(0, Math.Min(8, BotTeamCount));
             lock (TeamGate)
             {
@@ -268,6 +285,14 @@ namespace BotMod.Config
             LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, LoseTargetRange));
             AttackRange = Math.Max(3f, Math.Min(VisionRange, AttackRange));
         }
+        /// <summary>v replaced by fallback when NaN or Infinite (hand-edited
+        /// JSON may carry bare NaN/Infinity literals that survive Max/Min
+        /// clamps); range clamps then apply to the finite value.</summary>
+        static float Finite(float v, float fallback)
+        {
+            return float.IsNaN(v) || float.IsInfinity(v) ? fallback : v;
+        }
+
         /// <summary>Copy of <paramref name="items"/> without null or empty
         /// entries. Never returns null; an empty result means "everything was
         /// dropped" and the caller applies its documented fallback.</summary>

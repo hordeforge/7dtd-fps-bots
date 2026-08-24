@@ -827,7 +827,7 @@ namespace BotMod.Core
             // decorative bag ammo and never runs dry), so the honest equivalent
             // is magazine fill: full after each reload, draining per shot.
             float ammoFrac = 0f;
-            try { ammoFrac = Mathf.Clamp01(_ammo / Mathf.Max(1, Weapon.MagSize)); } catch { }
+            try { ammoFrac = Mathf.Clamp01(_ammo / (float)System.Math.Max(1, Weapon.MagSize)); } catch { }
             float stuck = 0f;
             try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); } catch { }
             return new BotMod.AI.BotNeuralBrain.NeuralInputs
