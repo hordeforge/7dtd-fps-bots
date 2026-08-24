@@ -33,12 +33,15 @@ def main():
         print(f"gens {len(gens)}  best last {best[-1] if best else 'n/a'}")
         return
     out = Path(args.out) if args.out else p.parent / "plot.png"
-    plt.figure()
+    fig = plt.figure()
     plt.plot(gens, best, label="best")
     plt.plot(gens, mean, label="mean")
     plt.xlabel("generation"); plt.ylabel("fitness")
     plt.legend(); plt.tight_layout()
     plt.savefig(out)
+    # Same release contract as every other plotting site (viz/sweep/report/
+    # dashboard): a saved figure must not stay registered in pyplot's state.
+    plt.close(fig)
     print(f"saved {out}")
 
 if __name__ == "__main__":

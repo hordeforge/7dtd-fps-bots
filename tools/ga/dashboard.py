@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import html
 import io
 import json
 import tempfile
@@ -82,7 +83,10 @@ def chart_card(data_b64: str, alt: str) -> str:
 
 
 def load_run_csv(run: Path):
-    rows = list(csv.DictReader(open(run / "fitness.csv", encoding="utf-8")))
+    # Bounded open: this helper runs three times per run per build (curves,
+    # held strip, run table), so each read must release its own descriptor.
+    with open(run / "fitness.csv", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
     if not rows:
         return [], [], [], [], [], []
     gens = [int(r["gen"]) for r in rows]
@@ -193,13 +197,16 @@ def build(runs, out: Path, replays):
 <p style="color:#94a3b8;font-size:13px">Neuroevolution of the FPS bot controller — 14&rarr;16&rarr;5 MLP, genetic algorithm, held-gated promotion.</p>
 <div>
   <span class="chip">Champion gen <b class="b">""")
-    chunks.append(str(best_meta.get("generation", "?")))
+    # best.meta.json travels via git (whitelisted in evolved/.gitignore), so
+    # its values are untrusted text from the dashboard's perspective: escape
+    # before they land in the page.
+    chunks.append(html.escape(str(best_meta.get("generation", "?"))))
     chunks.append("""</b></span>
   <span class="chip">train <b class="b">""")
     chunks.append(f"{best_meta.get('fitness',0):.1f}")
     chunks.append("""</b></span>
   <span class="chip">hash <b class="b">""")
-    chunks.append(str(best_meta.get("configHash", "?"))[:8])
+    chunks.append(html.escape(str(best_meta.get("configHash", "?"))[:8]))
     chunks.append("""</b></span>
 </div>
 """)
@@ -246,8 +253,13 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
                      cfg.get("islands"), f"{heldv[-1]:.2f}" if heldv else "—"))
     rows.sort(key=lambda r: float(r[5]) if r[5] != "—" else 0, reverse=True)
     chunks.append("""<h2>5 · Runs</h2><div class="card"><table><caption style="text-align:left">Summary of every GA run: population, generations, curriculum, islands, final held-out score</caption><thead><tr><th scope="col">run</th><th scope="col">pop</th><th scope="col">gens</th><th scope="col">curriculum</th><th scope="col">islands</th><th scope="col">held</th></tr></thead><tbody>""")
+    # Every cell is filesystem/config text (run dir names, hand-editable
+    # config.json values), so it is HTML-escaped before it lands in the page:
+    # a crafted run name must not execute in the browser of whoever opens the
+    # generated dashboard.
     for r in rows:
-        chunks.append(f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td><td>{r[5]}</td></tr>")
+        cells = "".join(f"<td>{html.escape(str(c))}</td>" for c in r)
+        chunks.append(f"<tr>{cells}</tr>")
     chunks.append("</tbody></table></div>")
     # Footer note in #94a3b8 (not the dimmer #64748b): it must keep 4.5:1
     # contrast on the dark page background.

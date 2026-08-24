@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import html
 import io
 import json
 from pathlib import Path
@@ -164,7 +165,7 @@ def build(runs: list[Path], out: Path):
     for run_dir in runs:
         csv_path = run_dir / "fitness.csv"
         if not csv_path.exists():
-            parts.append(f"<p><b>{run_dir.name}</b>: no fitness.csv</p>")
+            parts.append(f"<p><b>{html.escape(run_dir.name)}</b>: no fitness.csv</p>")
             continue
         gens, best, mean, median, q25, q75 = load_csv(csv_path)
         cfg = {}
@@ -175,8 +176,10 @@ def build(runs: list[Path], out: Path):
 
         # headline stats
         rel = (best[-1] - best[0]) / max(1e-9, abs(best[0])) * 100 if best else 0
+        # pop/seed come from the run's config.json; a hand-edited file may hold
+        # arbitrary text, so they are escaped like every other external string.
         headline = (
-            f"gens {len(gens)} · pop {cfg.get('pop','?')} · seed {cfg.get('seed','?')} · "
+            f"gens {len(gens)} · pop {html.escape(str(cfg.get('pop','?')))} · seed {html.escape(str(cfg.get('seed','?')))} · "
             f"best {best[-1]:+.3f} (g{gens[best.index(max(best))]} peak {max(best):+.3f}) · "
             f"Δ vs g0 {rel:+.1f}% · mean {mean[-1]:+.3f}"
         )
@@ -188,9 +191,13 @@ def build(runs: list[Path], out: Path):
         else:
             band = wh = topo = None
 
-        sec = [f"<h2 style='margin:18px 0 4px'>{run_dir.name}</h2>",
+        # Run dir names and paths are filesystem text (an --runs argument or a
+        # shared run directory), so they must be HTML-escaped before they land
+        # in the report: a name like "<img src=x onerror=...>" would otherwise
+        # execute in the browser of whoever opens the generated file.
+        sec = [f"<h2 style='margin:18px 0 4px'>{html.escape(run_dir.name)}</h2>",
                f"<p style='color:#334155;font-size:13px'>{headline}</p>",
-               f"<p style='color:#64748b;font-size:11px'>source: <code>{csv_path}</code> · {len(gens)} rows</p>"]
+               f"<p style='color:#64748b;font-size:11px'>source: <code>{html.escape(str(csv_path))}</code> · {len(gens)} rows</p>"]
         if band: sec.append(f"<div style='margin:10px 0'>{img_tag(band, 'fitness band over generations')}</div>")
         if wh:   sec.append(f"<div style='margin:10px 0'>{img_tag(wh, 'weight histogram')}</div>")
         if topo: sec.append(f"<div style='margin:10px 0'>{img_tag(topo, 'best network topology')}</div>")
@@ -198,7 +205,7 @@ def build(runs: list[Path], out: Path):
             sec.append("<p style='color:#b45309'>matplotlib not installed — showing headline only. <code>pip install matplotlib</code></p>")
         parts.append("\n".join(sec))
 
-    html = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bot Evolution Report</title>
 <style>
  body{{font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 980px; margin: 28px auto; padding: 0 18px; color:#0f172a}}
@@ -208,12 +215,12 @@ def build(runs: list[Path], out: Path):
  .muted{{color:#64748b; font-size:12px}}
 </style>
 <h1>Clanker — Evolution Report</h1>
-<p class="muted">Generated {Path.cwd()} · {__import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
+<p class="muted">Generated {html.escape(str(Path.cwd()))} · {__import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
 {"<hr style='border:none;border-top:1px solid #e2e8f0;margin:14px 0'/>".join(parts) if parts else "<p>No runs.</p>"}
 <footer class="muted" style="margin-top:22px">Charts score the headless combat sim (tools/ga/harness.py).</footer>
 """
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
+    out.write_text(page, encoding="utf-8")
     print(f"report -> {out}")
     return out
 
