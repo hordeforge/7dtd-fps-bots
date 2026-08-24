@@ -82,7 +82,7 @@ def _load_resume(resume: str, seed: int, pop: int):
     return start_gen, pop_w, top3[0].copy(), best_f
 
 
-def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
+def _held_probe(weights) -> float:
     """Held-out score on HELD_SEED under the shared canonical measuring stick
     (harness.canonical_scores: tanh + DEFAULT_FITNESS scalarization + the
     F=18 gate; docs/research/03: "eval gate pins F=18"). Training knobs are
@@ -91,7 +91,7 @@ def _held_probe(weights, matches: int = HELD_MATCHES) -> float:
     probe is visible instead of silently gating or silently waving every
     candidate through (-inf >= -inf)."""
     try:
-        return float(np.mean(harness.canonical_scores(weights, HELD_SEED, HELD_SEED, matches)))
+        return float(np.mean(harness.canonical_scores(weights, HELD_SEED, HELD_SEED, HELD_MATCHES)))
     except Exception as ex:
         print(f"held probe failed ({ex.__class__.__name__}: {ex}); scored -inf",
               file=sys.stderr)
@@ -296,10 +296,10 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                       f"({ex.__class__.__name__}: {ex}); promotion gate treats it as unmatched",
                       file=sys.stderr)
                 current_held = float("-inf")
-        # A failed probe scores -inf and must never promote, even against a
-        # champion that is itself unreadable (-inf): -inf >= -inf is True, so
-        # gate on the candidate being finite first.
-        if candidate_held > float("-inf") and (candidate_held >= current_held or current_held == float("-inf")):
+        # A failed probe scores -inf and must never promote. The finite guard
+        # is what rejects it: against a champion that is itself unreadable
+        # (current_held == -inf) the >= would otherwise pass -inf through.
+        if candidate_held > float("-inf") and candidate_held >= current_held:
             ga.save_best(best_path, best_w, generation=gens - 1, fitness=best_f, config=config)
             print(f"best -> {best_path}  gen {gens-1}  train {best_f:+.4f}  held40 {candidate_held:+.4f} (promoted, beats {current_held:+.4f})")
         else:

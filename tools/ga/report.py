@@ -100,20 +100,24 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
     return optimized_png_bytes(fig)
 
 
-def weight_hist(run_dir: Path) -> str | None:
-    """Weight histogram of the final best (or first gen ckpt if no best yet)."""
+def _last_best(run_dir: Path):
+    """(best genome, last ckpt json) of the newest gen_*.json, or (None, None)."""
     import numpy as np
     import ga
     cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
     if not cand:
-        return None
-    # pick the best genome of the last generation file
+        return None, None
     last = json.loads(cand[-1].read_text(encoding="utf-8"))
-    # top3 is [w, ...] flat arrays
-    w = None
-    if "top3" in last and last["top3"]:
-        w = np.array(last["top3"][0], dtype=float)
-    else:
+    if "top3" not in last or not last["top3"]:
+        return None, None
+    return np.array(last["top3"][0], dtype=float), last
+
+
+def weight_hist(run_dir: Path) -> str | None:
+    """Weight histogram of the final best (or first gen ckpt if no best yet)."""
+    import numpy as np
+    w, last = _last_best(run_dir)
+    if w is None:
         return None
     fig, ax = plt.subplots(figsize=(9, 2.6))
     ax.hist(w, bins=28, color=CAB, alpha=0.88, edgecolor="white", lw=0.6)
@@ -129,15 +133,9 @@ def best_net(run_dir: Path) -> str | None:
     Colors encode the final best's weights; gives a quick “is it dead units”
     scan without opening JSON.
     """
-    import numpy as np
-    import ga
-    cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
-    if not cand:
+    w, _ = _last_best(run_dir)
+    if w is None:
         return None
-    last = json.loads(cand[-1].read_text(encoding="utf-8"))
-    if "top3" not in last or not last["top3"]:
-        return None
-    w = np.array(last["top3"][0], dtype=float)
     H, IN, OUT = 16, 14, 5
     W1 = w[: H * IN].reshape(H, IN)
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.4), gridspec_kw={"width_ratios": [1.05, 1]})
@@ -150,7 +148,7 @@ def best_net(run_dir: Path) -> str | None:
     off = H * IN + H
     W2 = w[off: off + OUT * H].reshape(OUT, H)
     im1 = axes[1].imshow(W2, aspect="auto", cmap="RdBu", vmin=-0.7, vmax=0.7)
-    axes[1].set_title("W2  (outputs × hidden)  5×16"); axes[1].set_xlabel("hidden 0..15"); axes[1].set_ylabel("outputs 0..4")
+    axes[1].set_xlabel("hidden 0..15"); axes[1].set_ylabel("outputs 0..4")
     axes[1].set_xticks(range(H)); axes[1].set_xticklabels(range(H), fontsize=7)
     axes[1].set_yticks(range(OUT)); axes[1].set_yticklabels(["camp", "retreat", "aim", "fire", "strafe"], fontsize=7)
     fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04, label="weight")

@@ -20,7 +20,6 @@ import argparse
 import base64
 import csv
 import html
-import io
 import json
 import tempfile
 from pathlib import Path
@@ -43,27 +42,15 @@ import sys as _sys  # noqa: E402 -- sibling modules resolve only after the sys.p
 _sys.path.insert(0, str(TOOLS))
 from replay import record_match, render_html  # noqa: E402 -- same bootstrap
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
+import report as _report  # noqa: E402 -- same bootstrap
 
 
 def fig_b64(fig) -> str:
-    """Palette-optimized PNG as base64. Charts are flat-color figures, so an
-    adaptive 256-color palette keeps them visually identical at ~3-4x smaller
-    (the embedded charts are nearly all of this file's weight)."""
-    bio = io.BytesIO()
-    fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    raw = bio.getvalue()
-    try:
-        from PIL import Image
-    except ImportError:
-        return base64.b64encode(raw).decode()
-    im = Image.open(io.BytesIO(raw))
-    if im.mode != "RGBA":
-        im = im.convert("RGBA")
-    q = im.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
-    out = io.BytesIO()
-    q.save(out, "PNG", optimize=True)
-    return base64.b64encode(out.getvalue()).decode()
+    """Palette-optimized PNG as base64 (quantizer lives in report.py: charts
+    are flat-color figures, so an adaptive 256-color palette keeps them
+    visually identical at ~3-4x smaller, which matters because the embedded
+    charts are nearly all of this file's weight)."""
+    return base64.b64encode(_report.optimized_png_bytes(fig)).decode()
 
 
 def png_dimensions(data_b64: str) -> tuple[int, int]:

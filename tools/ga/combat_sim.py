@@ -46,11 +46,8 @@ OUTPUTS = 5
 W1_LEN = HIDDEN * INPUTS
 B1_LEN = HIDDEN
 W2_LEN = OUTPUTS * HIDDEN
-W_ALL = W1_LEN + B1_LEN + W2_LEN + 5
 # Activation is selected per call, not via a module flag: harness.ACTIVATION
 # picks simulate_match (tanh, what ships) or simulate_match_relu (sweeps).
-_WALL_SET = 0
-_LAYOUT_TAG = "H16-tanh"
 
 
 @numba.njit
@@ -256,7 +253,6 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
     burst_left = np.empty(16, dtype=numba.int64)
     burst_cd = np.empty(16, dtype=numba.float32)
     reaction_cd = np.empty(16, dtype=numba.float32)
-    strafe_dir = np.empty(16, dtype=numba.int64)
     ammo = np.empty(16, dtype=numba.int64)
     reload_cd = np.empty(16, dtype=numba.float32)
     reserve = np.empty(16, dtype=numba.int64)
@@ -265,8 +261,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
         burst_left[i] = WEAPON_BURST_MIN[bweapon[i]]
         burst_cd[i] = 0.0
         reaction_cd[i] = 0.0
-        v, rng = _lcg01(rng)
-        strafe_dir[i] = 1 if v > 0.5 else -1
+        v, rng = _lcg01(rng)  # keep the draw: downstream rng stream is part of the frozen replay contract
         ammo[i] = WEAPON_MAG[bweapon[i]]
         reserve[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT
         spread[i] = 0.0
@@ -397,7 +392,6 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             if vmag > 1.3:
                 vx *= 1.3 / vmag; vy *= 1.3 / vmag
             bx[bi] += vx; by[bi] += vy
-            strafe_dir[bi] = 1 if strafe_sig > 0.5 else -1
             # clamp to arena 0..80
             if bx[bi] < 2: bx[bi] = 2
             if bx[bi] > 78: bx[bi] = 78

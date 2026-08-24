@@ -137,8 +137,7 @@ namespace BotMod.Core
                     Vector3 best = dm[RngPick(dm.Count)]; float bestDist = -1f;
                     List<Vector3> playerPos = new List<Vector3>();
                     try { if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null && !p.IsDead()) playerPos.Add(p.position); } catch { }
-                    if (playerPos.Count == 0) best = dm[RngPick(dm.Count)];
-                    else
+                    if (playerPos.Count > 0)
                     {
                         for (int tries = 0; tries < Math.Min(6, dm.Count); tries++)
                         {

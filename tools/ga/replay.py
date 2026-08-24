@@ -98,17 +98,6 @@ def _sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
 
 
-def _forward(w, x, hidden=16, outputs=5, inputs=INPUTS):
-    """tanh hidden MLP, flat w order: W1 row-maj(hidden x inputs) b1 W2 b2."""
-    W1 = np.array(w[: hidden * inputs]).reshape(hidden, inputs)
-    b1 = np.array(w[hidden * inputs: hidden * inputs + hidden])
-    off = hidden * inputs + hidden
-    W2 = np.array(w[off: off + outputs * hidden]).reshape(outputs, hidden)
-    b2 = np.array(w[off + outputs * hidden: off + outputs * hidden + outputs])
-    h = np.tanh(W1 @ np.array(x, dtype=float) + b1)
-    return W2 @ h + b2
-
-
 def _trait_jitter(net_id):
     h = (net_id * 2654435761) & 0xFFFFFFFF
     h = _lcg(h)
@@ -156,10 +145,10 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
     frames = []
     RECORD_STRIDE = 4  # ~12.5 fps at dt=0.05
 
-    # Flat-genome -> layer split hoisted out of the tick loop: _forward
-    # re-copied W1/b1/W2/b2 (~325 floats) on every call, once per live bot
-    # per tick (~n_bots * max_ticks array rebuilds per match). Same ops and
-    # dtypes as _forward (hidden 16, outputs 5), so traces stay bit-identical.
+    # Flat-genome -> layer split hoisted out of the tick loop: re-copying
+    # W1/b1/W2/b2 (~325 floats) on every call meant ~n_bots * max_ticks array
+    # rebuilds per match. Same ops and dtypes as the old _forward (hidden 16,
+    # outputs 5), so traces stay bit-identical.
     hid, outs = 16, 5
     W1 = np.array(w[: hid * INPUTS]).reshape(hid, INPUTS)
     b1 = np.array(w[hid * INPUTS: hid * INPUTS + hid])

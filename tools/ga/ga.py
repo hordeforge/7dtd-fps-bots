@@ -11,7 +11,7 @@ import json
 import math
 import random
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 
@@ -24,33 +24,6 @@ B1_LEN = HIDDEN
 W2_LEN = OUTPUTS * HIDDEN
 B2_LEN = OUTPUTS
 W = W1_LEN + B1_LEN + W2_LEN + B2_LEN  # 325
-
-# Deterministic LCG matching clanker/zdtd_bot (state -> state*1103515245+12345)
-def _lcg(state: int) -> int:
-    return (state * 1103515245 + 12345) & 0xFFFFFFFF
-
-
-def _lcg01(state: int) -> Tuple[float, int]:
-    state = _lcg(state)
-    v = ((state >> 8) & 0x00FFFFFF) / 16777216.0
-    return v, state
-
-
-def flat_to_layers(w: np.ndarray):
-    off = 0
-    w1 = w[off: off + W1_LEN].reshape(HIDDEN, INPUTS); off += W1_LEN
-    b1 = w[off: off + B1_LEN];                        off += B1_LEN
-    w2 = w[off: off + W2_LEN].reshape(OUTPUTS, HIDDEN); off += W2_LEN
-    b2 = w[off: off + B2_LEN]
-    return w1, b1, w2, b2
-
-
-def forward(w: np.ndarray, x: np.ndarray) -> np.ndarray:
-    w1, b1, w2, b2 = flat_to_layers(w)
-    h = np.tanh(w1 @ x + b1)
-    y = w2 @ h + b2
-    return y  # caller applies sigmoid/tanh per head
-
 
 def he_init(rng: np.random.Generator, inputs: int = INPUTS, hidden: int = HIDDEN) -> np.ndarray:
     """He-ish init scaled so the initial policy roughly matches heuristic."""
