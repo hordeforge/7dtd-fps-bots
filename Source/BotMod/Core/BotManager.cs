@@ -152,12 +152,32 @@ namespace BotMod.Core
         public int RemoveAllBots(string reason = "command")
         {
             var world = GameManager.Instance?.World; int n = 0;
+            // Bots whose world removal threw stay tracked: dropping them here
+            // would orphan a live entity nobody manages or can retry removing
+            // (the registry is the only handle to it). They are re-offered on
+            // the next `bot remove all`.
+            List<Bot> stuck = null;
             foreach (var b in _bots.ToArray())
             {
-                try { if (world != null) { var ent = world.GetEntity(b.EntityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(b.EntityId, EnumRemoveEntityReason.Killed); } } _botEntityIds.Remove(b.EntityId); n++; }
-                catch (Exception ex) { ModApi.Warn("Remove bot failed: " + ex.Message); }
+                bool removed = true;
+                try
+                {
+                    if (world != null)
+                    {
+                        var ent = world.GetEntity(b.EntityId) as EntityAlive;
+                        if (ent != null) { ent.SetDead(); world.RemoveEntity(b.EntityId, EnumRemoveEntityReason.Killed); }
+                    }
+                }
+                catch (Exception ex) { ModApi.Warn("Remove bot failed id=" + b.EntityId + ": " + ex.Message); removed = false; }
+                if (removed) n++;
+                else { if (stuck == null) stuck = new List<Bot>(); stuck.Add(b); }
             }
             _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
+            if (stuck != null)
+            {
+                foreach (var b in stuck) { _bots.Add(b); _botEntityIds.Add(b.EntityId); _botById[b.EntityId] = b; }
+                ModApi.Warn("RemoveAll kept " + stuck.Count + " bot(s) whose world removal threw; they stay tracked, retry 'bot remove all'.");
+            }
             if (n > 0) ModApi.Log($"Removed {n} bots ({reason}).");
             return n;
         }
@@ -166,7 +186,20 @@ namespace BotMod.Core
             var world = GameManager.Instance?.World;
             var bot = GetBot(entityId);
             if (bot == null) return false;
-            try { if (world != null) { var ent = world.GetEntity(entityId) as EntityAlive; if (ent != null) { ent.SetDead(); world.RemoveEntity(entityId, EnumRemoveEntityReason.Killed); } } } catch (Exception ex) { ModApi.Warn("Remove bot failed: " + ex.Message); }
+            // False means "still tracked": callers must not report success
+            // while the entity may still be alive in-world (it would run on
+            // unmanaged as vanilla AI with no registry entry left to find it).
+            bool removed = true;
+            if (world != null)
+            {
+                try
+                {
+                    var ent = world.GetEntity(entityId) as EntityAlive;
+                    if (ent != null) { ent.SetDead(); world.RemoveEntity(entityId, EnumRemoveEntityReason.Killed); }
+                }
+                catch (Exception ex) { ModApi.Warn("Remove bot failed id=" + entityId + ": " + ex.Message); removed = false; }
+            }
+            if (!removed) return false;
             _bots.Remove(bot); _botEntityIds.Remove(entityId); _botById.Remove(entityId);
             return true;
         }

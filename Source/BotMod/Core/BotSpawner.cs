@@ -311,7 +311,10 @@ namespace BotMod.Core
                     if (list.Count > 0) { _dmSpawns = list; _dmSpawnsWorld = worldName; ModApi.Log($"DM spawns: {list.Count} from {path} (world={worldName})"); return list; }
                 }
             }
-            catch (Exception ex) { ModApi.Warn("GetDmSpawns failed: " + ex.Message); }
+            // Rate-limited: the auto-respawn loop re-enters here every second
+            // while population is short, so a corrupt spawnpoints.xml would
+            // otherwise emit this line once per second indefinitely.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "GetDmSpawns failed: " + ex.Message); }
             // Nothing found for THIS world: return null, never a list memoized
             // under another world's name. Hits above check _dmSpawnsWorld, so
             // the failure path must honor the same keying or bots would spawn

@@ -80,9 +80,12 @@ namespace BotMod.AI
 
         /// <summary>Best-effort server->client chat broadcast (dedicated-safe). Uses reflection
         /// against GameManager/ChatMessageServer so the exact API signature never breaks the
-        /// build; no-op when the API differs or no players are connected.</summary>
+        /// build; no-op when the API differs or no players are connected. A persistent
+        /// no-send (game update changed every probed signature) is surfaced through the
+        /// rate-limited warn gate instead of disabling announcements silently forever.</summary>
         static void ChatMessageServer(string msg)
         {
+            bool sent = false;
             try
             {
                 var gm = GameManager.Instance;
@@ -106,7 +109,7 @@ namespace BotMod.AI
                             try
                             {
                                 if (ps.Length >= 2 && ps[0].ParameterType.Name == "EnumGameMessages" && ps[1].ParameterType == typeof(string))
-                                    { ov.Invoke(gm, new object[] { (int)0, msg }); return; }
+                                    { ov.Invoke(gm, new object[] { (int)0, msg }); sent = true; return; }
                             }
                             catch { }
                         }
@@ -127,9 +130,9 @@ namespace BotMod.AI
                             try
                             {
                                 if (p.Length >= 1 && p[0].ParameterType == typeof(byte))
-                                    { sp.Invoke(inst, new object[] { (byte)0 }); return; }
+                                    { sp.Invoke(inst, new object[] { (byte)0 }); sent = true; return; }
                                 if (p.Length >= 2)
-                                    { sp.Invoke(inst, new object[] { cts, msg, false }); return; }
+                                    { sp.Invoke(inst, new object[] { cts, msg, false }); sent = true; return; }
                             }
                             catch { }
                         }
@@ -138,6 +141,7 @@ namespace BotMod.AI
                 catch { }
             }
             catch { }
+            if (!sent) ModApi.WarnRateLimited(() => "kill chat announce not delivered: no usable GameMessage/ChatMessageServer API (kill log lines unaffected)");
         }
     }
 }

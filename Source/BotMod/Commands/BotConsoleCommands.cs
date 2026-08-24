@@ -131,8 +131,11 @@ namespace BotMod.Commands
                 }
                 if (int.TryParse(arg, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
                 {
+                    bool exists = BotManager.Instance.GetBot(id) != null;
                     bool ok = BotManager.Instance.RemoveBot(id);
-                    SdtdConsole.Instance.Output(ok ? $"Removed bot {id}." : $"No bot with id {id}. Try: bot list");
+                    if (ok) SdtdConsole.Instance.Output($"Removed bot {id}.");
+                    else if (exists) SdtdConsole.Instance.Output($"Removal of bot {id} failed; it stays tracked - see server log, then retry.");
+                    else SdtdConsole.Instance.Output($"No bot with id {id}. Try: bot list");
                     return;
                 }
                 SdtdConsole.Instance.Output($"Unrecognized argument '{arg}'.\n  Usage: bot remove all | bot remove <id>");

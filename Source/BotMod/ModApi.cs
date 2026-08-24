@@ -46,7 +46,7 @@ namespace BotMod
                 catch (Exception ex) { Error("ModEvents.GameUpdate register failed: " + ex); }
 
                 try { ModEvents.WorldShuttingDown.RegisterHandler(OnWorldShuttingDown); }
-                catch (Exception ex) { Error("WorldShuttingDown register failed: " + ex.Message); }
+                catch (Exception ex) { Error("WorldShuttingDown register failed: " + ex); }
 
                 Log("BotMod init OK. Commands: bot help");
             }
@@ -86,8 +86,10 @@ namespace BotMod
 
         static void OnWorldShuttingDown(ref ModEvents.SWorldShuttingDownData data)
         {
+            // Full exception (not ex.Message): shutdown cleanup failures need
+            // the stack to be diagnosable, same as every other handler here.
             try { BotManager.Instance.OnWorldShuttingDown(); }
-            catch (Exception ex) { Warn("WorldShuttingDown cleanup failed: " + ex.Message); }
+            catch (Exception ex) { Warn("WorldShuttingDown cleanup failed: " + ex); }
         }
 
         public static bool ShouldRun()
