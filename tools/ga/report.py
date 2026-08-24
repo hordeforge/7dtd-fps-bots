@@ -140,10 +140,9 @@ def best_net(run_dir: Path) -> str | None:
     w = np.array(last["top3"][0], dtype=float)
     H, IN, OUT = 16, 14, 5
     W1 = w[: H * IN].reshape(H, IN)
-    b1 = w[H * IN: H * IN + H]
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.4), gridspec_kw={"width_ratios": [1.05, 1]})
     im0 = axes[0].imshow(W1, aspect="auto", cmap="RdBu", vmin=-0.9, vmax=0.9)
-    axes[0].set_title("W1  (hidden × inputs)  16×14   +  b1"); axes[0].set_xlabel("inputs 0..13"); axes[0].set_ylabel("hidden 0..15")
+    axes[0].set_title("W1  (hidden × inputs)  16×14"); axes[0].set_xlabel("inputs 0..13"); axes[0].set_ylabel("hidden 0..15")
     axes[0].set_xticks(range(IN)); axes[0].set_xticklabels(range(IN), fontsize=7)
     axes[0].set_yticks(range(H))
     fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04, label="weight")
@@ -155,7 +154,7 @@ def best_net(run_dir: Path) -> str | None:
     axes[1].set_xticks(range(H)); axes[1].set_xticklabels(range(H), fontsize=7)
     axes[1].set_yticks(range(OUT)); axes[1].set_yticklabels(["camp", "retreat", "aim", "fire", "strafe"], fontsize=7)
     fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04, label="weight")
-    axes[1].set_title("W2  (outputs × hidden)  5×16   —  b2 as right bar", pad=10)
+    axes[1].set_title("W2  (outputs × hidden)  5×16", pad=10)
     fig.tight_layout()
     return optimized_png_bytes(fig)
 
@@ -202,7 +201,7 @@ def build(runs: list[Path], out: Path):
         if wh:   sec.append(f"<div style='margin:10px 0'>{img_tag(wh, 'weight histogram')}</div>")
         if topo: sec.append(f"<div style='margin:10px 0'>{img_tag(topo, 'best network topology')}</div>")
         if not HAS_MPL:
-            sec.append("<p style='color:#b45309'>matplotlib not installed — showing headline only. <code>pip install matplotlib</code></p>")
+            sec.append("<p style='color:#b45309'>matplotlib not installed — showing headline only. <code>uv pip install matplotlib</code></p>")
         parts.append("\n".join(sec))
 
     page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

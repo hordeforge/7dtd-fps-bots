@@ -26,6 +26,11 @@ jobs:
             ~/.cache/clanker
           key: npx-${{ hashFiles('scripts/*.sh') }}
           restore-keys: npx-
+      # Python analysis gate: lint-python is part of `make check` (ruff.toml),
+      # so the pinned ruff must be on PATH first. Pin sourced from
+      # scripts/tool-versions.sh, the same single source of truth the other
+      # analyzers use; pipx ships on the runner image.
+      - run: source scripts/tool-versions.sh && pipx install "ruff==$RUFF_VERSION"
       - run: make check
       # C# analysis gate: scripts/test-idempotency.sh compiles pure-BCL sources
       # with mcs -warnaserror (warnings are errors, same contract as build) and

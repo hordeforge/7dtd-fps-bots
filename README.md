@@ -129,7 +129,7 @@ reported as a WARN line at load and ignored.
 make test          # C# unit tests (tests/BotMod.Web.Tests, mcs + mono)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod
 make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip
-make check         # what CI runs (shellcheck, vnu HTML lint, tsc/oxlint/bundle freshness)
+make check         # what CI runs (shellcheck, vnu HTML lint, tsc/oxlint/bundle freshness, ruff)
 ```
 
 `make package` output is byte-stable: entry order is sorted, every archive
@@ -142,7 +142,8 @@ MANIFEST.sha256` inside the extracted directory to verify it offline.
 Released versions and upgrade notes are documented in `CHANGELOG.md`.
 
 CI runs `make check` plus `scripts/test-idempotency.sh` (the workflow installs
-mono for it); locally `make test` needs mono, and
+mono for it, and the pinned ruff for `make lint-python` via pipx); locally
+`make test` needs mono, and
 `make build` needs the game's Managed DLLs (`SEVENDTD_DS_DIR`/`SEVENDTD_GAME_DIR`
 override the Steam paths scripts/build.sh probes). After editing
 `Source/BotMod/WebMod/bundle.ts`, run `make build` so the committed bundle.js

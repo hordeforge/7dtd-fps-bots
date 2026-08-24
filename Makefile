@@ -3,7 +3,7 @@ ROOT := $(CURDIR)
 DS ?= $(if $(SEVENDTD_DS_DIR),$(SEVENDTD_DS_DIR),$(HOME)/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell check
+.PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell lint-python check
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -15,6 +15,7 @@ Targets:
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make check        what CI runs: shellcheck + vnu HTML lint + tsc/oxlint/bundle freshness
   make lint-shell   shellcheck over scripts/*.sh
+  make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
   make lint-html    Nu HTML checker over shipped/generated HTML (needs java; tools via npx)
   make lint-webui   tsc strict type-check, oxlint, committed-bundle freshness gate (needs node/npm)
   make install      copy dist/BotMod into the dedicated server's Mods dir
@@ -23,7 +24,8 @@ Targets:
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
 SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip
 timestamps; defaults to the HEAD commit time). CI runs `make check` plus
-`scripts/test-idempotency.sh` (mono installed in the workflow); `make build`
+`scripts/test-idempotency.sh` (mono installed in the workflow; ruff via pipx
+for lint-python); `make build`
 additionally needs the game install locally.
 endef
 export HELP
@@ -43,7 +45,9 @@ lint-webui:
 	bash "$(SCRIPTS)/lint-webui.sh"
 lint-shell:
 	shellcheck "$(SCRIPTS)"/*.sh
-check: lint-shell lint-html lint-webui
+lint-python:
+	ruff check .
+check: lint-shell lint-html lint-webui lint-python
 install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:

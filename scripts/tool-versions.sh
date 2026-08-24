@@ -20,6 +20,11 @@
 : "${OXLINT_PLUGINS_VERSION:=1.79.0}"
 : "${ANTI_SLOP_SHA:=6d538555cb151d4121ed51a27db81890eacf8ae9}"
 : "${VNU_VERSION:=26.8.20}"
+# Python analysis gate (make lint-python / .github/workflows/ci.yml). Keep in
+# lockstep with the locally installed ruff so local runs and CI enforce the
+# same rule set and fixes (ruff.toml documents the selected rules).
+: "${RUFF_VERSION:=0.16.4}"
 
 export TSC_VERSION OXLINT_VERSION OXLINT_STANDARDS_VERSION \
-  OXLINT_TSGOLINT_VERSION OXLINT_PLUGINS_VERSION ANTI_SLOP_SHA VNU_VERSION
+  OXLINT_TSGOLINT_VERSION OXLINT_PLUGINS_VERSION ANTI_SLOP_SHA VNU_VERSION \
+  RUFF_VERSION

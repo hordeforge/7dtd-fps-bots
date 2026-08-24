@@ -27,7 +27,7 @@ import numpy as np
 TOOLS = Path(__file__).resolve().parent          # tools/ga
 REPO = TOOLS.parent.parent                        # repo root
 sys.path.insert(0, str(TOOLS))
-import harness  # noqa: E402
+import harness  # noqa: E402 -- sibling module resolves only after the sys.path bootstrap above
 
 DEFAULT_SEEDS = [999, 1234, 4242]
 

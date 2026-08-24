@@ -1,0 +1,23 @@
+# Ruff config for the repo's Python surface: tools/ga/*.py and
+# scripts/coverage_badge.py (`make lint-python`, part of `make check`).
+#
+# Defect-class baseline only (2026-08-25): the rules below are the set the
+# tree already passes, proven by `ruff check .`. Runtime/correctness first:
+#   E9     syntax errors and guaranteed runtime failures
+#   F      pyflakes: undefined names, unused imports/variables, shadowed defs
+#   W605   invalid escape sequences (silent str corruption class)
+#   E402   module-level imports not at top of file; the tools/ga scripts
+#          import sibling modules after a deliberate sys.path bootstrap, so
+#          each such import carries a rule-scoped `# noqa: E402 -- reason`
+#   RUF100 keeps those noqa directives honest: an ignore whose finding is
+#          gone stops suppressing anything and fails the build instead
+#
+# Known debt, deliberately NOT selected yet (fix in code-review passes, then
+# move the rule up here): the default-preset style/modernization findings
+# (I001, PLR1730, EXE001, BLE001, UP006, SIM114, UP031, C413, PLR0124, S110,
+# SIM103, RUF019, RUF059, UP034), mypy's 8 pre-existing errors in viz.py,
+# report.py, and dashboard.py, and E501 line length.
+target-version = "py310"
+
+[lint]
+select = ["E402", "E9", "F", "W605", "RUF100"]
