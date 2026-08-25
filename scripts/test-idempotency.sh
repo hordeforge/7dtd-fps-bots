@@ -61,6 +61,14 @@ run_suite logsanitize \
   "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
 
+# Randomized fuzzing of the same guard: arbitrary request-supplied strings
+# must sanitize without throwing, keep length, leave nothing scrubbable, and
+# stay idempotent.
+run_suite logsanitizerfuzz \
+  "$root/Source/BotMod/Config/LogSanitizer.cs" \
+  "$root/Source/BotMod/Config/BotText.cs" \
+  "$root/tests/BotMod.Web.Tests/LogSanitizerFuzzTests.cs"
+
 # vs-class combat gate: bot identity overrides body class (zombieSoldier
 # bodies are EntityZombie), so the vs-zombie/vs-player toggles must never
 # block bot targets or bot-on-bot damage.
@@ -130,6 +138,16 @@ if [[ -n "$managed" && -f "$managed/Newtonsoft.Json.dll" && -f "$managed/netstan
     "${config_src[@]}" \
     "$root/tests/BotMod.Web.Tests/BotConfigFuzzTests.cs" > /dev/null
   mono "$work/configfuzz.exe" "$root"
+
+  # Character-file parser fuzzer: the same trust boundary as botmod.json
+  # (operator hand-edited JSON at every startup) gets the same treatment:
+  # byte-level and structure-aware mutants must fail cleanly behind Warn or
+  # land inside the Normalize+difficulty-lerp contract with canonical keys.
+  mcs -warnaserror -langversion:7.2 -r:"$work/Newtonsoft.Json.dll" -r:"$work/netstandard.dll" \
+    -out:"$work/charfuzz.exe" \
+    "${character_src[@]}" \
+    "$root/tests/BotMod.Web.Tests/BotCharacterFuzzTests.cs" > /dev/null
+  mono "$work/charfuzz.exe" "$root"
 
   # Character-file ingestion pins: NaN/Infinity literals and out-of-range
   # traits in hand-edited characters.json must land finite and in range
