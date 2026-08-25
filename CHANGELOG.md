@@ -64,12 +64,31 @@ fails on drift between them.
   than overwritten by the shipped default.
 - Server log lines use WARN for degraded-but-running problems and ERR for
   broken functionality; each web API mutation logs one audit line.
+- Every `characters.json` load failure mode now reports the reason and the
+  file path it probed: an unparseable file logs `parse failed (<path>): ...`
+  and a bare JSON `null` body is reported instead of passing silently.
+- Misspelled trait keys inside `characters.json` entries (e.g. `"Acuraccy"`)
+  are reported as a WARN naming the entry and the key, same contract as the
+  botmod.json unknown-key warning; Json.NET silently ignores them otherwise,
+  leaving the built-in default in place with no signal.
 - `bot spawn <x> <z>` now spawns one bot at those coordinates. Previously the
   first coordinate was misread as a bot count (so `bot spawn 163 818` spawned
   up to 16 bots at a random position) and a trailing token that was neither
   count, coordinate pair nor gun id was silently ignored (`bot spawn 2 abc`,
   `bot player Kira xyz`); every leftover argument is now rejected with a
   usage error naming the offending token.
+- A null entry value in `characters.json` (`{"Grunt": null}`) is dropped
+  instead of failing the whole file: previously one such entry threw during
+  ingestion and every custom personality in the file silently fell back to
+  built-in defaults behind a generic parse warning.
+
+### Fixed
+- A failed `characters.json` reload (missing, unparseable, or null body) now
+  rebuilds the pristine default table like the missing-file case already did.
+  Previously an exception kept the previous load's instances untouched while
+  a null body re-applied the difficulty lerp onto them, so every `bot reload`
+  while the file stayed broken marched aim accuracy toward 1.0 and reaction
+  time toward its floor; both paths now converge on the documented defaults.
 
 ### Added
 - Unknown keys in `Config/botmod.json` are reported as a WARN naming the key

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace BotMod.Config
 {
@@ -107,66 +109,116 @@ namespace BotMod.Config
         public static Dictionary<string, BotCharacter> Characters { get; private set; } = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
         public static void Load(BotConfig cfg)
         {
-            try
+            string path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json");
+            if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine(".", "config", "characters.json");
+            if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine("config", "characters.json");
+            bool loaded = false;
+            if (!System.IO.File.Exists(path))
             {
-                string path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json");
-                if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine(".", "config", "characters.json");
-                if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine("config", "characters.json");
-                if (System.IO.File.Exists(path))
+                BotConfig.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
+            }
+            else
+            {
+                try
                 {
                     // Explicit UTF-8: characters.json is our own artifact and is
                     // written UTF-8; never depend on the platform default codepage.
                     var json = System.IO.File.ReadAllText(path, Encoding.UTF8);
-                    var loaded = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
-                    if (loaded != null)
+                    var parsed = JsonConvert.DeserializeObject<Dictionary<string, BotCharacter>>(json);
+                    if (parsed == null)
                     {
+                        // Deserialization can yield a null dictionary without
+                        // throwing (a hand-edited file holding bare JSON
+                        // "null"): surface it like every other unreadable file
+                        // instead of silently keeping whatever the previous
+                        // load left behind with no signal at all.
+                        BotConfig.Warn("characters.json parse failed (" + path + "): JSON body deserialized to null");
+                    }
+                    else
+                    {
+                        // Json.NET silently ignores keys that bind no property,
+                        // so a typo'd trait ("Acuraccy") keeps the built-in
+                        // default with no signal at all. Surface every unknown
+                        // key per entry, same contract as botmod.json's
+                        // top-level unknown-key warning.
+                        foreach (KeyValuePair<string, string> kv in UnknownEntryKeys(json))
+                            BotConfig.Warn("Unknown character trait '" + kv.Value + "' for '" + kv.Key + "' in " + path + " (typo? trait ignored, built-in default applies)");
                         // Sanitize at ingestion, then canonicalize keys
                         // (IdentityKey = NFC + no control/invisible
                         // characters): file values are operator-authored text
                         // that may carry NaN/Infinity literals or out-of-range
                         // traits; file keys may be NFD or carry paste noise.
                         // Keep one sane, canonical form on both sides of the
-                        // lookup.
+                        // lookup. A null entry value (hand-edited
+                        // "{\"Grunt\": null}") carries no data: drop it instead
+                        // of letting Normalize's dereference fail the whole
+                        // file behind a generic parse warning.
                         var canon = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var kv in loaded)
+                        foreach (var kv in parsed)
                         {
+                            if (kv.Value == null) continue;
                             kv.Value.Normalize();
                             canon[BotText.IdentityKey(kv.Key)] = kv.Value;
                         }
                         Characters = canon;
+                        loaded = true;
                     }
                 }
-                else
-                {
-                    BotConfig.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
-                    // Rebuild from pristine defaults: with no file there is nothing
-                    // to re-parse, so Characters would keep the instances a previous
-                    // Load already shifted by the difficulty lerp below, and every
-                    // `bot reload` would drift aim/reaction/aggression further
-                    // toward their clamps.
-                    Characters = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
-                }
-                // Ensure at least defaults for known names (BaseName is NFC, same
-                // canonical form as the keys above).
-                foreach (var n in cfg.BotNames)
-                {
-                    string key = BotText.BaseName(n);
-                    if (!Characters.ContainsKey(key)) Characters[key] = BotCharacter.Defaults(key);
-                }
-                // Apply difficulty lerp if characters have multiple skills (stored as skill 1 vs 5) - here we just scale by cfg.Difficulty
-                float diffSkill = cfg.Difficulty / 4f;
-                foreach (var kv in new List<KeyValuePair<string,BotCharacter>>(Characters))
-                {
-                    var ch = kv.Value;
-                    // Difficulty gently overrides core aim/reaction/aggro
-                    ch.AimAccuracy = Math.Max(0.2f, Math.Min(1f, ch.AimAccuracy + diffSkill * 0.25f - 0.12f));
-                    ch.AimSkill = Math.Max(0.2f, Math.Min(1f, ch.AimSkill + diffSkill * 0.25f - 0.12f));
-                    ch.ReactionTime = Math.Max(0.05f, ch.ReactionTime - diffSkill * 0.25f);
-                    ch.Alertness = Math.Max(0.1f, Math.Min(1f, ch.Alertness + diffSkill * 0.3f - 0.15f));
-                    ch.Aggression = Math.Max(0f, Math.Min(1f, ch.Aggression + diffSkill * 0.2f - 0.1f));
-                }
+                catch (Exception ex) { BotConfig.Warn("characters.json parse failed (" + path + "): " + ex.Message); }
             }
-            catch (Exception ex) { BotConfig.Warn("characters.json load failed, using defaults: " + ex.Message); }
+            if (!loaded)
+            {
+                // Rebuild from pristine defaults on EVERY failure mode
+                // (missing, unparseable, null body): Characters would otherwise
+                // keep the instances a previous Load already shifted by the
+                // difficulty lerp below, and every `bot reload` while the file
+                // stays broken would drift aim/reaction/aggression further
+                // toward their clamps.
+                Characters = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
+            }
+            // Ensure at least defaults for known names (BaseName is NFC, same
+            // canonical form as the keys above).
+            foreach (var n in cfg.BotNames)
+            {
+                string key = BotText.BaseName(n);
+                if (!Characters.ContainsKey(key)) Characters[key] = BotCharacter.Defaults(key);
+            }
+            // Apply difficulty lerp if characters have multiple skills (stored as skill 1 vs 5) - here we just scale by cfg.Difficulty
+            float diffSkill = cfg.Difficulty / 4f;
+            foreach (var kv in new List<KeyValuePair<string,BotCharacter>>(Characters))
+            {
+                var ch = kv.Value;
+                // Difficulty gently overrides core aim/reaction/aggro
+                ch.AimAccuracy = Math.Max(0.2f, Math.Min(1f, ch.AimAccuracy + diffSkill * 0.25f - 0.12f));
+                ch.AimSkill = Math.Max(0.2f, Math.Min(1f, ch.AimSkill + diffSkill * 0.25f - 0.12f));
+                ch.ReactionTime = Math.Max(0.05f, ch.ReactionTime - diffSkill * 0.25f);
+                ch.Alertness = Math.Max(0.1f, Math.Min(1f, ch.Alertness + diffSkill * 0.3f - 0.15f));
+                ch.Aggression = Math.Max(0f, Math.Min(1f, ch.Aggression + diffSkill * 0.2f - 0.1f));
+            }
+        }
+
+        /// <summary>(Entry name, unknown trait key) pairs for every character
+        /// object inside <paramref name="json"/>. Comparison mirrors how
+        /// JsonConvert binds members (exact first, then case-insensitive), so
+        /// valid traits never false-positive. Entries whose value is not an
+        /// object contribute nothing, and a body that does not re-parse yields
+        /// an empty list: both are reported by the load path itself.</summary>
+        internal static List<KeyValuePair<string, string>> UnknownEntryKeys(string json)
+        {
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (PropertyInfo p in typeof(BotCharacter).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                known.Add(p.Name);
+            var unknown = new List<KeyValuePair<string, string>>();
+            JObject root;
+            try { root = JObject.Parse(json); }
+            catch (Exception) { return unknown; }
+            foreach (KeyValuePair<string, JToken> entry in root)
+            {
+                if (!(entry.Value is JObject body)) continue;
+                foreach (JProperty p in body.Properties())
+                    if (!known.Contains(p.Name)) unknown.Add(new KeyValuePair<string, string>(entry.Key, p.Name));
+            }
+            return unknown;
         }
         public static BotCharacter ForName(string name)
         {

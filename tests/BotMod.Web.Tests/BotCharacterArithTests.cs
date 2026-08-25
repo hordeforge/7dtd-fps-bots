@@ -1,8 +1,9 @@
 // BotCharacterArithTests — numeric-correctness pins for characters.json
 // ingestion (BotCharacter.Normalize) plus the BotCharacterDB layer around it
 // (file resolution, IdentityKey-canonicalized file keys, ForName fallback
-// chain, difficulty lerp clamps, reload determinism), complementing
-// BotConfigFuzzTests which covers botmod.json ranges.
+// chain, difficulty lerp clamps, reload determinism across every failure
+// mode, unknown-trait reporting per entry), complementing BotConfigFuzzTests
+// which covers botmod.json ranges.
 //
 // Why: characters.json is operator-authored hand-edited text, and Newtonsoft
 // parses bare NaN/Infinity/-Infinity number literals straight into float
@@ -49,13 +50,17 @@ static class BotCharacterArithTests
     // Write characters.json into an isolated cwd (Load probes
     // "./config/characters.json" after the assembly dir), Load with cfg,
     // restore everything. json == null exercises the missing-file path.
-    static Dictionary<string, BotCharacter> LoadCharacters(string json, BotConfig cfg)
+    // warnings != null additionally captures the BotConfig.Warn sink so
+    // callers can pin which failure/typo surfaces got reported.
+    static Dictionary<string, BotCharacter> LoadCharacters(string json, BotConfig cfg, List<string> warnings = null)
     {
         string dir = Path.Combine(Path.GetTempPath(), "botmod-chardb-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(dir, "config"));
         if (json != null)
             File.WriteAllText(Path.Combine(dir, "config", "characters.json"), json, Encoding.UTF8);
         string oldCwd = Environment.CurrentDirectory;
+        Action<string> prevWarn = BotConfig.Warn;
+        if (warnings != null) BotConfig.Warn = w => warnings.Add(w);
         try
         {
             Environment.CurrentDirectory = dir;
@@ -64,6 +69,7 @@ static class BotCharacterArithTests
         finally
         {
             Environment.CurrentDirectory = oldCwd;
+            BotConfig.Warn = prevWarn;
             try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
         }
         return BotCharacterDB.Characters;
@@ -205,6 +211,71 @@ static class BotCharacterArithTests
                 new BotConfig { Difficulty = 2 });
             Check("NaN camper in file becomes the documented default 0.2",
                 chars["Grunt"].Camper == 0.2f);
+        }
+
+        // 8. Unknown-trait detection: a typo'd trait ("Acuraccy") must be
+        //    reported per entry like botmod.json's unknown-key warning,
+        //    instead of silently keeping the built-in default. Valid traits,
+        //    case variants and per-weapon table ids never false-positive;
+        //    non-object entries and unparseable bodies contribute nothing
+        //    (their failure is reported by the load path itself).
+        {
+            var found = BotCharacterDB.UnknownEntryKeys(
+                "{ \"Grunt\": { \"Acuraccy\": 0.9 }, \"Visor\": { \"camper\": 0.5, \"NotATrait\": 1 } }");
+            bool gruntTypo = false, visorTypo = false;
+            foreach (var p in found)
+            {
+                if (p.Key == "Grunt" && p.Value == "Acuraccy") gruntTypo = true;
+                if (p.Key == "Visor" && p.Value == "NotATrait") visorTypo = true;
+            }
+            // Count == 2 also proves the valid trait ("camper") produced no finding.
+            Check("typo'd trait keys detected per entry", found.Count == 2 && gruntTypo && visorTypo);
+            found = BotCharacterDB.UnknownEntryKeys(
+                "{ \"Grunt\": { \"Aggression\": 0.9, \"AIMACCURACYWEAPON\": { \"railgun\": 0.88 } } }");
+            Check("valid traits and weapon tables never flagged", found.Count == 0);
+            found = BotCharacterDB.UnknownEntryKeys("{ \"Grunt\": null, \"Zed\": [1] }");
+            Check("non-object entries contribute no findings", found.Count == 0);
+            found = BotCharacterDB.UnknownEntryKeys("{ oops");
+            Check("unparseable body yields no findings of its own", found.Count == 0);
+        }
+
+        // 9. Every unreadable-file mode surfaces a WARN naming the problem:
+        //    a silent fallback is indistinguishable from a clean load in the
+        //    server log (null body used to skip with NO signal at all).
+        {
+            var w = new List<string>();
+            LoadCharacters("null", new BotConfig { Difficulty = 2 }, w);
+            Check("null-body characters.json warns", w.Exists(x => x.Contains("deserialized to null")));
+            w.Clear();
+            LoadCharacters("{ oops", new BotConfig { Difficulty = 2 }, w);
+            Check("malformed characters.json warns", w.Exists(x => x.Contains("parse failed")));
+            w.Clear();
+            LoadCharacters(null, new BotConfig { Difficulty = 2 }, w);
+            Check("missing characters.json warns", w.Exists(x => x.Contains("not found")));
+            w.Clear();
+            LoadCharacters("{ \"Grunt\": null }", new BotConfig { Difficulty = 2 }, w);
+            Check("null entry value loads the rest without a parse warning",
+                w.Count == 0 && BotCharacterDB.ForName("Visor") != null);
+        }
+
+        // 10. Broken reload determinism (drift fix): every failure mode must
+        //     rebuild the pristine default table, never keep instances a
+        //     previous good load already shifted - otherwise each `bot reload`
+        //     while the file stays broken compounds the difficulty lerp
+        //     (aim accuracy marching toward 1, reaction to its floor).
+        {
+            const string goodFile = "{ \"Grunt\": { \"AimAccuracy\": 0.5 } }";
+            float goodAcc = LoadCharacters(goodFile, new BotConfig { Difficulty = 4 })["Grunt"].AimAccuracy;
+            Check("good load lerps exactly once (0.5 -> 0.63 at difficulty 4)", Math.Abs(goodAcc - 0.63f) < 1e-4f);
+            float absentAcc = LoadCharacters(null, new BotConfig { Difficulty = 4 })["Grunt"].AimAccuracy;
+            float brokenAcc = LoadCharacters("{ oops", new BotConfig { Difficulty = 4 })["Grunt"].AimAccuracy;
+            float nullBodyAcc = LoadCharacters("null", new BotConfig { Difficulty = 4 })["Grunt"].AimAccuracy;
+            Check("malformed reload matches pristine defaults, not the stale lerped instance",
+                brokenAcc == absentAcc);
+            Check("null-body reload matches pristine defaults, not the stale lerped instance",
+                nullBodyAcc == absentAcc);
+            Check("pristine default re-lerps from 0.75, not from the good load's 0.63",
+                Math.Abs(absentAcc - 0.88f) < 1e-4f);
         }
 
         if (_failures == 0) { Console.WriteLine("all bot character arithmetic tests passed"); return 0; }

@@ -128,6 +128,15 @@ bot reload | bot enable | bot disable
 - `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
 - `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `SpawnProtectionSec`.
 - `TargetBotCount=6 MaxBots=16`.
+- Neural controller: `UseNeuralBrain` (built-in default `false`; the shipped
+  config enables it) and `BotNeuralWeightPath` (default `evolved/best.json`,
+  resolved against the mod folder, then the server working directory). A
+  weights file that is missing or fails validation logs a WARN and bots fall
+  back to the heuristic brain; `bot neural status` shows the reason.
+- Personalities: `Config/characters.json` (Q3-style per-name skill blocks,
+  see `Source/BotMod/Config/BotCharacter.cs`). A missing or unparseable file
+  logs a WARN and bots use built-in default characteristics; misspelled trait
+  keys are reported as WARNs and keep the built-in default.
 
 Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).
 
