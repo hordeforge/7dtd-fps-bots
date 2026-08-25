@@ -732,7 +732,16 @@ namespace BotMod.Core
                     int hpAfter = target.Health;
                     if (hpBefore != hpAfter && Rng01() < 0.04f) ModApi.Log($"{Name} -> {target.entityId} dmg={dmg} res={dmgResult} hp {hpBefore}->{hpAfter} weap={Weapon.GunId}");
                     if (hpBefore == hpAfter && dmgResult == 0 && Rng01() < 0.02f) ModApi.Log($"{Name} shot {target.entityId} blocked dmg={dmg} res=0 weap={Weapon.GunId} burst={_burstLeft}");
-                    if (target.IsDead()) { try { BotCombat.OnKilled(me, target); } catch { } ModApi.Log($"{Name} KILLED {target.entityId} with {Weapon.GunId}"); break; }
+                    // OnKilled failures must not vanish (kill credit and score
+                    // would silently stop tracking); the flood gate bounds a
+                    // repeating failure while naming both sides.
+                    if (target.IsDead())
+                    {
+                        try { BotCombat.OnKilled(me, target); }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "OnKilled failed " + Name + " -> " + target.entityId + ": " + ex); }
+                        ModApi.Log($"{Name} KILLED {target.entityId} with {Weapon.GunId}");
+                        break;
+                    }
                     if (pellets > 1) break; // one hit per pellet volley (vanilla groups pellets via ray)
                 }
             }
@@ -791,7 +800,9 @@ namespace BotMod.Core
         /// movement all read identical inputs within a tick, so later callers reuse the
         /// cached outputs instead of re-evaluating (each old eval also re-raycast LOS
         /// inside BuildNeuralInputs). Returns false when the gate is off or eval failed,
-        /// mirroring the previous per-site fallback to heuristics.</summary>
+        /// mirroring the previous per-site fallback to heuristics. A failing eval while
+        /// the brain is loaded means every bot silently degrades to heuristics, so the
+        /// first failure per flood-gate window is logged with the recorded reason.</summary>
         bool TryNeuralOnce(EntityAlive me, World world, BotConfig cfg)
         {
             if (_neuralEvalDone) return _neuralOk;
@@ -800,6 +811,11 @@ namespace BotMod.Core
             try
             {
                 _neuralOk = BotNeuralBrain.TryEval(BuildNeuralInputs(me, world, cfg), out _neuralOuts);
+                // UseNeuralGate just confirmed Loaded; a false here is TryEval's
+                // exception path (reason recorded on the brain). Rate-limited:
+                // this runs per bot per tick.
+                if (!_neuralOk)
+                    ModApi.WarnRateLimited(() => "neural eval failed (" + BotNeuralBrain.LastReason + "), bots fall back to heuristic");
                 return _neuralOk;
             }
             catch { _neuralOk = false; return false; }

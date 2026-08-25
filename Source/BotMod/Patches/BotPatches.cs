@@ -27,7 +27,15 @@ namespace BotMod.Patches
                 BotMod.ModApi.Log("synthetic auth bypass for SteamId=" + sid + " ip=" + (_cInfo.ip ?? "?"));
                 return false;
             }
-            catch { }
+            // A failure here silently reverts to vanilla auth: synthetic
+            // clients would be rejected with no trace of why the configured
+            // bypass stopped applying. Join-frequency bounded, so a plain
+            // warn cannot flood (no rate gate: Time.time is unreliable off
+            // the main thread and this runs on the network thread).
+            catch (Exception ex)
+            {
+                BotMod.ModApi.Warn("synthetic auth bypass check failed, falling through to vanilla auth: " + ex);
+            }
             return true;
         }
     }
@@ -119,7 +127,11 @@ namespace BotMod.Patches
                         // Squad mode, vsBot-off and same-team block bot-on-bot damage.
                         if (victimIsBot && BotMod.Core.BotManager.Instance.AreAllies(attackerId, __instance.entityId)) return false;
                     }
-                    // Route damage back to bot for FPS dodge/aggro swap (victim is a bot)
+                    // Route damage back to bot for FPS dodge/aggro swap (victim is a bot).
+                    // No inner catch here: an OnDamaged failure must reach the
+                    // outer rate-limited gate below instead of silently
+                    // disabling dodging and aggro swaps (the gate names this
+                    // source and counts repeats).
                     if (BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId))
                     {
                         var world = GameManager.Instance?.World;
@@ -127,7 +139,7 @@ namespace BotMod.Patches
                         {
                             var attacker = world.GetEntity(attackerId) as EntityAlive;
                             var victim = BotMod.Core.BotManager.Instance.GetBot(__instance.entityId);
-                            if (victim != null) try { victim.OnDamaged(attacker, _strength); } catch { }
+                            if (victim != null) victim.OnDamaged(attacker, _strength);
                         }
                     }
                 }

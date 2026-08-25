@@ -204,7 +204,11 @@ namespace BotMod.Core
             if (n > 0) ModApi.Log($"Removed {n} bots ({reason}).");
             return n;
         }
-        public bool RemoveBot(int entityId)
+        /// <summary>Remove one tracked bot. <paramref name="reason"/> names the
+        /// surface ("command" console, "web") in the audit line: a single-bot
+        /// removal is destructive and must be reconstructable from the server
+        /// log alone, same as RemoveAllBots.</summary>
+        public bool RemoveBot(int entityId, string reason = "command")
         {
             var world = GameManager.Instance?.World;
             var bot = GetBot(entityId);
@@ -224,6 +228,7 @@ namespace BotMod.Core
             }
             if (!removed) return false;
             _bots.Remove(bot); _botEntityIds.Remove(entityId); _botById.Remove(entityId);
+            ModApi.Log("Removed bot id=" + entityId + " (" + reason + ").");
             return true;
         }
         public void NotifyBotDeath(int entityId) { var bot = GetBot(entityId); if (bot != null) bot.MarkDead(); }

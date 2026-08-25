@@ -92,15 +92,26 @@ static class IdempotencyLedgerTests
             Check("ordinary key accepted", IdempotencyLedger.IsValidKey("ok"));
         }
 
-        // 5. Bounded state: capacity cap holds under more keys than Capacity.
+        // 5. Bounded state: capacity cap holds under more keys than Capacity,
+        //    and every hard-cap eviction is reported through the host sink so
+        //    dedup loss for the evicted keys is not silent.
         {
-            for (int i = 0; i < IdempotencyLedger.Capacity * 3; i++)
+            int evictedTotal = 0;
+            int sinkCalls = 0;
+            IdempotencyLedger.CapacityEvicted = n => { sinkCalls++; evictedTotal += n; };
+            try
             {
-                string k = "cap-" + i.ToString();
-                if (Try(k) == IdempotencyLedger.BeginResult.Fresh)
-                    IdempotencyLedger.Complete(k, "{}");
+                for (int i = 0; i < IdempotencyLedger.Capacity * 3; i++)
+                {
+                    string k = "cap-" + i.ToString();
+                    if (Try(k) == IdempotencyLedger.BeginResult.Fresh)
+                        IdempotencyLedger.Complete(k, "{}");
+                }
+                Check("ledger never exceeds capacity", IdempotencyLedger.Count <= IdempotencyLedger.Capacity);
+                Check("capacity overflow reported through the sink",
+                    sinkCalls > 0 && evictedTotal >= IdempotencyLedger.Capacity * 2 - IdempotencyLedger.Capacity);
             }
-            Check("ledger never exceeds capacity", IdempotencyLedger.Count <= IdempotencyLedger.Capacity);
+            finally { IdempotencyLedger.CapacityEvicted = null; }
         }
 
         // 6. Retention window, driven by the virtual clock: exact boundaries,

@@ -109,6 +109,88 @@ static class MainThreadDispatchTests
             Check("cross-thread completion returns work result", r == 7);
         }
 
+        // 6. Abandoned-dispatch reporting: once the caller timed out, the late
+        //    work's outcome must reach the Abandoned sink instead of dying in
+        //    a dead stack frame (a failing spawn would otherwise look like a
+        //    clean 500 while the action actually ran or failed afterwards).
+        {
+            Action abandoned = null;
+            string seenOp = null;
+            Exception seenError = null;
+            int calls = 0;
+            MainThreadDispatch.Abandoned = (op, error) => { calls++; seenOp = op; seenError = error; };
+            try
+            {
+                try
+                {
+                    MainThreadDispatch.Execute<int>(() => throw new InvalidOperationException("late boom"),
+                        task => { abandoned = task; }, TimeSpan.FromMilliseconds(200), "spawnNear");
+                }
+                catch (TimeoutException) { }
+                abandoned?.Invoke();
+                Check("abandoned failing work reports through the sink",
+                    calls == 1 && seenOp == "spawnNear" && seenError is InvalidOperationException);
+            }
+            finally { MainThreadDispatch.Abandoned = null; }
+        }
+
+        // 7. Abandoned success reports a null error (action took effect after
+        //    the 500: the "lost response after the server acted" case).
+        {
+            Action abandoned = null;
+            Exception seenError = new ApplicationException("sentinel");
+            int calls = 0;
+            MainThreadDispatch.Abandoned = (op, error) => { calls++; seenError = error; };
+            try
+            {
+                try
+                {
+                    MainThreadDispatch.Execute<int>(() => 9,
+                        task => { abandoned = task; }, TimeSpan.FromMilliseconds(200), "status");
+                }
+                catch (TimeoutException) { }
+                abandoned?.Invoke();
+                Check("abandoned successful work reports a null error",
+                    calls == 1 && seenError == null);
+            }
+            finally { MainThreadDispatch.Abandoned = null; }
+        }
+
+        // 8. In-window completion must not touch the sink (no false alarms).
+        {
+            int calls = 0;
+            MainThreadDispatch.Abandoned = (op, error) => calls++;
+            try
+            {
+                int r = MainThreadDispatch.Execute(() => 5, task => task(),
+                    TimeSpan.FromSeconds(5), "in-window");
+                Check("in-window completion returns normally", r == 5);
+                Check("in-window completion never reports abandonment", calls == 0);
+            }
+            finally { MainThreadDispatch.Abandoned = null; }
+        }
+
+        // 9. A throwing sink must not break the abandoned task (it runs on
+        //    the main-thread loop).
+        {
+            Action abandoned = null;
+            MainThreadDispatch.Abandoned = (op, error) => throw new ApplicationException("sink down");
+            try
+            {
+                try
+                {
+                    MainThreadDispatch.Execute<int>(() => 1,
+                        task => { abandoned = task; }, TimeSpan.FromMilliseconds(200), "throwing-sink");
+                }
+                catch (TimeoutException) { }
+                bool threw = false;
+                try { abandoned?.Invoke(); }
+                catch (Exception ex) { threw = ex is ApplicationException; }
+                Check("throwing sink cannot break the abandoned task", !threw);
+            }
+            finally { MainThreadDispatch.Abandoned = null; }
+        }
+
         Console.WriteLine(_failures == 0 ? "all main-thread dispatch tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
     }

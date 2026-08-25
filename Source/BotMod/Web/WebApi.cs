@@ -38,6 +38,25 @@ namespace BotMod.Web
     /// </summary>
     public sealed class Bot : AbsRestApi
     {
+        static Bot()
+        {
+            // Observability sinks for the two silent failure modes of the
+            // dispatch/ledger plumbing (both hooks are null in headless unit
+            // runs and wired here once for the server):
+            // - a dispatch whose caller already timed out still runs later;
+            //   its outcome must reach the log or a spawn that "failed" with
+            //   a 500 can actually have executed (or failed afterwards).
+            // - ledger capacity overflow silently drops the oldest idempotency
+            //   keys, so retries reusing them execute again instead of
+            //   replaying; sustained overflow means a runaway or abusive
+            //   client and must be visible.
+            MainThreadDispatch.Abandoned = (op, error) => ModApi.Warn(
+                "web api dispatch '" + LogSanitizer.Clean(op) + "' ran after its caller timed out"
+                + (error != null ? " and failed: " + error : " (completed; response was lost)"));
+            IdempotencyLedger.CapacityEvicted = n => ModApi.Warn(
+                "idempotency ledger at capacity: evicted " + n + " oldest entries; retries reusing those requestId values will re-execute");
+        }
+
         public Bot() : base(null) { }
 
         public override void HandleRestGet(RequestContext context)
@@ -205,7 +224,7 @@ namespace BotMod.Web
                         {
                             // {"action":"removeOne","entityId":N} - remove a single bot.
                             int entityId = GetInt(_jsonInput, "entityId", 0);
-                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId), "removeOne");
+                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId, "web"), "removeOne");
                             respBody = RespondJson("removed", removed, "entityId", entityId);
                         }
                         break;

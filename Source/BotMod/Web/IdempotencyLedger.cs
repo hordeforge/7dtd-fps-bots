@@ -30,6 +30,15 @@ namespace BotMod.Web
         /// <summary>Replay window. Must exceed the retry horizon callers use.</summary>
         internal static TimeSpan Retention = TimeSpan.FromMinutes(10);
 
+        /// <summary>Host-side sink for hard-cap evictions. When more than
+        /// Capacity keys are live at once, the oldest entries are dropped and
+        /// a retry reusing such a key executes again instead of replaying:
+        /// dedup is silently lost for those keys. Null in headless unit runs;
+        /// WebApi wires it to the server log so sustained overflow (runaway
+        /// client generating unique keys, or abuse) is visible to operators.
+        /// Receives the number of entries evicted in one prune pass.</summary>
+        internal static Action<int> CapacityEvicted = null;
+
         /// <summary>Monotonic elapsed-time source for retention/pruning
         /// decisions. Retention is a pure duration, so it must not ride the
         /// wall clock: an NTP step or manual change forward by more than the
@@ -123,6 +132,7 @@ namespace BotMod.Web
             }
             if (dead != null) for (int i = 0; i < dead.Count; i++) Entries.Remove(dead[i]);
             // Hard cap independent of age: drop oldest until one slot is free.
+            int evicted = 0;
             while (Entries.Count >= Capacity)
             {
                 string oldestKey = null;
@@ -133,7 +143,13 @@ namespace BotMod.Web
                 }
                 if (oldestKey == null) break;
                 Entries.Remove(oldestKey);
+                evicted++;
             }
+            // Surface dedup loss: a retry with an evicted key re-executes. The
+            // sink is host-wired (server log); swallow sink faults so pruning
+            // itself can never throw into TryBegin's caller.
+            if (evicted > 0 && CapacityEvicted != null)
+                try { CapacityEvicted(evicted); } catch (Exception) { }
         }
     }
 }
