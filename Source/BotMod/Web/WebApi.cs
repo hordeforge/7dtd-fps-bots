@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Net;
 using System.Text;
 using Utf8Json;
@@ -35,6 +34,17 @@ namespace BotMod.Web
     /// so that key stays claimed (retries get 409 until the entry ages out)
     /// rather than risking a second execution. Without a key, execution is
     /// unchanged and repeated calls repeat the effect.
+    ///
+    /// Validation: optional numeric fields fall back to their documented
+    /// defaults only when absent (JSON null counts as absent); a value that
+    /// is present but malformed rejects the whole request with 400 and a
+    /// named INVALID_* code instead of silently executing something else.
+    /// Required fields (spawnNear's player, removeOne's entityId, the toggles'
+    /// on flag) reject absence the same way. A requestId that is present but
+    /// unusable (empty or over the ledger key limit) is INVALID_REQUEST_ID:
+    /// the caller must learn its retry protection is not active. Range
+    /// clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
+    /// console command's setters in BotConfig.
     /// </summary>
     public sealed class Bot : AbsRestApi
     {
@@ -86,9 +96,11 @@ namespace BotMod.Web
             PrepareEnvelopedResult(out JsonWriter writer);
             string action = GetString(_jsonInput, "action")?.ToLowerInvariant();
             // Optional idempotency key: one per logical request, reused across
-            // retries (see class doc + IdempotencyLedger).
+            // retries (see class doc + IdempotencyLedger). Present but unusable
+            // is a 400: silently degrading to keyless execution would leave the
+            // caller believing retries replay when they would re-execute.
             string requestId = GetString(_jsonInput, "requestId");
-            bool keyed = IdempotencyLedger.IsValidKey(requestId);
+            bool keyed = requestId != null;
             // One audit line per executed/replayed/rejected mutation; GET stays
             // unlogged because the dashboard polls it continuously.
             string reqTag = keyed ? requestId : "-";
@@ -97,6 +109,12 @@ namespace BotMod.Web
             // LogSanitizer). The raw values still drive routing and the ledger.
             string logAction = LogSanitizer.Clean(action);
             string logTag = LogSanitizer.Clean(reqTag);
+            if (keyed && !IdempotencyLedger.IsValidKey(requestId))
+            {
+                ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected INVALID_REQUEST_ID");
+                SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_REQUEST_ID", null);
+                return;
+            }
             if (keyed)
             {
                 string cached;
@@ -147,7 +165,7 @@ namespace BotMod.Web
                         break;
                     case "spawn":
                         {
-                            int count = Math.Max(1, Math.Min(16, GetInt(_jsonInput, "count", 1)));
+                            if (!OptCount(_jsonInput, out int count)) { errorCode = "INVALID_COUNT"; break; }
                             // Bot spawning touches Unity/world state and must run
                             // on the main thread (a direct call from the web
                             // thread pool segfaulted the server).
@@ -168,7 +186,11 @@ namespace BotMod.Web
                             // target player, out-of-sight preferred (11-42m via DM
                             // spawnpoints with a ~22m sweet spot, else a 14-30m ring).
                             string ident = GetString(_jsonInput, "player");
-                            int count = Math.Max(1, Math.Min(16, GetInt(_jsonInput, "count", 1)));
+                            // Absent player is a client bug, not "player not found":
+                            // both used to answer 200 {"found":false}, which made a
+                            // malformed body indistinguishable from a left player.
+                            if (string.IsNullOrEmpty(ident)) { errorCode = "INVALID_PLAYER"; break; }
+                            if (!OptCount(_jsonInput, out int count)) { errorCode = "INVALID_COUNT"; break; }
                             string weapon = null;
                             {
                                 string wv = GetString(_jsonInput, "weapon");
@@ -204,7 +226,10 @@ namespace BotMod.Web
                         break;
                     case "neural":
                         {
-                            bool on = GetBool(_jsonInput, "on");
+                            // The toggles require an explicit on flag: absence or
+                            // garbage used to read as false and silently flip the
+                            // live setting (e.g. squad mode off) with a 200.
+                            if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
                             ModApi.Config.UseNeuralBrain = on;
                             ModApi.PersistConfigField("UseNeuralBrain", on);
                             string why = "";
@@ -223,7 +248,9 @@ namespace BotMod.Web
                     case "removeone":
                         {
                             // {"action":"removeOne","entityId":N} - remove a single bot.
-                            int entityId = GetInt(_jsonInput, "entityId", 0);
+                            // Absence ran a lookup for id 0 and answered 200
+                            // {"removed":false}; a malformed body is a 400 instead.
+                            if (RequestFields.OptInt(_jsonInput, "entityId", out int entityId) != FieldRead.Ok) { errorCode = "INVALID_ENTITY_ID"; break; }
                             bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId, "web"), "removeOne");
                             respBody = RespondJson("removed", removed, "entityId", entityId);
                         }
@@ -233,8 +260,12 @@ namespace BotMod.Web
                             // {"action":"skill","level":0-4} - same as `bot skill`.
                             // Clamp/Normalize live in BotConfig.SetDifficulty (shared
                             // with the console command); the persisted value is the
-                            // post-clamp property.
-                            int level = GetInt(_jsonInput, "level", ModApi.Config.Difficulty);
+                            // post-clamp property. Absent level re-applies the
+                            // current difficulty (a no-op refresh); garbage rejects.
+                            int level = ModApi.Config.Difficulty;
+                            FieldRead read = RequestFields.OptInt(_jsonInput, "level", out int parsed);
+                            if (read == FieldRead.Invalid) { errorCode = "INVALID_LEVEL"; break; }
+                            if (read == FieldRead.Ok) level = parsed;
                             string field = ModApi.Config.SetDifficulty(level);
                             ModApi.PersistConfigField(field, ModApi.Config.Difficulty);
                             respBody = RespondJson("difficulty", ModApi.Config.Difficulty);
@@ -244,7 +275,7 @@ namespace BotMod.Web
                         {
                             // {"action":"team","on":bool} - squad mode: all bots are
                             // one team (never target/damage each other). Persisted.
-                            bool on = GetBool(_jsonInput, "on");
+                            if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
                             ModApi.Config.BotTeam = on;
                             ModApi.PersistConfigField("BotTeam", on);
                             respBody = RespondJson("team", on);
@@ -255,7 +286,7 @@ namespace BotMod.Web
                             // {"action":"vs","target":"bot|zombie|player","on":bool} -
                             // bots shoot that target class (same as `bot vs`). Persisted.
                             string target = GetString(_jsonInput, "target")?.ToLowerInvariant() ?? "";
-                            bool on = GetBool(_jsonInput, "on");
+                            if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
                             if (ModApi.Config.SetVsTarget(target, on, out string field))
                             {
                                 ModApi.PersistConfigField(field, on);
@@ -270,7 +301,10 @@ namespace BotMod.Web
                             // a bot to a team (0 = free-for-all). Keyed by base name,
                             // persists to config, applies to live bots immediately.
                             string name = GetString(_jsonInput, "name") ?? "";
-                            int team = GetInt(_jsonInput, "team", 0);
+                            int team = 0;
+                            FieldRead teamRead = RequestFields.OptInt(_jsonInput, "team", out int teamParsed);
+                            if (teamRead == FieldRead.Invalid) { errorCode = "INVALID_TEAM"; break; }
+                            if (teamRead == FieldRead.Ok) team = teamParsed;
                             if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
                             string baseName = BotManager.BaseName(name);
                             var cfg = ModApi.Config;
@@ -290,8 +324,12 @@ namespace BotMod.Web
                             // {"action":"teamCount","count":N} - number of team
                             // buckets (0 = free-for-all only). Persisted. Clamp +
                             // assignment pruning live in BotConfig.SetTeamCount
-                            // (shared with the console command).
-                            int count = GetInt(_jsonInput, "count", ModApi.Config.BotTeamCount);
+                            // (shared with the console command). Absent count
+                            // re-applies the current value; garbage rejects.
+                            int count = ModApi.Config.BotTeamCount;
+                            FieldRead countRead = RequestFields.OptInt(_jsonInput, "count", out int countParsed);
+                            if (countRead == FieldRead.Invalid) { errorCode = "INVALID_COUNT"; break; }
+                            if (countRead == FieldRead.Ok) count = countParsed;
                             string field = ModApi.Config.SetTeamCount(count);
                             ModApi.PersistConfigField(field, ModApi.Config.BotTeamCount);
                             ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
@@ -369,20 +407,16 @@ namespace BotMod.Web
             return body != null && body.TryGetValue(key, out object v) && v != null ? Convert.ToString(v) : null;
         }
 
-        /// <summary>Boolean flag of the POST body: true only when the value reads "true"
-        /// (case-insensitive); absent or any other value is false.</summary>
-        static bool GetBool(IDictionary<string, object> body, string key)
+        /// <summary>Spawn-count field: absent means 1, present-but-malformed is
+        /// false so the caller rejects with INVALID_COUNT. Range clamps 1..16
+        /// like the console parser's ClampCount.</summary>
+        static bool OptCount(IDictionary<string, object> body, out int count)
         {
-            string v = GetString(body, key);
-            return v != null && v.ToLowerInvariant() == "true";
-        }
-
-        /// <summary>Integer field of the POST body; fallback when absent or unparseable.
-        /// Invariant parse: JSON numbers are protocol tokens, not host-locale text.</summary>
-        static int GetInt(IDictionary<string, object> body, string key, int fallback)
-        {
-            string v = GetString(body, key);
-            return v != null && int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : fallback;
+            FieldRead read = RequestFields.OptInt(body, "count", out count);
+            if (read == FieldRead.Absent) { count = 1; return true; }
+            if (read != FieldRead.Ok) { count = 0; return false; }
+            count = Math.Max(1, Math.Min(16, count));
+            return true;
         }
 
         /// <summary>Serialize the success payload. The caller sends it and, for

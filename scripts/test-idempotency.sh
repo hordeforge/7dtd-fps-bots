@@ -69,6 +69,13 @@ run_suite logsanitizerfuzz \
   "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/LogSanitizerFuzzTests.cs"
 
+# POST /api/bot body-field readers: absent vs present-but-garbage triage for
+# untrusted JSON values (named 400s instead of silent defaults), plus a
+# shape fuzzer over adversarial value types.
+run_suite requestfields \
+  "$root/Source/BotMod/Web/RequestFields.cs" \
+  "$root/tests/BotMod.Web.Tests/RequestFieldsTests.cs"
+
 # vs-class combat gate: bot identity overrides body class (zombieSoldier
 # bodies are EntityZombie), so the vs-zombie/vs-player toggles must never
 # block bot targets or bot-on-bot damage.

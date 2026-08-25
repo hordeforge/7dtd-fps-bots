@@ -124,6 +124,26 @@ fails on drift between them.
   `400 INVALID_WEAPON` instead of silently ignoring it and spawning bots with
   random loadouts (same grammar as `bot player ... [weapon]`).
 
+### Changed
+- `POST /api/bot` rejects malformed request bodies with named `400 INVALID_*`
+  codes (new: `INVALID_COUNT`, `INVALID_ENTITY_ID`, `INVALID_LEVEL`,
+  `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`, `INVALID_REQUEST_ID`) where
+  it previously silently reinterpreted them:
+  - a missing `spawnNear` `player` answered `200 {"found":false}` like a
+    departed player instead of flagging the bad request;
+  - a missing `removeOne` `entityId` ran a lookup for id 0 and answered
+    `200 {"removed":false}`;
+  - absent or non-boolean `on` on `neural`/`team`/`vs` read as `false` and
+    flipped the live setting with a `200` (a malformed squad-mode call could
+    disband teams);
+  - present-but-unparseable numeric fields (`count`, `level`, `team`)
+    substituted their defaults; omitted fields still take those defaults;
+  - a `requestId` that is present but empty or over 128 chars degraded to
+    keyless execution, so retries re-executed while the caller believed they
+    would replay; it is now rejected so the caller can fix the key.
+  Range clamps are unchanged (`count` 1..16, `skill` 0..4, teams 0..8) and
+  stay shared with the console command's setters.
+
 ## [0.4.0] - 2026-08-23
 
 Not yet git-tagged; cut from commit f97ab9d.

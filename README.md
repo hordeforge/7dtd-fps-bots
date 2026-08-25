@@ -62,7 +62,8 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 API: authenticated `GET /api/bot` (status + online `players` list +
 scoreboard), `POST /api/bot` with
 `{"action":"enable|disable|spawn|spawnNear|remove|removeOne|skill|neural|team|vs|setTeam|teamCount|clearTeams", ...}`
-(permission level 0; `skill` takes `{"action":"skill","level":0-4}`, same as
+(`remove` accepts the alias `clear`; permission level 0; `skill` takes
+`{"action":"skill","level":0-4}`, same as
 `bot skill`). `removeOne` takes
 `{"action":"removeOne","entityId":N}` and removes that single bot.
 `spawnNear` takes
@@ -74,6 +75,22 @@ and responds `{"spawned":N,"found":bool,"player":"<name>"}`. `team` takes
 `{"action":"teamCount","count":N}`, `{"action":"clearTeams"}`. All persist to
 `config/botmod.json` and apply live. World-touching
 actions are dispatched to the game's main thread.
+
+Request validation: optional numeric fields (`count`, `level`, `team`) fall
+back to their documented defaults only when omitted; a value that is present
+but malformed rejects the request with `400` and a named code instead of
+executing something else, as do missing required fields (`spawnNear`
+`player`, `removeOne` `entityId`) and the toggles' required `on` flag.
+Rejection codes: `INVALID_ACTION`, `INVALID_COUNT`, `INVALID_ENTITY_ID`,
+`INVALID_LEVEL`, `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`,
+`INVALID_REQUEST_ID`, `INVALID_TARGET`, `INVALID_WEAPON`. Range clamps match
+the console (`count` 1..16, `skill` 0..4, teams 0..8). Send an optional
+client-generated `"requestId"` with mutations so a retried POST replays the
+recorded response instead of executing twice; a concurrent duplicate gets
+`409 REQUEST_IN_PROGRESS`, and a requestId that is present but empty or over
+128 chars is rejected `400 INVALID_REQUEST_ID` (your retry protection would
+not be active). Failures return a generic `500 ERROR` envelope; detail goes
+to the server log only.
 
 ## Console commands
 

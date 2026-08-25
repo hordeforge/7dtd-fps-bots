@@ -2,7 +2,7 @@
 
 Systemic view of what this mod exposes to attack, what it costs if broken, and
 what stands in the way. Derived from code and deployment artifacts on `main`
-(last reviewed 2026-08-23, commit c01c074, mod version 0.4.0). Every claim
+(last reviewed 2026-08-23, commit c01c074; WebApi.cs line refs re-anchored 2026-08-26, mod version 0.4.0). Every claim
 carries a file reference so the next review can re-verify it.
 
 Owner and review cadence are organizational decisions; none is defined in this
@@ -25,8 +25,8 @@ not reviewed here), the host OS, and the dev-side GA training tools
 |---|------|----------|-------|
 | G1 | Single control carries all `/api/bot` authority: authentication and authorization are delegated entirely to the stock webserver (permission level 0 declared, never re-checked in mod code). Stolen/replayed admin webtoken or a webpermissions misconfiguration yields full bot control with no second gate. | TB2 | Named gap |
 | G2 | Opt-in auth bypass (`AllowSyntheticAuthBypass=true`) lets anyone who can reach the server port join with a predictable synthetic Steam id, without owning the game. Controls: default off (`Source/BotMod/Config/BotConfig.cs:17`) and the `AuthBypass=` startup log line (`Source/BotMod/ModApi.cs:31`). | TB1 | Documented residual (README Install) |
-| G3 | Audit line appends the raw response body, which embeds request-supplied identifiers and world player names that never pass `LogSanitizer`; player-controlled text crosses into the audit trail unsanitized. Location: `Source/BotMod/Web/WebApi.cs:293` fed from `:142`, `:144`, `:152`. | TB6 -> TB1 | Threat recorded; fix belongs to sec-review |
-| G4 | No mod-layer rate limit or quota on `/api/bot`: each call is clamped, but aggregate calls (mutations and the every-5s-per-session status poll, `Source/BotMod/Web/WebApi.cs:410-411`) are unbounded. | TB2 | Named gap |
+| G3 | Audit line appends the raw response body, which embeds request-supplied identifiers and world player names that never pass `LogSanitizer`; player-controlled text crosses into the audit trail unsanitized. Location: `Source/BotMod/Web/WebApi.cs:384` fed from `:217`, `:255`, `:319`. | TB6 -> TB1 | Threat recorded; fix belongs to sec-review |
+| G4 | No mod-layer rate limit or quota on `/api/bot`: each call is clamped, but aggregate calls (mutations and the every-5s-per-session status poll, `Source/BotMod/Web/WebApi.cs:496`) are unbounded. | TB2 | Named gap |
 | G5 | Operator-trusted files (`botmod.json`, neural weights, `characters.json`) are parsed without integrity verification; weights get structural validation only (`Source/BotMod/AI/BotNeuralBrain.cs:188-207`). | TB3/TB4 | Accepted risk (operator boundary) |
 | G6 | Idempotency ledger eviction (oldest-first, capacity 256) can drop an active claim under key churn, allowing a late duplicate to execute twice. Admin-only trigger. `Source/BotMod/Web/IdempotencyLedger.cs:106-117`. | TB2 | Named gap, low |
 
@@ -34,7 +34,7 @@ not reviewed here), the host OS, and the dev-side GA training tools
 
 - **A1 Dedicated server availability** - the game main thread is the chokepoint;
   the code records that touching Unity/world state off it segfaulted the server
-  (`Source/BotMod/Web/WebApi.cs:113-115`). Loss: whole server down.
+  (`Source/BotMod/Web/WebApi.cs:169-171`). Loss: whole server down.
 - **A2 Game-world fairness** - bots shoot players; admins can retarget them at a
   specific player (`spawnNear`, `vs player`). Loss: griefing at scale, PvP
   balance destroyed.
@@ -44,10 +44,10 @@ not reviewed here), the host OS, and the dev-side GA training tools
   (`Source/BotMod/Config/AtomicTextFile.cs`, fallback in `BotConfig.Load`,
   `Source/BotMod/Config/BotConfig.cs:162-181`).
 - **A4 Audit trail integrity** - one log line per executed/replayed/rejected
-  mutation is the investigation record (`Source/BotMod/Web/WebApi.cs:67-74`).
+  mutation is the investigation record (`Source/BotMod/Web/WebApi.cs:104-111`).
   Loss: repudiation, hidden actions.
 - **A5 Player identity data** - online player names + entity ids served by
-  `GET /api/bot` (`BuildStatus`, `Source/BotMod/Web/WebApi.cs:347-433`).
+  `GET /api/bot` (`BuildStatus`, `Source/BotMod/Web/WebApi.cs:432-519`).
   Exposure limited to permission-0 holders.
 - **A6 Admin browser session** - the dashboard runs in the admin's browser
   against the stock webserver; server-controlled strings render through React
@@ -64,9 +64,9 @@ not reviewed here), the host OS, and the dev-side GA training tools
   `AllowSyntheticAuthBypass=true` (`Source/BotMod/Patches/BotPatches.cs:11-33`).
   Deployments running code mods have EAC disabled anyway (README, Install).
 - **TB2 Admin browser <-> stock webserver <-> BotMod REST API.**
-  `GET/POST /api/bot` (`Source/BotMod/Web/WebApi.cs:37,59`) is discovered by the
+  `GET/POST /api/bot` (`Source/BotMod/Web/WebApi.cs:72,94`) is discovered by the
   game's webserver as an `AbsRestApi` subclass; the mod declares permission
-  level 0 for all methods (`WebApi.cs:298`) and performs **no** authentication,
+  level 0 for all methods (`WebApi.cs:389`) and performs **no** authentication,
   authorization, or rate limiting of its own. Enforcement point is entirely in
   game-owned code/config.
 - **TB3 Operator filesystem <-> mod.** Config (`BotConfig.Load`),
@@ -80,13 +80,13 @@ not reviewed here), the host OS, and the dev-side GA training tools
   as data driving combat decisions.
 - **TB5 Web thread pool <-> game main thread.** Every world-touching action is
   marshaled via `RunOnMain` -> `MainThreadDispatch.Execute` with a 15 s timeout
-  (`Source/BotMod/Web/WebApi.cs:305-311`, `Source/BotMod/Web/MainThreadDispatch.cs`).
+  (`Source/BotMod/Web/WebApi.cs:396-401`, `Source/BotMod/Web/MainThreadDispatch.cs`).
   This is a privilege transition: queued work still runs after a dispatch
   timeout, which the error path handles by keeping the idempotency claim
-  (`WebApi.cs:268-277`).
+  (`WebApi.cs:352-369`).
 - **TB6 Mod <-> server log.** Request-derived strings are scrubbed before
   logging (`LogSanitizer.Clean`, `Source/BotMod/Config/LogSanitizer.cs:40-53`,
-  applied at `WebApi.cs:73-74`); see G3 for what escapes it.
+  applied at `WebApi.cs:110-111`); see G3 for what escapes it.
 - **TB7 Server data <-> admin browser.** Status JSON renders player/bot names in
   the dashboard (React default escaping, asset A6).
 
@@ -94,8 +94,8 @@ not reviewed here), the host OS, and the dev-side GA training tools
 
 | Entry point | Untrusted input | Reference |
 |---|---|---|
-| `GET /api/bot` | none (read-only status) | `Source/BotMod/Web/WebApi.cs:37` |
-| `POST /api/bot` | `action`, `requestId`, `count`, `player`, `weapon`, `entityId`, `level`, `target`, `name`, `team`, `on` fields | `Source/BotMod/Web/WebApi.cs:59-264` |
+| `GET /api/bot` | none (read-only status) | `Source/BotMod/Web/WebApi.cs:72` |
+| `POST /api/bot` | `action`, `requestId`, `count`, `player`, `weapon`, `entityId`, `level`, `target`, `name`, `team`, `on` fields | `Source/BotMod/Web/WebApi.cs:94-346` |
 | Console command `bot` (console/telnet) | subcommand args incl. player name/id lookups | `Source/BotMod/Commands/BotConsoleCommands.cs:30-57` |
 | `Config/botmod.json` (+ `.bak`) | full config object; unknown keys warned | `Source/BotMod/Config/BotConfig.cs:152-196` |
 | `evolved/best.json` weights | version/inputs/shape validated, length-checked | `Source/BotMod/AI/BotNeuralBrain.cs:159-215`; fuzz: `tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs` |
@@ -121,21 +121,21 @@ world player names echoed into responses/logs (G3).
 
 **TB2 (admin -> API)**
 - *Spoofing/EoP (SPOF, G1):* one control - webserver token authn + level-0
-  declaration (`WebApi.cs:298`). No second gate in mod code.
+  declaration (`WebApi.cs:389`). No second gate in mod code.
 - *Tampering:* concurrent persists interleaving - mitigated: serialized by
   `PersistGate` (`Source/BotMod/ModApi.cs:157-175`); torn writes recovered from
   `.bak` (`BotConfig.cs:162-181`).
 - *Repudiation:* every executed/replayed/rejected mutation logs one sanitized
-  line (`WebApi.cs:81,88,278,288,293`); GET polling deliberately unlogged
-  (`WebApi.cs:67-68`) - acceptable volume tradeoff, noted for investigators.
+  line (`WebApi.cs:114,124,131,365,384`); GET polling deliberately unlogged
+  (`WebApi.cs:104-105`) - acceptable volume tradeoff, noted for investigators.
 - *Information disclosure:* exception type/message/stack suppressed from
-  responses; generic 500 envelope only (`WebApi.cs:279-283`), detail to log.
+  responses; generic 500 envelope only (`WebApi.cs:365-369`), detail to log.
 - *DoS:* body-size limits are game-owned; per-call clamps everywhere
-  (spawn count 1..16 `WebApi.cs:112,132`; team 0..BotTeamCount `:234`;
-  skill 0..4 `:193`; global bot ceiling 64 via `Normalize`
+  (spawn count 1..16 `WebApi.cs:168,193,413-420`; team 0..BotTeamCount `:311`;
+  skill 0..4 `:269`; global bot ceiling 64 via `Normalize`
   `BotConfig.cs:199-200`); ledger capped at 256 keys, 128-char keys, 10 min
   retention (`IdempotencyLedger.cs:26-30`); dispatch timeout 15 s
-  (`WebApi.cs:310`). Aggregate rate: unbounded (G4).
+  (`WebApi.cs:396-401`). Aggregate rate: unbounded (G4).
 
 **TB3/TB4 (files/artifacts -> runtime)**
 - *Tampering/EoP:* hand-edited or substituted config/weights change bot behavior
@@ -147,20 +147,20 @@ world player names echoed into responses/logs (G3).
 
 **TB5 (web thread -> main thread)**
 - *DoS/crash:* wrong-thread world access historically segfaulted the dedi
-  (`WebApi.cs:113-115`); mitigated by mandatory `RunOnMain` marshaling and the
+  (`WebApi.cs:169-171`); mitigated by mandatory `RunOnMain` marshaling and the
   ambiguous-timeout rule preventing double execution
-  (`WebApi.cs:268-277`, `MainThreadDispatch.cs`).
+  (`WebApi.cs:352-369`, `MainThreadDispatch.cs`).
 
 **TB6 (output -> audit log)**
 - *Repudiation/tampering:* log forging via CR/LF, terminal escapes, bidi/zero-
-  width controls - mitigated for `action`/`requestId` (`WebApi.cs:73-74`);
+  width controls - mitigated for `action`/`requestId` (`WebApi.cs:110-111`);
   **not** mitigated for response-embedded player/request text (G3).
 
 ## Abuse cases
 
 - **Hostile-but-authenticated admin (griefing at scale).** An authenticated
   permission-0 user can aim bots at a chosen player (`POST /api/bot`
-  `action=spawnNear`, `WebApi.cs:126-155`) and keep them there across respawns,
+  `action=spawnNear`, `WebApi.cs:182-218`) and keep them there across respawns,
   or flip `vs player on`. Bounded only by MaxBots <= 64. This is the tool's
   intended power; the mitigation is webserver credential hygiene (game-owned),
   not mod code.
@@ -180,21 +180,21 @@ world player names echoed into responses/logs (G3).
 
 | Control | Covers | Reference |
 |---|---|---|
-| Webserver authn + permission level 0 declaration | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:298` |
+| Webserver authn + permission level 0 declaration | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:389` |
 | Deny-side matrix tests: web API method levels and console default level pinned to 0 | TB2 gate regression (widened declaration fails `make test`) | `tests/BotMod.Web.Tests/WebApiAuthzTests.cs` |
 | Bypass flag default-off + startup visibility | TB1 spoofing blast radius (G2) | `BotConfig.cs:17`, `ModApi.cs:31` |
 | Per-join bypass logging | TB1 attribution | `BotPatches.cs:27` |
-| Sanitized audit fields, generic 500s | TB6 forgery, TB2 disclosure | `WebApi.cs:73-74,279-283`, `LogSanitizer.cs` |
+| Sanitized audit fields, generic 500s | TB6 forgery, TB2 disclosure | `WebApi.cs:110-111,365-369`, `LogSanitizer.cs` |
 | Serialized atomic persists + `.bak` recovery | A3 tampering/durability | `ModApi.cs:157-175`, `AtomicTextFile.cs`, `BotConfig.cs:162-181` |
 | Locked team-map access | race between web writes and tick reads | `BotConfig.cs:64-107` |
-| Input clamps (all POST fields, config Normalize) | TB2 DoS/value abuse | `WebApi.cs:112-253`, `BotConfig.cs:197-241` |
+| Input clamps (all POST fields, config Normalize) | TB2 DoS/value abuse | `WebApi.cs:154-346,413-420`, `BotConfig.cs:197-241` |
 | Bounded idempotency ledger | retry storms, unbounded memory | `IdempotencyLedger.cs` |
-| Main-thread dispatch + 15 s timeout + claim-on-timeout | TB5 crash/double-exec | `WebApi.cs:268-277,305-311` |
+| Main-thread dispatch + 15 s timeout + claim-on-timeout | TB5 crash/double-exec | `WebApi.cs:352-369,396-401` |
 | Weight structural validation + fuzz suites | TB4 malformed artifacts | `BotNeuralBrain.cs:159-215`, `tests/BotMod.Web.Tests/` |
 | React default escaping (no raw HTML sinks) | TB7 XSS into admin session | `Source/BotMod/WebMod/bundle.ts` |
 
 Documentation claims checked against code this pass: README's "authenticated
-GET/POST /api/bot ... permission level 0" matches `WebApi.cs:298`;
+GET/POST /api/bot ... permission level 0" matches `WebApi.cs:389`;
 "admin login required" for the dashboard matches the stock-webserver pattern;
 the auth-bypass description matches `BotPatches.cs`. No contradicted claim
 found.
