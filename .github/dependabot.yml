@@ -1,0 +1,9 @@
+# The mod compiles against the game's own assemblies and carries no NuGet
+# PackageReference, so the SHA-pinned CI actions are the whole dependency
+# surface.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
