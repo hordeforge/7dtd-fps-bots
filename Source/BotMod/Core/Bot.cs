@@ -148,6 +148,11 @@ namespace BotMod.Core
                 // _target and the bot shoots back until the next scan drops it.
                 if (me != null && IsValidTarget(attacker, cfg) && Vector3.Distance(me.position, attacker.position) < cfg.VisionRange * 1.1f)
                 {
+                    // Same motion-sample reset as AdoptTarget: switching targets
+                    // must not let the old body's position fabricate one
+                    // velocity sample on the next UpdateTargetVelocity.
+                    _targetVel = Vector3.zero;
+                    _lastTargetPos = Vector3.zero;
                     _target = attacker;
                     _loseTargetTimer = 0f;
                     _state = BotBrain.State.Chase;
@@ -245,6 +250,13 @@ namespace BotMod.Core
         {
             if (_target != null && _target.entityId == found.entityId) return;
             _target = found;
+            // Drop the previous engagement's motion samples. Keeping them makes
+            // the next UpdateTargetVelocity divide (new pos - old target pos)
+            // by dt, one fabricated velocity (up to VisionRange/dt, clamped to
+            // 12 m/s in the wrong direction) that skews LeadAimPoint until the
+            // tick after; zeroed here, the first engaged tick aims unled.
+            _targetVel = Vector3.zero;
+            _lastTargetPos = Vector3.zero;
             _loseTargetTimer = 0f;
             _state = BotBrain.State.Chase;
             _reactionUntil = Time.time + cfg.ReactionTimeSec;

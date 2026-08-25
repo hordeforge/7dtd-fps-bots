@@ -314,7 +314,7 @@ def main():
                 "seed 1234 · maze": (1234, 4, 3, 4),
                 "seed 42 · corridor": (42, 4, 3, 3),
             }.items():
-                summary, frames = record_match(w, seed, nb, nz, 1200, 3, 0, envf)
+                summary, frames = record_match(w, seed, nb, nz, 1200, 3, -1, envf)
                 walls = _rp.WALLS[envf]
                 html_path = Path(tmp) / f"replay_seed{seed}.html"
                 render_html(summary, frames, walls, html_path, label)

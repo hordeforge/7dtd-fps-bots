@@ -119,6 +119,9 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
       t, env, bots:[{id,x,y,hp,alive,tx,ty,strafe,fire,hit}], zombies:[{id,x,y,hp,alive}],
       events:["shot b0->z2","hit","kill b0@z2 b5",...]
     A frame is recorded once every RECORD_STRIDE ticks so replay stays small.
+    `bot_weapon` pins every bot's loadout when it names a weapon index (0..5);
+    negative rolls a mixed loadout per bot off the LCG stream (same shape as
+    combat_sim's wep_pin).
     """
     rng = seed & 0xFFFFFFFF
     bx = []; by = []; bhp = []; bweapon = []; balive = []; bskill = []
@@ -126,7 +129,8 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
         v2, rng = _lcg01(rng); rad = 8.0 + v2 * 18.0
         bx.append(40.0 + math.cos(ang) * rad); by.append(40.0 + math.sin(ang) * rad)
-        bhp.append(100.0); bweapon.append((rng >> 8) % 6); bskill.append(float(bot_skill)); balive.append(True)
+        bhp.append(100.0); bweapon.append(bot_weapon if bot_weapon >= 0 else ((rng >> 8) % 6))
+        bskill.append(float(bot_skill)); balive.append(True)
     zx = []; zy = []; zhp = []; zalive = []
     for i in range(n_zombies):
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
@@ -134,9 +138,12 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
         zx.append(40.0 + math.cos(ang) * rad); zy.append(40.0 + math.sin(ang) * rad)
         zhp.append(80.0); zalive.append(True)
     kills = 0; deaths = 0; damage_dealt = 0.0; damage_taken = 0.0; shots = 0; hits = 0; total_ticks = 0
-    burst_left = [WEAPON_BURST_MIN[bot_weapon]] * n_bots
+    # Per-bot init keyed to each bot's ROLLED weapon (bweapon[i]), not the
+    # --weapon default: a bot rolling AK with --weapon 0 used to start on the
+    # pistol's 15-round mag and burst 1, then silently correct at first reload.
+    burst_left = [WEAPON_BURST_MIN[w] for w in bweapon]
     burst_cd = [0.0] * n_bots; reaction_cd = [0.0] * n_bots; strafe_dir = [1] * n_bots
-    ammo = [WEAPON_MAG[bot_weapon]] * n_bots; reload_cd = [0.0] * n_bots
+    ammo = [WEAPON_MAG[w] for w in bweapon]; reload_cd = [0.0] * n_bots
     last_x = list(bx); last_y = list(by)
     stuck = [0] * n_bots
     env = (seed % 5) if env_fixed is None else env_fixed
@@ -495,7 +502,9 @@ def main():
     ap.add_argument("--n-zombies", type=int, default=3)
     ap.add_argument("--max-ticks", type=int, default=1200)
     ap.add_argument("--skill", type=int, default=3)
-    ap.add_argument("--weapon", type=int, default=0)
+    ap.add_argument("--weapon", type=int, default=-1,
+                    help="pin every bot to this weapon index (0 pistol, 1 shotgun, 2 AK, "
+                         "3 sniper, 4 auto-shotgun, 5 SMG); negative rolls mixed loadouts")
     ap.add_argument("--env", type=int, default=None)
     ap.add_argument("--out", default="docs/ga-replay.html")
     ap.add_argument("--verify", action="store_true", help="compare summary to numba eval on same seed")
