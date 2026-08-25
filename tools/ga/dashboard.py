@@ -72,15 +72,28 @@ def chart_card(data_b64: str, alt: str) -> str:
 def load_run_csv(run: Path):
     # Bounded open: this helper runs three times per run per build (curves,
     # held strip, run table), so each read must release its own descriptor.
+    # Unparseable rows are skipped with one stderr note (same contract as
+    # report.load_csv): a torn row in one old run's fitness.csv must not kill
+    # the whole dashboard build; every section degrades independently.
     with open(run / "fitness.csv", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     if not rows:
         return [], [], [], [], [], []
-    gens = [int(r["gen"]) for r in rows]
-    best = [float(r["best"]) for r in rows]
-    mean = [float(r["mean"]) for r in rows]
-    q25 = [float(r.get("q25") or r["mean"]) for r in rows]
-    q75 = [float(r.get("q75") or r["mean"]) for r in rows]
+    gens, best, mean, q25, q75 = [], [], [], [], []
+    skipped = 0
+    for r in rows:
+        try:
+            g = int(r["gen"])
+            b = float(r["best"])
+            m = float(r["mean"])
+            lo = float(r.get("q25") or r["mean"])
+            hi = float(r.get("q75") or r["mean"])
+        except (KeyError, TypeError, ValueError):
+            skipped += 1
+            continue
+        gens.append(g); best.append(b); mean.append(m); q25.append(lo); q75.append(hi)
+    if skipped:
+        print(f"{run / 'fitness.csv'}: skipped {skipped} unparseable row(s)", file=_sys.stderr)
     held = []
     for r in rows:
         hv = r.get("held")

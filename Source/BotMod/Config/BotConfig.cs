@@ -206,7 +206,16 @@ namespace BotMod.Config
                 try
                 {
                     var loaded = JsonConvert.DeserializeObject<BotConfig>(json);
-                    if (loaded == null) continue;
+                    if (loaded == null)
+                    {
+                        // Deserialization can yield a null object without
+                        // throwing (a hand-edited file holding bare JSON
+                        // "null"): surface it like every other unreadable
+                        // candidate instead of silently falling through to
+                        // .bak / defaults with no signal at all.
+                        Warn("BotConfig parse failed (" + candidate + "): JSON body deserialized to null");
+                        continue;
+                    }
                     // Json.NET silently ignores keys that bind no property, so a
                     // typo ("TagetBotCount") keeps the built-in default with no
                     // signal at all. Surface every unknown key instead.

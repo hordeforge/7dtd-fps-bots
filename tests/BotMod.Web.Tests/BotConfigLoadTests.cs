@@ -235,14 +235,25 @@ static class BotConfigLoadTests
         // A primary holding bare JSON null (hand-edit gone wrong) deserializes
         // to a null object WITHOUT throwing, so it must hit the same
         // fall-through-to-.bak branch as any other unreadable primary instead
-        // of escaping Load as a null config (every caller would NRE).
+        // of escaping Load as a null config (every caller would NRE) - and the
+        // skip must be reported like every other unreadable candidate, not
+        // discarded silently.
         {
             string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
             AtomicTextFile.Write(path, "{ \"TargetBotCount\": 8 }");
             AtomicTextFile.Write(path, "{ \"TargetBotCount\": 12 }"); // snapshots 8 into .bak
-            File.WriteAllText(path, "null");
-            BotConfig cfg = BotConfig.Load(path);
-            Check("null-body primary recovers from .bak", cfg != null && cfg.TargetBotCount == 8);
+            var warnings = new List<string>();
+            Action<string> prevWarn = BotConfig.Warn;
+            BotConfig.Warn = w => warnings.Add(w);
+            try
+            {
+                File.WriteAllText(path, "null");
+                BotConfig cfg = BotConfig.Load(path);
+                Check("null-body primary recovers from .bak", cfg != null && cfg.TargetBotCount == 8);
+                Check("null-body primary is reported, not silently skipped",
+                    warnings.Exists(w => w != null && w.Contains(path) && w.Contains("deserialized to null")));
+            }
+            finally { BotConfig.Warn = prevWarn; }
         }
         {
             string dir = TempDir(), path = Path.Combine(dir, "botmod.json");

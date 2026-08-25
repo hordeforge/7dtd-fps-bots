@@ -129,8 +129,10 @@ def main():
     # also dump JSON for CI diffing
     dump = {k: [{"gen": g, "best": b, "mean": m} for (g, b, m) in v] for k, v in ok.items()}
     jpath = Path(f"evolved/runs/sweep_{args.seed}.json") if args.out is None else Path(args.out).with_suffix(".json")
+    # Atomic like every other evolved/ artifact (ga.atomic_write_text): the
+    # diff consumer must never read a half-written file.
     jpath.parent.mkdir(parents=True, exist_ok=True)
-    jpath.write_text(json.dumps(dump, indent=2), encoding="utf-8")
+    ga.atomic_write_text(jpath, json.dumps(dump, indent=2))
     print(f"json -> {jpath}")
 
 

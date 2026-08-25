@@ -74,16 +74,31 @@ def img_tag(data: bytes, alt: str) -> str:
 
 
 def load_csv(path: Path):
+    """gens/best/mean/median/q25/q75 lists from a run's fitness.csv.
+
+    Unparseable rows are skipped with one stderr note instead of raising:
+    this loader runs for every historical run in a single build, and a torn
+    row (a crash mid-write before ga.atomic_write_text, or a hand edit) in
+    one old run must not cost the whole report/dashboard for all of them.
+    """
     gens, best, mean, median, q25, q75 = [], [], [], [], [], []
+    skipped = 0
     with open(path, encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            gens.append(int(row["gen"]))
-            best.append(float(row["best"]))
-            mean.append(float(row["mean"]))
-            median.append(float(row["median"]))
-            q25.append(float(row.get("q25", row["mean"])) )
-            q75.append(float(row.get("q75", row["mean"])) )
+        for row in csv.DictReader(f):
+            try:
+                g = int(row["gen"])
+                b = float(row["best"])
+                m = float(row["mean"])
+                md = float(row["median"])
+                lo = float(row.get("q25") or row["mean"])
+                hi = float(row.get("q75") or row["mean"])
+            except (KeyError, TypeError, ValueError):
+                skipped += 1
+                continue
+            gens.append(g); best.append(b); mean.append(m)
+            median.append(md); q25.append(lo); q75.append(hi)
+    if skipped:
+        print(f"{path}: skipped {skipped} unparseable row(s)", file=sys.stderr)
     return gens, best, mean, median, q25, q75
 
 
@@ -166,6 +181,11 @@ def build(runs: list[Path], out: Path):
             parts.append(f"<p><b>{html.escape(run_dir.name)}</b>: no fitness.csv</p>")
             continue
         gens, best, mean, median, q25, q75 = load_csv(csv_path)
+        if not gens:
+            # Every row was skipped (or the file holds only a header): say so
+            # instead of indexing into an empty series below.
+            parts.append(f"<p><b>{html.escape(run_dir.name)}</b>: fitness.csv has no parsable rows</p>")
+            continue
         cfg = {}
         cfg_path = run_dir / "config.json"
         if cfg_path.exists():

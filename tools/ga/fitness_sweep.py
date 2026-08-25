@@ -55,7 +55,9 @@ if __name__=="__main__":
     # convention as sweep.py), not a fixed /tmp path: /tmp is RAM-backed and
     # wiped on reboot, and the name is not run-parameterized.
     out_dir = Path("evolved/runs"); out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "fitness_sweep_R7.json").write_text(json.dumps([{"tag":t,"train":bf,"held":h,"held_std":s,"mix":m} for t,bf,h,s,m in rows], indent=2), encoding="utf-8")
+    # Atomic like every other evolved/ artifact (ga.atomic_write_text): the
+    # result JSON must never land torn for the next comparison.
+    ga.atomic_write_text(out_dir / "fitness_sweep_R7.json", json.dumps([{"tag":t,"train":bf,"held":h,"held_std":s,"mix":m} for t,bf,h,s,m in rows], indent=2))
     print(f"json -> {out_dir}/fitness_sweep_R7.json")
     # plot
     try:
