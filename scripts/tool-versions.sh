@@ -5,7 +5,7 @@
 # win over the defaults below (same override contract as before).
 #
 # The repo deliberately tracks no package.json/node_modules (.gitignore);
-# these pins fetched via npx ARE the dependency manifest (same policy as
+# these pins fetched via bunx ARE the dependency manifest (same policy as
 # ../7dtd-server-apm/scripts/lint-webui.sh).
 #
 # TSC_VERSION is load-bearing in two places: scripts/build.sh compiles the

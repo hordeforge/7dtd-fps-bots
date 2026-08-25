@@ -63,7 +63,7 @@ build_webmod() {
   # Compile the TypeScript panel to bundle.js (dashboard loads
   # /webmods/BotMod/bundle.js); emit lands next to bundle.ts per
   # WebMod/tsconfig.json, then bundle.js + styling.css ship in the payload.
-  npx --yes -p "typescript@$TSC_VERSION" tsc -p "$SRC/WebMod/tsconfig.json"
+  bunx -p "typescript@$TSC_VERSION" tsc -p "$SRC/WebMod/tsconfig.json"
   mkdir -p "$OUT/WebMod"
   cp "$SRC/WebMod/bundle.js" "$OUT/WebMod/bundle.js"
   cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"

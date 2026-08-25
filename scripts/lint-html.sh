@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # vnu (Nu HTML Checker) over the HTML this repo ships (GA dashboards, evolved
-# reports). Same convention as zdtd and 7dtd-server-apm: vnu runs through npx
+# reports). Same convention as zdtd and 7dtd-server-apm: vnu runs through bunx
 # pinned by VNU_VERSION in scripts/tool-versions.sh; java is required.
 # vnu-filter.txt drops deliberate deviations; warnings do not fail, errors do.
 set -euo pipefail
@@ -23,5 +23,5 @@ if [ "${#html_files[@]}" -eq 0 ]; then
 fi
 
 echo "vnu: checking ${#html_files[@]} HTML documents"
-npx --yes "vnu-jar@$VNU_VERSION" --filterfile "$root/vnu-filter.txt" --also-check-css "${html_files[@]}"
+bunx "vnu-jar@$VNU_VERSION" --filterfile "$root/vnu-filter.txt" --also-check-css "${html_files[@]}"
 echo "vnu: OK"

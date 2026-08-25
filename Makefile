@@ -16,8 +16,8 @@ Targets:
   make check        what CI runs: shellcheck + vnu HTML lint + tsc/oxlint/bundle freshness
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
-  make lint-html    Nu HTML checker over shipped/generated HTML (needs java; tools via npx)
-  make lint-webui   tsc strict type-check, oxlint, committed-bundle freshness gate (needs node/npm)
+  make lint-html    Nu HTML checker over shipped/generated HTML (needs java; tools via bunx)
+  make lint-webui   tsc strict type-check, oxlint, committed-bundle freshness gate (needs bun/bunx)
   make install      copy dist/BotMod into the dedicated server's Mods dir
   make uninstall    remove Mods/BotMod from the server
   make clean        remove dist/ and C# obj/bin intermediates
