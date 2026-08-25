@@ -94,8 +94,7 @@ def mutate(w: np.ndarray, rng: np.random.Generator, sigma: float = 0.05, rank_no
         for o in range(OUTPUTS):
             row = W1_LEN + B1_LEN + o * HIDDEN
             w[row + a], w[row + b] = w[row + b], w[row + a]
-    w = np.clip(w, -8.0, 8.0).astype(np.float32)
-    return w
+    return np.clip(w, -8.0, 8.0).astype(np.float32)
 
 
 def next_generation(pop_w: List[np.ndarray], ranked, order, rng: np.random.Generator,

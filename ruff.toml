@@ -11,13 +11,20 @@
 #          each such import carries a rule-scoped `# noqa: E402 -- reason`
 #   RUF100 keeps those noqa directives honest: an ignore whose finding is
 #          gone stops suppressing anything and fails the build instead
+# Promoted 2026-08-25 (proven clean by `ruff check --select ... .` on the
+# whole Python surface): W (pycodestyle warnings incl. W605 above), A
+# (builtins shadowing), ARG (unused arguments = dead parameters), PIE
+# (useless constructs), RET (needless returns before return). Style/
+# modernization families that also pass today (FLY, FURB, PT) stay out to
+# keep this a defect-class baseline.
 #
 # Known debt, deliberately NOT selected yet (fix in code-review passes, then
 # move the rule up here): the default-preset style/modernization findings
 # (I001, PLR1730, EXE001, BLE001, UP006, SIM114, UP031, C413, PLR0124, S110,
-# SIM103, RUF019, RUF059, UP034), mypy's 8 pre-existing errors in viz.py,
-# report.py, and dashboard.py, and E501 line length.
+# SIM103, RUF019, RUF059, UP034), mypy's 10 findings in viz.py, report.py,
+# and evolve.py (dashboard.py is clean as of 2026-08-25), and E501 line
+# length (99 over-length lines at a 100-column cap).
 target-version = "py310"
 
 [lint]
-select = ["E402", "E9", "F", "W605", "RUF100"]
+select = ["E402", "E9", "F", "W605", "RUF100", "W", "A", "ARG", "PIE", "RET"]
