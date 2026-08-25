@@ -4,7 +4,11 @@
 // answers to the ally rule alone. Regression for the configuration where
 // "bot vs zombie off" with BotVsBot on silently disabled every bot-vs-bot
 // engagement in IsValidTarget and the DamageEntity patch.
-// Pure BCL; compiled and run by scripts/test-idempotency.sh.
+// AllyBlocks pins the ally rule as a BOT-PAIR relation: vsBot-off and squad
+// mode must never make a bot allied with a player or zombie body (the trigger
+// guard in TryShootBurst is class-unguarded, so that pairing silenced ALL bot
+// fire in "bot vs bot off" and squad modes). Pure BCL; compiled and run by
+// scripts/test-idempotency.sh.
 //
 //   bash scripts/test-idempotency.sh
 using System;
@@ -61,6 +65,44 @@ static class CombatGatesTests
                                 exempt = false;
             Check("bot victim exempt in every one of the 16 toggle combos", exempt);
         }
+
+        // 5. Ally rule is a bot-pair relation: mixed pairs are NEVER allied.
+        //    Regression: vsBot-off / squad mode early-returned "allies" for any
+        //    id pair, and the class-unguarded TryShootBurst guard then held
+        //    every bot's fire against players and zombies (documented as
+        //    "players/zombies still fair game" in both modes).
+        //    Signature: (aIsBot, bIsBot, botVsBot, squad, teamA, teamB).
+        {
+            bool mixedNeverAllied = true;
+            foreach (bool botVsBot in new[] { false, true })
+                foreach (bool squad in new[] { false, true })
+                {
+                    // bot vs world body
+                    if (CombatGates.AllyBlocks(true, false, botVsBot, squad, 1, 0)) mixedNeverAllied = false;
+                    // world body vs bot
+                    if (CombatGates.AllyBlocks(false, true, botVsBot, squad, 0, 1)) mixedNeverAllied = false;
+                    // two world bodies
+                    if (CombatGates.AllyBlocks(false, false, botVsBot, squad, 0, 0)) mixedNeverAllied = false;
+                }
+            Check("mixed pairs never allied in every toggle combo", mixedNeverAllied);
+        }
+
+        // 6. Bot pairs keep the documented ally semantics on top of the
+        //    mixed-pair fix: vsBot-off and squad mode bar all bot fights,
+        //    otherwise only a shared nonzero team does.
+        Check("bot pair blocked when vsBot off",
+            CombatGates.AllyBlocks(true, true, false, false, 0, 0));
+        Check("bot pair blocked in squad mode even with vsBot on",
+            CombatGates.AllyBlocks(true, true, true, true, 0, 0));
+        Check("bot pair blocked on shared nonzero team",
+            CombatGates.AllyBlocks(true, true, true, false, 2, 2));
+        Check("bot pair free when teams differ",
+            !CombatGates.AllyBlocks(true, true, true, false, 1, 2));
+        Check("bot pair free in FFA defaults (team 0)",
+            !CombatGates.AllyBlocks(true, true, true, false, 0, 0));
+        Check("team 0 never allies two bots",
+            !CombatGates.AllyBlocks(true, true, true, false, 0, 3) &&
+            !CombatGates.AllyBlocks(true, true, true, false, 3, 0));
 
         if (_failures > 0)
         {

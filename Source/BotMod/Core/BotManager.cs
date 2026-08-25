@@ -77,15 +77,22 @@ namespace BotMod.Core
             return ModApi.Config.GetTeamAssignmentCanonical(bot.TeamKey);
         }
         // Single ally rule for every damage path (targeting, firing, DamageEntity):
-        // same entity, global no-bot-vs-bot, squad mode, or a shared nonzero team.
+        // same entity, or two bots that are globally barred from fighting
+        // (vsBot off), in squad mode, or on a shared nonzero team. A MIXED pair
+        // (bot vs player/zombie body) is never allied - CombatGates.AllyBlocks
+        // scopes the vsBot/squad early returns to bot pairs, so the trigger-pull
+        // guard in Bot.TryShootBurst cannot silence bot fire at world bodies.
         public bool AreAllies(int aId, int bId)
         {
             if (aId == bId) return true;
             var cfg = ModApi.Config;
-            if (!cfg.BotVsBot) return true; // bots never fight bots
-            if (cfg.BotTeam) return true;   // squad mode: everyone allies
-            int ta = GetTeamId(aId), tb = GetTeamId(bId);
-            return ta != 0 && ta == tb;
+            bool aBot = IsBotEntity(aId);
+            bool bBot = IsBotEntity(bId);
+            // Team lookups stay behind the both-bots check: world bodies have no
+            // registry entry (GetTeamId would return 0) and the hot damage path
+            // skips the dictionary work for them.
+            if (!aBot || !bBot) return false;
+            return Config.CombatGates.AllyBlocks(aBot, bBot, cfg.BotVsBot, cfg.BotTeam, GetTeamId(aId), GetTeamId(bId));
         }
         public void OnGameStartDone()
         {
