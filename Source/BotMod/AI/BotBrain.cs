@@ -8,7 +8,11 @@ namespace BotMod.AI
     {
         public enum State { Wander, Chase, Attack }
 
-        public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg, int preferredId = -1, float preferredScale = 1f)
+        // Grudge bias (zdtd_bot parity): while the revenge memory is fresh,
+        // FindTarget out-scores the attacker by this factor (0.6x).
+        const float GrudgeBias = 0.6f;
+
+        public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg, int preferredId = -1)
         {
             if (world == null || me == null) return null;
             EntityAlive best = null;
@@ -51,7 +55,7 @@ namespace BotMod.AI
                         // Retaliation bias (zdtd_bot grudge parity): the bot keeps
                         // re-acquiring whoever shot it while the grudge is fresh,
                         // instead of forgetting the instant they leave LOS.
-                        if (preferredId >= 0 && alive.entityId == preferredId) score *= preferredScale;
+                        if (preferredId >= 0 && alive.entityId == preferredId) score *= GrudgeBias;
                         if (score < bestScore) { bestScore = score; best = alive; }
                     }
                 }
@@ -74,7 +78,7 @@ namespace BotMod.AI
                             if (dist > cfg.VisionRange) continue;
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, p.position + Vector3.up * 1.05f, world)) continue;
                             float score = dist * 0.82f;
-                            if (preferredId >= 0 && p.entityId == preferredId) score *= preferredScale;
+                            if (preferredId >= 0 && p.entityId == preferredId) score *= GrudgeBias;
                             if (score < bestScore) { bestScore = score; best = p; }
                         }
                     }
@@ -98,7 +102,7 @@ namespace BotMod.AI
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, a.position + Vector3.up * 1.05f, world)) continue;
                             float score = dist;
                             score += (a.Health / System.Math.Max(1f, cfg.BotHealth)) * 6f; // finish wounded targets
-                            if (preferredId >= 0 && a.entityId == preferredId) score *= preferredScale;
+                            if (preferredId >= 0 && a.entityId == preferredId) score *= GrudgeBias;
                             if (score < bestScore) { bestScore = score; best = a; }
                         }
                 }

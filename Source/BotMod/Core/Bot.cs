@@ -87,7 +87,7 @@ namespace BotMod.Core
         // so it runs at 4 Hz instead of once per frame (flip latency <= 0.25 s).
         float _nextFlankScan;
 
-        public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character = null)
+        public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character)
         {
             EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
             TeamKey = BotManager.BaseName(name); // frozen: names never change after spawn
@@ -219,9 +219,9 @@ namespace BotMod.Core
             if (Time.time < _nextTargetScan) return;
             _nextTargetScan = Time.time + scanPeriod;
             // Grudge bias (zdtd_bot parity): while the revenge memory is
-            // fresh, FindTarget out-scores the attacker (0.6x).
+            // fresh, FindTarget out-scores the attacker (BotBrain.GrudgeBias).
             bool vengeful = Time.time < _grudgeUntil;
-            var found = BotBrain.FindTarget(me, world, cfg, vengeful ? _grudgeId : -1, 0.6f);
+            var found = BotBrain.FindTarget(me, world, cfg, vengeful ? _grudgeId : -1);
             if (found != null)
             {
                 AdoptTarget(found, cfg);

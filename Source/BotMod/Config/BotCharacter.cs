@@ -37,7 +37,7 @@ namespace BotMod.Config
         public float ChatInsult { get; set; } = 0.3f;
         public bool ChallengeAim { get; set; } = false; // Q3 bot_challenge cvar: true=clamped smooth, false=spring
 
-        public static BotCharacter Defaults(string name = "Grunt") => new BotCharacter { Name = name };
+        public static BotCharacter Defaults(string name) => new BotCharacter { Name = name };
 
         /// <summary>Clamp every characteristic into its documented range,
         /// replacing non-finite values with the built-in defaults. Run on

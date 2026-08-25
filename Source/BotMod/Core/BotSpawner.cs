@@ -29,7 +29,7 @@ namespace BotMod.Core
             if (raw.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) return raw;
             return "[Bot] " + raw;
         }
-        public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride = null)
+        public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride)
         {
             string pick = gunOverride ?? cfg.BotWeapon;
             if (!string.IsNullOrEmpty(pick) && pick != "mixed")
@@ -378,7 +378,7 @@ namespace BotMod.Core
             catch (Exception ex) { ModApi.Warn("SpawnBotEntity failed: " + ex); return null; }
         }
 
-        public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp, string botName = null)
+        public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp, string botName)
         {
             try
             {

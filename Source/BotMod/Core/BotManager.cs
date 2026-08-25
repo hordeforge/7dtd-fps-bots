@@ -129,7 +129,7 @@ namespace BotMod.Core
             if (alive >= target) return;
             TrySpawnOne();
         }
-        public bool TrySpawnOne(Vector3? posOverride = null, string nameOverride = null, string weaponOverride = null)
+        public bool TrySpawnOne(Vector3? posOverride = null, string weaponOverride = null)
         {
             var world = GameManager.Instance?.World;
             if (world == null) return false;
@@ -137,7 +137,7 @@ namespace BotMod.Core
             if (_bots.Count >= cfg.MaxBots) { ModApi.Log("Max bots reached (" + cfg.MaxBots + ")"); return false; }
             Vector3 pos = posOverride ?? BotSpawner.PickSpawnPosition(world, cfg);
             if (pos == Vector3.zero) pos = BotSpawner.PickSpawnPosition(world, cfg);
-            string name = nameOverride ?? BotSpawner.PickName(cfg);
+            string name = BotSpawner.PickName(cfg);
             var wp = BotSpawner.PickWeapon(cfg, weaponOverride);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
             var character = BotMod.Config.BotCharacterDB.ForName(name);

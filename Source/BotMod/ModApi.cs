@@ -159,19 +159,11 @@ namespace BotMod
         static int _warnSuppressed;
 
         /// <summary>Rate-limited Warn for per-frame / per-shot / per-damage call
-        /// sites. Main-thread only (reads UnityEngine.Time.time).</summary>
-        public static void WarnRateLimited(string msg)
-        {
-            float now = Time.time;
-            if (now < _warnGateUntil) { _warnSuppressed++; return; }
-            EmitRateLimitedWarn(now, msg);
-        }
-
-        /// <summary>Lazy variant of <see cref="WarnRateLimited(string)"/> for
         /// sites where building the message costs real work (Exception.ToString
         /// walks the stack): the factory runs only when the gate is open, so a
         /// failure repeating every frame pays the string construction once per
-        /// cooldown window instead of on every suppressed call.</summary>
+        /// cooldown window instead of on every suppressed call.
+        /// Main-thread only (reads UnityEngine.Time.time).</summary>
         public static void WarnRateLimited(Func<string> msgFactory)
         {
             float now = Time.time;
