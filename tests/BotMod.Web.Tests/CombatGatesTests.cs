@@ -1,4 +1,4 @@
-// CombatGatesTests — pins the shared vs-class combat gate: the BotVs* toggles
+// CombatGatesTests: pins the shared vs-class combat gate: the BotVs* toggles
 // describe world bodies only, and a bot victim (spawned as zombieSoldier, an
 // EntityZombie subclass) is exempt from both class gates because bot-vs-bot
 // answers to the ally rule alone. Regression for the configuration where

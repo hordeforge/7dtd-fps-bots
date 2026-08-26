@@ -1,4 +1,4 @@
-// BotArgParserTests — pins the positional grammar of `bot spawn` /
+// BotArgParserTests: pins the positional grammar of `bot spawn` /
 // `bot player`: optional count, optional dot-decimal x z pair, trailing
 // weapon token, and a named usage error for every leftover token. Guards
 // the regression where "bot spawn 163 818" ate 163 as a bot count and

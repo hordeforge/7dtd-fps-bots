@@ -1,8 +1,8 @@
-# Training Pipeline — From Weights to `best.json`
+# Training Pipeline: From Weights to `best.json`
 
 ## 1. Bird's eye
 
-The evolution loop is deliberately split into a **trainer** (owns GA, fitness, logging) and a **harness** (owns the sim tick). The trainer can be Python + harness bridge, or a Zig binary. As shipped (R1 pivot) the harness is the self-contained numba sim `tools/ga/combat_sim.py` driven by `harness.py` — no 7DTD binary; the `zdtd` headless bridge below is the planned fidelity upgrade, not the current pipeline. The mod itself never runs the GA; it only loads the outcome.
+The evolution loop is deliberately split into a **trainer** (owns GA, fitness, logging) and a **harness** (owns the sim tick). The trainer can be Python + harness bridge, or a Zig binary. As shipped (R1 pivot) the harness is the self-contained numba sim `tools/ga/combat_sim.py` driven by `harness.py`, no 7DTD binary; the `zdtd` headless bridge below is the planned fidelity upgrade, not the current pipeline. The mod itself never runs the GA; it only loads the outcome.
 
 ```
 ┌──────────────────┐      queued text SimCommands      ┌──────────────────┐
@@ -15,7 +15,7 @@ The evolution loop is deliberately split into a **trainer** (owns GA, fitness, l
 ```
 
 - Trainer = GA operators (§`03`), fitness (§`02`), checkpointing, curriculum.
-- Harness = world store, LOS, move caps, damage, replication — the ground truth.
+- Harness = world store, LOS, move caps, damage, replication: the ground truth.
 - Mod = `BotNeuralBrain.cs` that does the 500-MAC forward pass and nothing else.
 
 ## 2. Trainer options
@@ -59,7 +59,7 @@ Before the first GA generation, run a short trace dump:
 
 1. Spawn heuristic bots (`BotCharacter` Stripe/Visor/Ranger) for ~5 minutes, deterministic seeds, mixed loadouts.
 2. Log `(obs[14] → heuristicOutputs[5])` pairs at decision cadence (every `scanPeriod`).
-3. Offline in the trainer, fit a 14→16→5 net to that trace via ~500 steps of Adam (learning rate 0.01) — this is the only place gradient descent lives, and it is offline + optional.
+3. Offline in the trainer, fit a 14→16→5 net to that trace via ~500 steps of Adam (learning rate 0.01): this is the only place gradient descent lives, and it is offline + optional.
 4. `pop[0] = clonedWeights`, `pop[1..] = clonedWeights + N(0, 0.02)`.
 
 If cloning regresses (net worse than heuristic), retry with fewer steps or skip cloning entirely. Log clone loss so we know warm-start helped.
@@ -76,7 +76,7 @@ For each genome `i` in generation `g`:
   - Accumulate `kills/deaths/damage/timeAlive` from `BotManager.hp` and `sim` health.
 - Aggregate to `fitness(i) = scalarized(F performances)` (see `02` §3).
 
-**Cost knob:** `F` is linear in wall-clock. `F=9` at ~90 ticks/match → ~810 ticks per genome. At 32 genomes that's ~26k ticks/gen; on headless that's seconds, not minutes. The live dedi path is 20× slower — hence we train headless.
+**Cost knob:** `F` is linear in wall-clock. `F=9` at ~90 ticks/match → ~810 ticks per genome. At 32 genomes that's ~26k ticks/gen; on headless that's seconds, not minutes. The live dedi path is 20× slower, hence we train headless.
 
 **Parallelism:** genomes are independent. Shard across `N` workers (one sim per worker, or one process with `P` isolated `BotManager` instances). Seed independence keeps it deterministic regardless of shard order.
 
@@ -96,7 +96,7 @@ Naive from-scratch DM is unstable early (random bots die instantly, no gradient 
 | B: mixed | 16..45 | Add `Visor` rusher + shotgun, then DM 4-bots |
 | C: full | 45.. | FFA + Horde, mixed loadouts, FOV cone active |
 
-Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` norm units in the last 10 gens before curriculum advances. This is conservative on purpose — rushing curriculum just injects noise.
+Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` norm units in the last 10 gens before curriculum advances. This is conservative on purpose, rushing curriculum just injects noise.
 
 ## 7. Checkpointing and resumability
 
@@ -121,7 +121,7 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
 
 Each `best.json` is validated before it can be promoted:
 
-1. Re-evaluate it 30 matches (more samples than training) vs a *fresh opponent pool* never seen during evolution (e.g., `Hunter`/`Wrack` + a new map patch). If mean fitness drops > one stdev, it is overfit — reject.
+1. Re-evaluate it 30 matches (more samples than training) vs a *fresh opponent pool* never seen during evolution (e.g., `Hunter`/`Wrack` + a new map patch). If mean fitness drops > one stdev, it is overfit, reject.
 2. Human blind test: two DM replays (heuristic vs evolved) as video or trace CSV; operator picks which felt more human-like. Ship only when the evolved bot actually feels *better*, not just number-better.
 
 ## 9. Shipping to the mod
@@ -130,14 +130,14 @@ Each `best.json` is validated before it can be promoted:
 - Commit and push (`7dtd-fps-bots` repo). Operators `git pull` or download the asset.
 - The mod's `ModApi` loads `evolved/best.json` on `OnGameStartDone` (or on config reload via `bot reload` / `bot neural reload`) through `BotNeuralBrain.TryLoad`. If the file is absent or malformed (`version`/`inputs`/weight-count mismatch), the mod falls back to the heuristic and logs `BotNeuralBrain: not loaded (<reason>), using heuristic`.
 
-No Python ships, no extra DLL, no native module — just JSON.
+No Python ships, no extra DLL, no native module, just JSON.
 
 ## 10. Resource budget (honest numbers)
 
 | Item | Approx |
 |---|---|
 | Gen 0..80, P=32, F=9, 90s matches, headless | ~40 min on a 8-core dev box (most of it is sim ticks, not GA math) |
-| Same via live dedi | ~14 hours (physics + chunk IO) — not used for training |
+| Same via live dedi | ~14 hours (physics + chunk IO), not used for training |
 | Disk for `runs/<ts>` (no traces) | ~40 MiB |
 | Disk with obs traces | ~400 MiB (optional; prune) |
 | Mod runtime overhead | ~0 (forward pass is already benchmarked < 1 µs/bot) |

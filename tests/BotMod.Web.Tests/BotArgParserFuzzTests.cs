@@ -1,4 +1,4 @@
-// BotArgParserFuzzTests — randomized fuzzing of the `bot spawn` / `bot player`
+// BotArgParserFuzzTests: randomized fuzzing of the `bot spawn` / `bot player`
 // positional-tail grammar (BotArgParser). Tokens arrive from the admin console
 // as free text; whatever the list, TryParseSpawn/TryParsePlayer must never
 // throw, either fail with a non-empty usage error or succeed with a clamped

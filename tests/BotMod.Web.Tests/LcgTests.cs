@@ -1,4 +1,4 @@
-// LcgTests — pins the deterministic 32-bit LCG that every random decision in
+// LcgTests: pins the deterministic 32-bit LCG that every random decision in
 // the mod rides (per-bot combat rolls, spawn picks, mixed-loadout counter,
 // wander hash) and whose tap constants are mirrored BY HAND in tools/ga
 // (combat_sim.py, replay.py) to keep the GA simulation faithful to in-game

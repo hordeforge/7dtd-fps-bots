@@ -29,8 +29,9 @@ jobs:
       # Python analysis gate: lint-python is part of `make check` (ruff.toml),
       # so the pinned ruff must be on PATH first. Pin sourced from
       # scripts/tool-versions.sh, the same single source of truth the other
-      # analyzers use; pipx ships on the runner image.
-      - run: source scripts/tool-versions.sh && pipx install "ruff==$RUFF_VERSION"
+      # analyzers use.
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: source scripts/tool-versions.sh && uv tool install "ruff==$RUFF_VERSION"
       # The lint scripts run oxlint, tsc and vnu through bunx at pinned
       # versions; the runner preinstalls node, but not bun.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

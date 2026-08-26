@@ -1,4 +1,4 @@
-// BotCharacterArithTests — numeric-correctness pins for characters.json
+// BotCharacterArithTests: numeric-correctness pins for characters.json
 // ingestion (BotCharacter.Normalize) plus the BotCharacterDB layer around it
 // (file resolution, IdentityKey-canonicalized file keys, ForName fallback
 // chain, difficulty lerp clamps, reload determinism across every failure

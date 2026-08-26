@@ -1,4 +1,4 @@
-// BotConfigLoadTests — pins the config-loading contract that protects
+// BotConfigLoadTests: pins the config-loading contract that protects
 // operators from silent misconfiguration:
 //   - misspelled top-level keys are reported by BotConfig.UnknownKeys instead
 //     of silently keeping the built-in default (Json.NET ignores them),

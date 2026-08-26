@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fitness_sweep.py — proper weight sweep now that harness does scalarization."""
+"""fitness_sweep.py: proper weight sweep now that harness does scalarization."""
 import sys, json
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -68,7 +68,7 @@ if __name__=="__main__":
         tags=[r[0] for r in rows]; helds=[r[2] for r in rows]
         ax.bar(range(len(tags)), helds, color="#0369a1", alpha=0.9)
         ax.set_xticks(range(len(tags))); ax.set_xticklabels(tags, rotation=18, ha="right", fontsize=7)
-        ax.set_ylabel("held60 (canon)"); ax.set_title("Fitness mix sweep — held60 on canonical (train on mix) pop24×22 seed42")
+        ax.set_ylabel("held60 (canon)"); ax.set_title("Fitness mix sweep: held60 on canonical (train on mix) pop24×22 seed42")
         ax.grid(True, axis="y", alpha=0.15)
         for i,v in enumerate(helds): ax.text(i, v+0.02, f"{v:.2f}", ha="center", fontsize=6)
         fig.tight_layout(); fig.savefig(out_dir / "fitness_sweep_R7.png", dpi=150); plt.close(fig); print(f"plot -> {out_dir}/fitness_sweep_R7.png")

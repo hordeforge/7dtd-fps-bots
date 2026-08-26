@@ -633,7 +633,7 @@ namespace BotMod.Core
         }
 
         /// <summary>True if another bot is engaging the same target from the same strafe side
-        /// (cross-product sign), so this bot flips to split around the enemy — light squad
+        /// (cross-product sign), so this bot flips to split around the enemy, light squad
         /// flanking via position only (no shared state).</summary>
         bool FlankAway(EntityAlive me, World world, EntityAlive target, int myStrafeDir)
         {

@@ -1,4 +1,4 @@
-# R8 — Fire-Cost Task Rework: Pacing Beats Spam, GOAL MET (2026-08-20)
+# R8: Fire-Cost Task Rework: Pacing Beats Spam, GOAL MET (2026-08-20)
 
 *Task change, not a GA knob.* The binding constraint was the simulator's task shape:
 it rewarded fire volume so fully that the evolved brain and an always-firing no-brain

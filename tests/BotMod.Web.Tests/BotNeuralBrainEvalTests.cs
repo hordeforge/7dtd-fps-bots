@@ -1,11 +1,11 @@
-// BotNeuralBrainEvalTests — numeric-correctness pins for the neural forward
+// BotNeuralBrainEvalTests: numeric-correctness pins for the neural forward
 // pass, complementing BotNeuralBrainFuzzTests (which pins robustness
 // invariants: no-throw, finite outputs, load rejection). Here the weights
 // are constructed so every expectation is hand-derivable from the documented
 // contract (docs/research/01 §2/§4, tools/ga/ga.py INPUTS):
 //
 //   1. Input packing: one weight per probe makes the camp head answer "is
-//      NeuralInputs field i nonzero?" — a field packed into the wrong scratch
+//      NeuralInputs field i nonzero?"; a field packed into the wrong scratch
 //      slot leaves its own slot at zero and the probe fails.
 //   2. Head math: sigmoid saturation (>8 -> exactly 1), the 0.5 decision
 //      threshold behind WantCamp/WantRetreat/ShouldFire/StrafeDir, and the

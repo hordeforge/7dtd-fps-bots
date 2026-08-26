@@ -1,10 +1,10 @@
-# Live Dedi Proof — Neural Brain on Real Server (2026-08-19)
+# Live Dedi Proof: Neural Brain on Real Server (2026-08-19)
 
 *The GA champion now runs on the real dedicated server, not just the numba stub.*
 
 ## What was proven
 
-**Server:** `7DaysToDieServer.x86_64 b14 V3.1.0` — `Navezgane/MyGame`, EAC off,
+**Server:** `7DaysToDieServer.x86_64 b14 V3.1.0`: `Navezgane/MyGame`, EAC off,
 port `26900`, `ModInfo 0.2.0` (contains `BotNeuralBrain.cs` from `0af6cff`).
 
 **Build+install:** `dist/BotMod/evolved/best.json` (now shipped by `build.sh`)
@@ -36,7 +36,7 @@ Neural: use=True loaded=True weights=325 hidden=16 inputs=14 outputs=5
 Bot [Bot] Slash_97 [gunMGT1AK47] id=8134 state=Wander pos=(512,61,942) tgt=none hp=50 burst=3
 Bot [Bot] TankJr_23 [gunHandgunT3SMG5] id=8135 state=Attack pos=(850,62,642) tgt=8139 hp=50 burst=0
 Bot [Bot] Hunter_50 [gunShotgunT3AutoShotgun] id=8139 state=Attack pos=(850,62,642) tgt=8135 hp=50 burst=1
-# TankJr_23 ↔ Hunter_50 mutually in Attack already — loose is live
+# TankJr_23 ↔ Hunter_50 mutually in Attack already: loose is live
 
 > bot status
 BotMod: enabled=True target=6 max=16 alive=6 class=zombieSoldier weapon=mixed diff=4
@@ -45,7 +45,7 @@ BotMod: enabled=True target=6 max=16 alive=6 class=zombieSoldier weapon=mixed di
 **Controls:** `UseNeuralBrain` defaults `true` now (source `config/botmod.json`),
 but a malformed `best.json` still falls back to heuristic with one log, and
 `bot neural off/on/reload [path]` toggles live without rejoining. Every neural
-output is advisory — ANDed with LOS/range/reaction/burst/move caps (`05-integration.md`).
+output is advisory: ANDed with LOS/range/reaction/burst/move caps (`05-integration.md`).
 Telnet was moved to `8087` to avoid the docker-proxy on `8081` (see log's prior
 `Error in Telnet.ctor: Address already in use` on 8081).
 
@@ -53,7 +53,7 @@ Telnet was moved to `8087` to avoid the docker-proxy on `8081` (see log's prior
 
 Previous reports were combat-sim `numba` only. The champion (g37 `pop40×80`
 seed42, `W=325`, held-out `+12.16±1.15` vs random `−0.01`) is now the same JSON
-that the dedi ticks — proves PvP and vs-zombie behavior under real `BotVsBot`
+that the dedi ticks: proves PvP and vs-zombie behavior under real `BotVsBot`
 and `BotVsZombie` gates, real `SpawnNearPlayer` and `Physics.Raycast` LOS, and
 real 20 Hz `GameUpdate` timing.
 

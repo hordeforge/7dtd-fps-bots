@@ -1,4 +1,4 @@
-# R11 — Residual Sweep: Duel Re-Test, Champion Plateau, Live-Verification Limit (2026-08-21)
+# R11: Residual Sweep: Duel Re-Test, Champion Plateau, Live-Verification Limit (2026-08-21)
 
 *Follow-up to R10: re-test duel discrimination under policy-driven movement, push
 the champion past 11.0 held, and verify the neural movement live. Status:
@@ -75,7 +75,7 @@ firing (death spiral). After removal: champion held 10.93 -> **11.11 avg**
 `TryShootBurst` is unaffected.
 
 Duel diagnosis (why duels still lose, instrumented): duels are decided in ~3
-seconds — bots spawn 8-26 units apart, the champion often draws a weak random
+seconds: bots spawn 8-26 units apart, the champion often draws a weak random
 weapon (e.g. pistol, 12 mag), and the turret's close-range constant fire shreds
 it (hp 100 -> 20 in 2.5 s) before any kiting develops. Discriminative duels need
 larger spawn separation + fixed equal loadouts; that arena rework is the next

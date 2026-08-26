@@ -1,4 +1,4 @@
-// LogSanitizerFuzzTests — randomized fuzzing of the log-injection guard
+// LogSanitizerFuzzTests: randomized fuzzing of the log-injection guard
 // applied to every request-supplied string echoed into server log lines
 // ("action", "requestId", spawnNear player names inside response bodies).
 // Whatever the input, Clean must never throw, must return the input verbatim

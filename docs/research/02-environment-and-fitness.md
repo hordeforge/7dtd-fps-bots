@@ -15,8 +15,8 @@ Additional raw that stays *fitness-only* (never fed to the net, only scored):
 The fitness landscape is meaningless without a fixed test suite. Three arena types, composed into a single scalar.
 
 > Status (2026-08-21, R9/R11): the shipped mix is 9 fixed arena configs per
-> seed-stream (`tools/ga/harness.py`) — duels vs static `(2,1,0)` ×3 + one
-> evolved-vs-evolved duel `(2,2,0)`, FFA `(6,6,0)` ×3, horde `(4,4,6)` ×2 —
+> seed-stream (`tools/ga/harness.py`): duels vs static `(2,1,0)` ×3 + one
+> evolved-vs-evolved duel `(2,2,0)`, FFA `(6,6,0)` ×3, horde `(4,4,6)` ×2:
 > every match weighted equally into the scalar mean, not the 40/40/20 split
 > below. Opponents are the static no-brain policy (`_OPP_STATIC`, all-zero
 > weights) with skill cycling 1..4 across matches, not named bot characters;
@@ -41,7 +41,7 @@ The fitness landscape is meaningless without a fixed test suite. Three arena typ
 ### 2.4 Map / weapon sampling
 
 - Each evaluation runs F matches per genome, each match samples a `spawnpoints.xml` patch and a `LoadoutPool` entry. Average over samples so the net cannot overfit one gun (sniper-only cheese) or one map seam.
-- Deterministic sampler: `LCG(generation, genomeIdx, matchIdx)` — same samples every generation.
+- Deterministic sampler: `LCG(generation, genomeIdx, matchIdx)`, same samples every generation.
 
 ## 3. Fitness function
 
@@ -60,7 +60,7 @@ fitness = 0.55 * norm(elo) + 0.25 * norm(econ) + 0.15 * survival
 norm(x) is rank-normalized per generation (see §3.2).
 ```
 
-Headshot rate is reported but not directly scored — it is a diagnostic for aim-bias drift. We score *damage dealt* instead so the GA cannot game headshot RNG on low-HP targets.
+Headshot rate is reported but not directly scored: it is a diagnostic for aim-bias drift. We score *damage dealt* instead so the GA cannot game headshot RNG on low-HP targets.
 
 ### 3.1 Why scalarized, not Pareto
 
@@ -95,7 +95,7 @@ The current `zdtd` passes already rely on this (stuck, LOS, wander hash). Evolut
 ## 5. Running the environment
 
 > Status (2026-08-19, R1 pivot): training actually runs on the self-contained
-> numba sim `tools/ga/combat_sim.py` driven by `harness.py` — no 7DTD binary.
+> numba sim `tools/ga/combat_sim.py` driven by `harness.py`, no 7DTD binary.
 > The zdtd-headless path below is the planned higher-fidelity step (see R8 §7
 > residuals), not the current pipeline.
 

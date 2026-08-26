@@ -11,7 +11,7 @@ namespace BotMod.Core
     {
         // Deterministic LCG (zdtd parity: no wall-clock noise). Spawn helpers advance this
         // monotonically so consecutive `bot spawn` in the same tick still pick distinct
-        // names/weapons/spots. Not per-bot (no entity yet) — global is fine for spawns.
+        // names/weapons/spots. Not per-bot (no entity yet), global is fine for spawns.
         static Lcg _rng = Lcg.Seeded(0xC0FFEEu);
         static float Rng01() { return _rng.Next01(); }
         static int RngInt(int lo, int hi) { return _rng.Range(lo, hi); }
@@ -227,7 +227,7 @@ namespace BotMod.Core
             try
             {
                 int x = Mathf.FloorToInt(pos.x), z = Mathf.FloorToInt(pos.z);
-                // Prefer a physics raycast down — finds terrain collider even when
+                // Prefer a physics raycast down: finds terrain collider even when
                 // voxels are air above a cave (which voxel scan would anchor to cave floor y≈5).
                 try
                 {
@@ -235,7 +235,7 @@ namespace BotMod.Core
                     Ray ray = new Ray(probe, Vector3.down);
                     if (Physics.Raycast(ray, out RaycastHit hit, 130f, -1))
                     {
-                        // hit on terrain/mesh — anchor just above impact
+                        // hit on terrain/mesh: anchor just above impact
                         if (hit.point.y > 10f) return new Vector3(pos.x, hit.point.y + 1f, pos.z);
                     }
                 } catch { }

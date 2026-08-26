@@ -1,4 +1,4 @@
-# Genetic Algorithm — Operators & Hyperparameters
+# Genetic Algorithm: Operators & Hyperparameters
 
 ## 1. Representation
 
@@ -9,7 +9,7 @@
 
 ## 2. Operators
 
-### 2.1 Selection — tournament(k=3) + rank
+### 2.1 Selection: tournament(k=3) + rank
 
 Rank-normalize fitness (see `02`), then:
 
@@ -19,7 +19,7 @@ parent = argmax fitness among 3 uniformly sampled genomes (with replacement)
 
 High selection pressure would be k=5; k=3 is calmer and preserves diversity alongside mutation. Top-ranked but unlucky genomes still reproduce.
 
-### 2.2 Crossover — uniform blend
+### 2.2 Crossover: uniform blend
 
 - With prob `pc = 0.6` a child is a crossover of 2 parents, else it is a mutated clone of one parent.
 - Uniform: each weight from parent A with prob 0.5, else B.
@@ -31,7 +31,7 @@ Mutation is the main explorer (GA literature: crossover is overrated for small n
 
 | Mutator | Probability per child | Effect |
 |---|---|---|
-| Gaussian weight noise | 0.92 every child | Each weight `w += N(0, σ)` with σ cosine-annealed over the run and scaled by rank: `σ = 0.05 * anneal * burst * (0.6 + 0.9*(1 - rankNorm))` — fitter parents mutate less |
+| Gaussian weight noise | 0.92 every child | Each weight `w += N(0, σ)` with σ cosine-annealed over the run and scaled by rank: `σ = 0.05 * anneal * burst * (0.6 + 0.9*(1 - rankNorm))`, fitter parents mutate less |
 | Sparse reset | 0.14 (0.22 stagnant) | Pick 1–3 weights, resample `U(-0.7, 0.7)` |
 | Swap | 0.06 (0.12 stagnant) | Swap two hidden-unit weight blocks (positional robustness) |
 | ΔCharacter nudge | not implemented | The genome carries no trait tail (`W = 325` weights only); trait nudges would need the §1 ΔCharacter encoding first |
@@ -50,7 +50,7 @@ Compatibility distance `δ = c1·E/N + c2·D/N + c3·W̄` with `c = (1.0, 1.0, 0
 Evolution collapses fast on small arenas. Countermeasures (cheap, deterministic):
 
 - **Hall-of-Fame opponents.** Re-encountering old champs prevents cycling.
-- **Map/weapon rotation.** See `02` sampling — a genome that memorized one map dies on the next draw.
+- **Map/weapon rotation.** See `02` sampling, a genome that memorized one map dies on the next draw.
 - **Weight-space distance diagnostic.** Track mean pairwise Euclidean distance of top quartile; if it drops below 0.08 for 5 consecutive generations, boost `σ` by 1.5× for one generation (noise burst).
 - **Novelty bonus (optional).** `+0.01 * novelty(genome)` where novelty is k-NN distance in behavior space `(kills, timeAlive, damageEff)` archive of last 200 evaluations (Lehman & Stanley 2011). Disabled by default; enable if plateau persists.
 

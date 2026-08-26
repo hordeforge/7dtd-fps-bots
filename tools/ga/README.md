@@ -1,4 +1,4 @@
-# `tools/ga/` — Offline Neuroevolution Harness
+# `tools/ga/`: Offline Neuroevolution Harness
 
 Training and evaluation tooling for `docs/research/04-training-pipeline.md`,
 used for every experiment recorded in `docs/research/REPORT-*.md` (R0..R13).
@@ -31,8 +31,24 @@ tools/ga/
   viz.py                 network diagram rendering
   report.py              per-run report.html generator
   dashboard.py           live training dashboard (docs/ga-dashboard.html)
+  paths.py               repo-root discovery (walks up for the root Makefile)
   requirements.txt       numpy, numba, matplotlib (+ optional Pillow)
 ```
+
+## Generated HTML
+
+`docs/ga-dashboard.html` is committed: it is the visual record of the runs in
+`evolved/runs/`, which a clone does not get. Everything `report.py` writes
+(`evolved/report.html`, `evolved/runs/<ts>/report.html`) is git-ignored, being
+a few MB of embedded base64 per file and reproducible from a run directory:
+
+```bash
+python tools/ga/report.py --runs evolved/runs/<ts> --out evolved/report.html
+python tools/ga/dashboard.py --all --out docs/ga-dashboard.html
+```
+
+`make lint-html` runs vnu over the tracked HTML only, and warnings fail it, so
+regenerating the committed dashboard must keep it warning-clean.
 
 ## How to run
 
@@ -62,4 +78,4 @@ checkpoint deterministically (same LCG chain as clanker/zdtd_bot).
 
 See `evolved/README.md` and `docs/research/04` §3 for the `evolved/runs/<ts>/`
 and `best.json` shapes. The flat weight order is `W1 row-maj(16×14) | b1(16) |
-W2 row-maj(5×16) | b2(5)` — shared with `BotNeuralBrain.cs`.
+W2 row-maj(5×16) | b2(5)`: shared with `BotNeuralBrain.cs`.

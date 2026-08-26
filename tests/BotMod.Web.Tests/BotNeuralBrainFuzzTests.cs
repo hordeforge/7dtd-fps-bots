@@ -1,4 +1,4 @@
-// BotNeuralBrainFuzzTests — fuzzing of the evolved/best.json weights-file
+// BotNeuralBrainFuzzTests: fuzzing of the evolved/best.json weights-file
 // parser plus the forward pass behind it. TryLoad parses externally supplied
 // JSON reachable from mod startup, the admin web API ("neural") and console,
 // and its output drives every bot tick once loaded. Mutants (byte-level and

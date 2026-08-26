@@ -24,7 +24,7 @@ Targets:
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
 SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip
 timestamps; defaults to the HEAD commit time). CI runs `make check` plus
-`scripts/test-idempotency.sh` (mono installed in the workflow; ruff via pipx
+`scripts/test-idempotency.sh` (mono installed in the workflow; ruff via uv tool
 for lint-python); `make build`
 additionally needs the game install locally.
 endef

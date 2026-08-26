@@ -1,4 +1,4 @@
-# Integration — `BotNeuralBrain` Inside `Bot.cs`
+# Integration: `BotNeuralBrain` Inside `Bot.cs`
 
 ## 1. Design rule
 
@@ -22,7 +22,7 @@ Bot.Tick(dt, world)
 Every site funnels through one cached forward pass per tick (`Bot.TryNeuralOnce`
 wrapping `BotNeuralBrain.TryEval`; no model → heuristic fallback, no throw), so
 a thrown `NullRef` / `IndexOutOfRange` from a malformed `best.json` never
-crashes the tick — it logs once and falls back.
+crashes the tick: it logs once and falls back.
 
 ## 3. File and API
 
@@ -53,7 +53,7 @@ public static void Forward(in float[] w, in float[] x, ref float[] hidden, ref f
 - Arrays are `static readonly` buffers sized at startup; the tick reuses them (no `new`).
 - Weights order is canonical: `W1 row-major (16×14) | b1 | W2 row-major (5×16) | b2`. Documented in `evolved/README.md` and in the file header so Python and C# never drift.
 - Clamp outputs: `sigmoid(x)=1/(1+exp(-x))` with `x` clamped to `[-8,8]` so `exp` never under/overflows on Mono.
-- Micro-opt: run `forward` every *other* scan period, not every tick, if profiling ever shows cost (we have ~19 µs/bot budget before it matters — see §6).
+- Micro-opt: run `forward` every *other* scan period, not every tick, if profiling ever shows cost (we have ~19 µs/bot budget before it matters, see §6).
 
 ### 3.2 Flat JSON contract
 
@@ -76,7 +76,7 @@ JSON is the only format `TryLoad` accepts today (it parses the file as JSON text
 
 | Config flag | Location | Effect |
 |---|---|---|
-| `UseNeuralBrain` (bool, default `false` in `BotConfig.cs`) | `BotConfig` → `botmod.json` | When false, `BotNeuralBrain` is never called — heuristic only. The deployed `config/botmod.json` ships it **true** since R13: the validation gates were met (R12/R13 GOAL MET) and the champion held 13.04 avg after the magazine alignment. |
+| `UseNeuralBrain` (bool, default `false` in `BotConfig.cs`) | `BotConfig` → `botmod.json` | When false, `BotNeuralBrain` is never called, heuristic only. The deployed `config/botmod.json` ships it **true** since R13: the validation gates were met (R12/R13 GOAL MET) and the champion held 13.04 avg after the magazine alignment. |
 | `BotNeuralWeightPath` (string, default `evolved/best.json`) | `BotConfig` | Where to load the model from |
 | `bot neural reload` | console command | Re-reads `best.json` without restarting the server |
 | `bot neural off/on` | admin | Toggles flag live; useful for blind tests |
@@ -97,18 +97,18 @@ No exception propagates to `Bot.Tick`.
 
 ## 5. Per-bot own trick: no cross-bot state
 
-`BotNeuralBrain` holds no per-bot mutable state (weights are shared). Any per-bot scratch (e.g., hidden-state for a future recurrent net) lives on the `Bot` instance, not statical — otherwise two bots would alias each other's memory. Phase 1's fixed MLP needs no scratch at all.
+`BotNeuralBrain` holds no per-bot mutable state (weights are shared). Any per-bot scratch (e.g., hidden-state for a future recurrent net) lives on the `Bot` instance, not `static`, otherwise two bots would alias each other's memory. Phase 1's fixed MLP needs no scratch at all.
 
 ## 6. Performance
 
 - Forward pass: ~500 MACs → ~2 KiB memory loads → ~19 µs/bot on Mono (measured on `net48`, not guessed).
-- 16 bots × 20 Hz → ~0.3 ms/s — invisibly small vs the 45 ms physics budget.
+- 16 bots × 20 Hz → ~0.3 ms/s, invisibly small vs the 45 ms physics budget.
 - No native calls, no `DllImport`, no `System.Numerics.Vectors` dependency (Mono ships without it on some distros).
 
 ## 7. Testing
 
 - `tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs` (**shipped**): compiles `BotNeuralBrain.cs` against a `ModApi.ModPath` stub and fuzzes `TryLoad` (byte-level + structure-aware JSON mutants of the golden `best.json`) plus `TryEval` (sane/extreme observations must stay finite, bounded, internally consistent; non-14 input counts rejected). Run via `bash scripts/test-idempotency.sh` (`make test`; skipped when the game's Newtonsoft.Json.dll is absent).
-- Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay traces — they must differ only via net decisions, not physics.
+- Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay traces: they must differ only via net decisions, not physics.
 
 ## 8. Migration path
 

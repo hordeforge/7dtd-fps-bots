@@ -1,4 +1,4 @@
-// BotCharacterFuzzTests — fuzzing of the operator-maintained
+// BotCharacterFuzzTests: fuzzing of the operator-maintained
 // config/characters.json loader (BotCharacterDB.Load). Like botmod.json, that
 // file is hand-editable text parsed at every mod startup; its traits feed the
 // neural observation vector, the per-engagement aim-bias rotation and the

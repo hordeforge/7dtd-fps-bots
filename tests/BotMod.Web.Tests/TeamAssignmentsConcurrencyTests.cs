@@ -1,4 +1,4 @@
-// TeamAssignmentsConcurrencyTests — hammers the locked team-map helpers from
+// TeamAssignmentsConcurrencyTests: hammers the locked team-map helpers from
 // writer threads while reader threads treat the map the way the game tick
 // does: a lookup per damage event plus periodic snapshot/normalize sweeps.
 //

@@ -1,4 +1,4 @@
-# R10 — Deeper Sim Rework: Policy-Driven Movement, GOAL MET at +6 (2026-08-21)
+# R10: Deeper Sim Rework: Policy-Driven Movement, GOAL MET at +6 (2026-08-21)
 
 *The R9 blocker was that policy could not control movement: both sides shared the
 same hardcoded chase/strafe code, so positioning and duel outcomes were not

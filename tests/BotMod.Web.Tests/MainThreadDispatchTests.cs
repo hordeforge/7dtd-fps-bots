@@ -1,4 +1,4 @@
-// MainThreadDispatchTests — pins the web -> main-thread dispatch wait-handle
+// MainThreadDispatchTests: pins the web -> main-thread dispatch wait-handle
 // lifecycle: the signal event is released on every exit path (result, error,
 // timeout) and a queued task that runs after its caller timed out (abandoned
 // dispatch) must be able to signal the disposed event without throwing.
@@ -49,7 +49,7 @@ static class MainThreadDispatchTests
         //    abandoned task then still runs later (the engine drains its
         //    queue) and signals an already-disposed event: that late Set must
         //    not throw into the main-thread loop. The work itself DOES run on
-        //    that late invocation — the caller has already seen TimeoutException,
+        //    that late invocation: the caller has already seen TimeoutException,
         //    so from the retry-safety side the outcome is ambiguous, and
         //    WebApi.HandleRestPost must keep the idempotency key claimed for
         //    exactly this case instead of releasing it for a re-run.

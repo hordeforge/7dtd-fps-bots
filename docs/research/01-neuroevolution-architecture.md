@@ -14,8 +14,8 @@ The neural controller replaces the **decision + aim-bias + throttle** slice, not
 
 | Shape | Net replaces | Fallback if net fails |
 |---|---|---|
-| **A — policy head** (chosen) | `WantsToCamp/Retreat`, `_aimBiasYaw`, `TryShootBurst` gate, `_strafeDir` flip | Heuristic runs if `BotNeuralBrain` throws or weights missing |
-| **B — full motor** | Also `MoveTo` vector | Riskier; needs safety clamp |
+| **A: policy head** (chosen) | `WantsToCamp/Retreat`, `_aimBiasYaw`, `TryShootBurst` gate, `_strafeDir` flip | Heuristic runs if `BotNeuralBrain` throws or weights missing |
+| **B: full motor** | Also `MoveTo` vector | Riskier; needs safety clamp |
 
 ## 2. Observation vector (14 inputs, frozen)
 
@@ -56,7 +56,7 @@ Built from data `Bot.Tick` already computes; no new sensors needed for v1.
 > replaces the idle `WantsToCamp` roll (idle camping stays heuristic); it damps
 > forward movement to 15% when healthy and far in `AttackInRange`. `strafeDir`
 > survives as the sign head, but since R10 the continuous strafe/retreat logits
-> also compose the bot's 2D velocity (`BotBrain.MoveDir`, Q3 fallback kept) —
+> also compose the bot's 2D velocity (`BotBrain.MoveDir`, Q3 fallback kept),
 > see REPORT-2026-08-21-R10 and `05-integration.md` §2.
 
 | # | Output | Interpretation | Host clamp |
@@ -80,7 +80,7 @@ Genome: float[W] + optional small ΔCharacter tweak (Camper/Aggression/etc)
 ```
 
 - Flat `float[]` stored as JSON `number[]` or binary blob.
-- Initialization: He-style `U(-√6/fan_in, √6/fan_in)` then scaled so initial policy roughly matches heuristic (behavioral cloning warm-start — see §6).
+- Initialization: He-style `U(-√6/fan_in, √6/fan_in)` then scaled so initial policy roughly matches heuristic (behavioral cloning warm-start, see §6).
 - Encoding is framework-free: no ONNX, no `System.Numerics.Tensors` needed on the mod. Forward pass is handwritten loops (see `05-integration.md`).
 
 ### 4.2 NEAT / evolving topology (phase 2)
@@ -93,7 +93,7 @@ When `W` stops improving for `G_plat` generations:
 
 ### 4.3 ES / CMA-ES (optional phase 3)
 
-If we want *gradient-free but smoother* than GA, OpenAI-ES (Salimans et al. 2017) or CMA-ES on the same flat vector is a drop-in replacement for selection/crossover — no new encoding.
+If we want *gradient-free but smoother* than GA, OpenAI-ES (Salimans et al. 2017) or CMA-ES on the same flat vector is a drop-in replacement for selection/crossover, no new encoding.
 
 ## 5. Determinism contract
 
@@ -127,7 +127,7 @@ Result: generation 0 already behaves like today's bots; evolution only needs to 
 |---|---|
 | Weights per genome | ~325 floats (1.3 KiB), up to ~600 with NEAT |
 | Forward FLOPs | ~500 MACs/bot/tick |
-| 16 bots @ 20 Hz | ~160k MACS/s — negligible vs physics |
+| 16 bots @ 20 Hz | ~160k MACS/s: negligible vs physics |
 | JSON `best.json` | ~5 KiB, loaded once at `GameStartDone` |
 | No native deps | Pure C# loops; no `DllImport`, no ONNX Runtime |
 
@@ -144,4 +144,4 @@ Result: generation 0 already behaves like today's bots; evolution only needs to 
 
 1. Should `WeaponProfile.Range` be baked into the genome's range head or left as a hard clamp? (Leaving as clamp is safer for now.)
 2. Does the net need a `timeSinceLastShot` feature? Cheap to add; measure ablation.
-3. Innovation log for NEAT — keep in `evolved/` or in the trainer's DB? (File is fine < 100 KiB.)
+3. Innovation log for NEAT: keep in `evolved/` or in the trainer's DB? (File is fine < 100 KiB.)
