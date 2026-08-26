@@ -6,7 +6,8 @@
 // reason and leave the brain unloaded, or load into a state where TryEval is
 // finite, bounded and consistent for any sane observation. Includes targeted
 // regressions for the frozen v1 dimension contract (inputs must be exactly
-// 14: TryEval packs those slots into fixed scratch buffers).
+// 14 and outputs exactly 5: TryEval packs those input slots into fixed
+// scratch buffers and reads exactly those five action heads by index).
 //
 // Needs Newtonsoft.Json.dll from the game install; scripts/test-idempotency.sh
 // probes for it and skips this suite when absent. Run locally:
@@ -179,8 +180,8 @@ static class BotNeuralBrainFuzzTests
 
     static readonly int[] BadVersions = { 0, 2, -1, 99 };
     static readonly int[] WrongInputs = { 13, 15, 0, -3, 32 };   // all must be rejected
+    static readonly int[] WrongOutputs = { 1, 3, 9, 0, -2, 6 };  // all must be rejected
     static readonly int[] AltHidden = { 1, 2, 8, 64, 256 };
-    static readonly int[] AltOutputs = { 1, 3, 9 };
 
     static JArray BuildWeights(int inputs, int hidden, int outputs, Random rng)
     {
@@ -205,13 +206,11 @@ static class BotNeuralBrainFuzzTests
             case 1:
                 obj["inputs"] = WrongInputs[rng.Next(WrongInputs.Length)];
                 break;
-            case 2: // alternate topology WITH a matching weight array: must load and run
+            case 2: // alternate hidden width WITH a matching weight array: must load and run
                 {
                     int h = AltHidden[rng.Next(AltHidden.Length)];
-                    int o = AltOutputs[rng.Next(AltOutputs.Length)];
                     obj["hidden"] = h;
-                    obj["outputs"] = o;
-                    obj["weights"] = BuildWeights(kExpectedInputs, h, o, rng);
+                    obj["weights"] = BuildWeights(kExpectedInputs, h, 5, rng);
                     break;
                 }
             case 3: // alternate topology keeping stale weights: count mismatch
@@ -360,10 +359,11 @@ static class BotNeuralBrainFuzzTests
             Check(ok1 && ok2 && r1 == r2, "regression: reload not deterministic: " + r1 + " vs " + r2);
         }
 
-        // 3. Frozen dimension contract: anything but 14 inputs is rejected
-        //    outright. Before this was enforced, such files loaded and then
-        //    silently failed every tick (scratch-buffer overruns swallowed by
-        //    TryEval's catch-all).
+        // 3. Frozen dimension contract: anything but 14 inputs or 5 outputs is
+        //    rejected outright. Before this was enforced, such files loaded
+        //    and then silently misbehaved every tick (inputs: scratch-buffer
+        //    overruns swallowed by TryEval's catch-all; outputs: the fire and
+        //    strafe gates read stale scratch slots from the previous model).
         foreach (int bad in WrongInputs)
         {
             string p = VariantFile(dir, "bad-inputs-" + bad + ".json",
@@ -374,6 +374,20 @@ static class BotNeuralBrainFuzzTests
             if (!ok) Check(reason != null && reason.Contains("inputs"),
                 "regression: inputs=" + bad + " rejection lacks reason, got: " + reason);
             Check(!BotMod.AI.BotNeuralBrain.Loaded, "regression: loaded despite inputs=" + bad);
+        }
+        foreach (int bad in WrongOutputs)
+        {
+            // rebuildWeights matches the array to the mutated topology, so a
+            // length-only check would accept these; rejection must come from
+            // the action-head pin itself.
+            string p = VariantFile(dir, "bad-outputs-" + bad + ".json",
+                o => o["outputs"] = bad, rng, rebuildWeights: true);
+            string reason;
+            bool ok = BotMod.AI.BotNeuralBrain.TryLoad(p, out reason);
+            Check(!ok, "regression: outputs=" + bad + " was accepted");
+            if (!ok) Check(reason != null && reason.Contains("outputs"),
+                "regression: outputs=" + bad + " rejection lacks reason, got: " + reason);
+            Check(!BotMod.AI.BotNeuralBrain.Loaded, "regression: loaded despite outputs=" + bad);
         }
 
         // 4. Version pinning.

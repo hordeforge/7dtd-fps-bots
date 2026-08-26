@@ -201,8 +201,8 @@ namespace BotMod.Config
             // build is the operator-facing default otherwise.
             foreach (string candidate in new[] { path, AtomicTextFile.BackupPath(path) })
             {
-                string json;
-                if (!AtomicTextFile.TryRead(candidate, out json)) continue;
+                string json, source;
+                if (!AtomicTextFile.TryRead(candidate, out json, out source)) continue;
                 try
                 {
                     var loaded = JsonConvert.DeserializeObject<BotConfig>(json);
@@ -213,19 +213,25 @@ namespace BotMod.Config
                         // "null"): surface it like every other unreadable
                         // candidate instead of silently falling through to
                         // .bak / defaults with no signal at all.
-                        Warn("BotConfig parse failed (" + candidate + "): JSON body deserialized to null");
+                        Warn("BotConfig parse failed (" + source + "): JSON body deserialized to null");
                         continue;
                     }
                     // Json.NET silently ignores keys that bind no property, so a
                     // typo ("TagetBotCount") keeps the built-in default with no
                     // signal at all. Surface every unknown key instead.
                     foreach (string key in UnknownKeys(json))
-                        Warn("Unknown config key '" + key + "' in " + candidate + " (typo? key ignored, built-in default applies)");
+                        Warn("Unknown config key '" + key + "' in " + source + " (typo? key ignored, built-in default applies)");
                     loaded.Normalize();
-                    if (candidate != path) Warn("BotConfig restored from backup " + candidate + " (" + path + " was unreadable)");
+                    // The content may have come from TryRead's internal .bak
+                    // fallback (primary missing or deleted, not merely torn)
+                    // rather than this loop's own candidate; compare against the
+                    // file actually read so every restore-from-backup is
+                    // visible, not just the corrupt-primary one.
+                    if (source != candidate)
+                        Warn("BotConfig restored from backup " + source + " (" + candidate + " was unreadable)");
                     return loaded;
                 }
-                catch (Exception ex) { Warn("BotConfig parse failed (" + candidate + "): " + ex.Message); }
+                catch (Exception ex) { Warn("BotConfig parse failed (" + source + "): " + ex.Message); }
             }
             return new BotConfig();
         }

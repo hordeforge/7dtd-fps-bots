@@ -72,7 +72,18 @@ namespace BotMod.Config
         /// WriteGate above).</summary>
         public static bool TryRead(string path, out string contents)
         {
+            string from;
+            return TryRead(path, out contents, out from);
+        }
+
+        /// <summary>TryRead variant that also names the file the content came
+        /// from (the primary or a fallback), so a caller recovering from an
+        /// unreadable primary can say which copy actually served the data.
+        /// <paramref name="readFrom"/> is null together with a false return.</summary>
+        public static bool TryRead(string path, out string contents, out string readFrom)
+        {
             contents = null;
+            readFrom = null;
             lock (WriteGate)
             {
                 foreach (string candidate in new[] { path, BackupPath(path) })
@@ -80,7 +91,7 @@ namespace BotMod.Config
                     if (string.IsNullOrEmpty(candidate) || !File.Exists(candidate)) continue;
                     // Explicit UTF-8: Write() stages Encoding.UTF8 bytes, so reads
                     // must not depend on the platform default codepage to round-trip.
-                    try { contents = File.ReadAllText(candidate, Encoding.UTF8); return true; }
+                    try { contents = File.ReadAllText(candidate, Encoding.UTF8); readFrom = candidate; return true; }
                     catch (Exception) { }
                 }
             }

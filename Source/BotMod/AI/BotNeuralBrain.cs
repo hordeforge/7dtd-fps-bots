@@ -20,6 +20,13 @@ namespace BotMod.AI
         // fixed scratch slots, so any other "inputs" value would load and then
         // fail every evaluation (or read/write past the scratch buffer).
         const int kInputs = 14;
+        // Frozen action layout of version 1 (docs/research/01 §3, "Action heads
+        // (5 out)"): TryEval reads exactly these five heads by index (camp,
+        // retreat, aimBiasYaw, fireGate, strafe). A file declaring fewer heads
+        // would load and then drive the fire/strafe gates from stale scratch
+        // slots left over from the previous model; more heads would silently
+        // ignore them. Same rejection contract as the inputs pin above.
+        const int kOutputs = 5;
         static bool _loaded;
         static string _loadedPath = "";
         static string _loadedHash = "";
@@ -213,7 +220,12 @@ namespace BotMod.AI
                     _lastReason = reason; return false;
                 }
                 int hidden = obj.Value<int?>("hidden") ?? 16;
-                int outputs = obj.Value<int?>("outputs") ?? 5;
+                int outputs = obj.Value<int?>("outputs") ?? kOutputs;
+                if (outputs != kOutputs)
+                {
+                    reason = "unsupported outputs=" + outputs + " (v" + kVersion + " exposes " + kOutputs + " action heads)";
+                    _lastReason = reason; return false;
+                }
                 var arr = obj["weights"] as Newtonsoft.Json.Linq.JArray;
                 if (arr == null) { reason = "missing weights[]"; _lastReason = reason; return false; }
                 int want = hidden * inputs + hidden + outputs * hidden + outputs;
