@@ -1,11 +1,11 @@
-# R9 — Draw Regularization + Opponent-Arena Exploration, Plateau Below the Hand-Built Pacer (2026-08-21)
+# R9: Draw Regularization + Opponent-Arena Exploration, Plateau Below the Hand-Built Pacer (2026-08-21)
 
 *Goal: improve the GA bots beyond R8. Outcome: the GA's evolved champion improved
 measurably (9.76 -> 10.11 avg held) via draw regularization, but four evolution runs
 all plateau below the hand-built spread-gated pacer (A2, 10.30). Status: `verified`
 for the numbers, `blocked` for "evolution beats A2" without deeper sim changes.*
 
-## 1. Draw regularization (F=36) — kept, training-time only
+## 1. Draw regularization (F=36): kept, training-time only
 
 `harness.DRAWS_PER_CONFIG = 2`: every arena config is sampled twice per seed-stream,
 so a genome cannot overfit the exact arena-draw chain. The best evolved champion to
@@ -16,7 +16,7 @@ The gate is pinned to the canonical sample: `eval_static_vs_neural.py` sets
 `harness.DRAWS_PER_CONFIG = 1` in `held()`, so training-time knobs never leak into
 the measuring stick. R8's contract reproduces exactly (GOAL MET, +0.587/+0.504/+0.606).
 
-## 2. Fixed-opponent arenas — built, tested, reverted
+## 2. Fixed-opponent arenas: built, tested, reverted
 
 Implemented the arena promised in `docs/research/02` §2.1 (bot vs a fixed opponent
 pool): both `combat_sim` njit variants accept `w_opp`/`n_evolved` and return per-side

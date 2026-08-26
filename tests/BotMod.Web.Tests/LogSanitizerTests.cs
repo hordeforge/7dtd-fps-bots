@@ -1,4 +1,4 @@
-// LogSanitizerTests — pins the log-injection guard for untrusted request
+// LogSanitizerTests: pins the log-injection guard for untrusted request
 // fields echoed into server log lines: control characters (C0, DEL, C1) are
 // replaced so a crafted "requestId"/"action" cannot forge or restructure
 // audit lines; printable text including non-ASCII passes through unchanged.

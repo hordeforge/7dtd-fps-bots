@@ -1,4 +1,4 @@
-// BotConfigFuzzTests — fuzzing of the operator-maintained Config/botmod.json
+// BotConfigFuzzTests: fuzzing of the operator-maintained Config/botmod.json
 // loader. BotConfig.Load parses a hand-editable file reachable at every mod
 // startup (primary + .bak recovery) and its output drives spawn counts,
 // combat tuning and team maps on every tick. Mutants (byte-level and

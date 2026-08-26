@@ -1,4 +1,4 @@
-# R13 — Static (Q3/D3-style) Bot Parity Audit: clanker heuristic vs zdtd_bot guest (2026-08-21)
+# R13: Static (Q3/D3-style) Bot Parity Audit: clanker heuristic vs zdtd_bot guest (2026-08-21)
 
 *The clanker static/heuristic bot AI (`BotBrain.cs`, `Bot.cs` non-neural paths,
 `BotConfig.cs`) is cross-pollinated with zdtd's bot brain guest
@@ -14,7 +14,7 @@ game data); the alignment itself needs direction (see section 5).*
 
 - Target scoring structure: nearest with kind multipliers (clanker `player ×0.82,
   bot ×0.9` on linear distance; zdtd `player ×0.67 = 0.82^2, bot ×0.81 = 0.9^2`
-  on squared distance — the same weights, squared) and a wounded-target bonus.
+  on squared distance: the same weights, squared) and a wounded-target bonus.
 - FOV cone with a close-spot radius (clanker `dist<12` wider cone, `<7 m` always
   spotted; zdtd `CLOSE_SPOT_RANGE 7.0`, `<7 m` always spotted).
 - Grudge/retaliation: remember attacker ~15 s, bias target score, halve reaction
@@ -85,7 +85,7 @@ binary state here; the following need a decision:
    quirks in the same pass.
 2. **Retreat firing**: zdtd suppresses fire while retreating; clanker's heuristic
    does not. Recommend: align clanker to zdtd (suppress) for the heuristic path
-   only — the neural path keeps its policy-driven behavior (R11).
+   only: the neural path keeps its policy-driven behavior (R11).
 3. **Hit model**: keep the two mechanics (raycast vs probability) but align the
    skill-scaled accuracy curves so the effective hit rates match.
 4. **Weapon mags**: aligning to the game changes the headless sim's ammo economy
@@ -118,5 +118,5 @@ Decision item 4 executed deliberately: magazine sizes aligned to the game's
 - BotMod.dll rebuilt and installed (live bots get the game-accurate mags on the
   next server restart).
 
-Still open (needs direction): decision items 1, 2, 3 — retreat-firing behavior,
+Still open (needs direction): decision items 1, 2, 3: retreat-firing behavior,
 the skill-table curves, and the hit-model curve alignment.

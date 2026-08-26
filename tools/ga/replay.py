@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""replay.py — deterministic arena match recorder + top-down HTML replay renderer.
+"""replay.py: deterministic arena match recorder + top-down HTML replay renderer.
 
 The production fitness uses the numba `combat_sim.simulate_match` which discards
 per-tick state. This module is a pure-Python recorder of the pre-R10 sim rules
@@ -516,7 +516,7 @@ def main():
     summary, frames = record_match(w, args.seed, args.n_bots, args.n_zombies, args.max_ticks,
                                    args.skill, args.weapon, args.env)
     walls = WALLS[args.env if args.env is not None else args.seed % 5]
-    out = render_html(summary, frames, walls, Path(args.out), f"GA Arena Replay — seed {args.seed}")
+    out = render_html(summary, frames, walls, Path(args.out), f"GA Arena Replay: seed {args.seed}")
     print(f"replay -> {out}  ({len(frames)} frames, kills={summary['kills']}, shots={summary['shots']})")
     if args.verify:
         import harness

@@ -311,13 +311,13 @@ namespace BotMod.Commands
                         // user-facing echo reads LastReason (TryLoad records it
                         // on both the success and failure path).
                         bool ok = ModApi.LoadNeuralWeights("loaded", ", using heuristic.");
-                        SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + BotMod.AI.BotNeuralBrain.LastReason : "Neural ON but load failed: " + BotMod.AI.BotNeuralBrain.LastReason + " — heuristic until reload succeeds.");
+                        SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + BotMod.AI.BotNeuralBrain.LastReason : "Neural ON but load failed: " + BotMod.AI.BotNeuralBrain.LastReason + ", heuristic until reload succeeds.");
                     }
                     break;
                 case "off": case "disable": case "false": case "0":
                     ModApi.Config.UseNeuralBrain = false;
                     ModApi.PersistConfigField("UseNeuralBrain", false);
-                    SdtdConsole.Instance.Output("Neural OFF (persisted) — using heuristic. (weights stay cached; `bot neural on` re-enables)");
+                    SdtdConsole.Instance.Output("Neural OFF (persisted), using heuristic. (weights stay cached; `bot neural on` re-enables)");
                     break;
                 case "reload": case "load":
                     {

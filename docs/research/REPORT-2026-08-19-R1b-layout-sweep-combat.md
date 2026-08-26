@@ -1,4 +1,4 @@
-# Layout Sweep on Combat Harness — Result (2026-08-19)
+# Layout Sweep on Combat Harness: Result (2026-08-19)
 
 *Synthetic-stub sweeps said H08. Combat says something else.*
 
@@ -21,13 +21,13 @@ plots all curves on one chart + JSON, `tools/ga/sweeps/`).
  layout        best   mean@last   Δ best-mean   FLOPs/bot   W
  ──────────────────────────────────────────────────────────
  H08-tanh      +12.341  ~11.0        ~1.3        304      165
- H16-relu      +17.991  12.0?         —          608      325
- H16-tanh      +17.991  12.0?         —          608      325   ← winner (tied, tanh kept)
- H24-tanh      +17.945  ~11.8         —          912      485
+ H16-relu      +17.991  12.0?        ,          608      325
+ H16-tanh      +17.991  12.0?        :          608      325   ← winner (tied, tanh kept)
+ H24-tanh      +17.945  ~11.8        ,          912      485
 ```
 
 On the **toy synthetic stub** the ranking was `H08 > H16 > H24 > H32` by a
-wide margin — the stub's decision surface is tiny, so fewer weights converges
+wide margin: the stub's decision surface is tiny, so fewer weights converges
 faster. On the **combat stub** the ranking inverts in the middle: `H16` now
 wins, `H24` trails closely, `H08` drops. The larger net's extra capacity only
 pays when the task has actual LOS/wall/burst/zombie pressure.
@@ -40,7 +40,7 @@ pays when the task has actual LOS/wall/burst/zombie pressure.
 - The synthetic H08 win is an artifact of the stub's small surface, not a
   reason to downsize before the real `ZBS2` harness. When the headless harness
   lands, rerun `sweep.py --hidden 8 12 16 24 32 --activations tanh relu
-  --pop 32 --gens 80` and let the real sim pick — the ranking will move again
+  --pop 32 --gens 80` and let the real sim pick, the ranking will move again
   if it should.
 - `relu` vs `tanh` tied on the combat stub too (`17.648` each in the earlier
   60-gen check). Bounded `tanh` stays for small-net stability under mutation

@@ -223,7 +223,7 @@ namespace BotMod.AI
                 try { me.MoveEntityHeaded(dir, false); } catch { }
                 try { me.SetLookPosition(pos + Vector3.up * 1f); } catch { }
                 if (dist > 6f) try { me.FindPath(pos, 1f, false, null); } catch { }
-                // Trader bodies (npcTraderJoel bots) ignore MoveEntityHeaded — the engine only
+                // Trader bodies (npcTraderJoel bots) ignore MoveEntityHeaded: the engine only
                 // moves them through their AI moveHelper, which we don't drive. Detect that the
                 // position didn't change and step it directly so player-model bots patrol/chase.
                 if (Vector3.Distance(me.position, before) <= 0.01f)

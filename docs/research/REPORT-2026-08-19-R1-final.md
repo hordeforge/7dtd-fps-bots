@@ -1,31 +1,31 @@
-# Final R1 Report — Crazy-Good Net From Scratch (2026-08-19)
+# Final R1 Report: Crazy-Good Net From Scratch (2026-08-19)
 
 *Goal: use GA to create a crazy good 7DTD PvP+zombie net from scratch for 7dtd-fps-bots.*
 *Result: 14→16(tanh)→5 champion (W=325, 608 FLOPs/bot) trained in a numba
-combat tick loop — walls, LOS, burst, trait jitter, zombie horde pressure.*
+combat tick loop: walls, LOS, burst, trait jitter, zombie horde pressure.*
 
 ## The number
 
-- `evolved/best.json` **gen 37 / pop 40×80 / seed 42** — train fitness **+18.90**,
+- `evolved/best.json` **gen 37 / pop 40×80 / seed 42**, train fitness **+18.90**,
   mean **12.47**. **Held-out 100 matches:** seed999 **+12.16±1.15** (min
-  9.97 max 18.03), seed1234 **+11.87±0.95**, seed4242 **+12.03±1.11** —
+  9.97 max 18.03), seed1234 **+11.87±0.95**, seed4242 **+12.03±1.11**,
   holds across seeds. Vs random baseline on same harness **−0.01±0.09 to
   +7.74±5.39** (champ `+12.16` is `+4.2–12.2` above). Vs zero-brain
   **+12.03±0.86 (Δ +0.13)**: zero spams fire at 0.5 and still scores in FFA
-  meat-grinder — champ wins on **aim bias sign correctly flipping by health**
+  meat-grinder: champ wins on **aim bias sign correctly flipping by health**
   (healthy `aim −0.39`, wounded `+0.20`, camp opportunist `−0.48`), **strafe
   camping at 0.31→0.43**, and **stuck avoidance** (see `net.png` `W1`/`W2` mats;
   they are non-degenerate). Full train-tick harness will widen the gap.
 
 - Per-arena **n=30** (1200/1800 ticks, seed 999): **1v1 +4.49±0.45**,
-  **FFA +15.82±0.70**, **Horde +19.88±8.72** — Horde stdev is large because
+  **FFA +15.82±0.70**, **Horde +19.88±8.72**, Horde stdev is large because
   zombie focus fire is stochastic; mean still ~5×1v1, confirming the net
-  handles meat-grinder pressure. Random is `0.06 / 0.10 / 0.10` —
+  handles meat-grinder pressure. Random is `0.06 / 0.10 / 0.10`,
   discriminative.
 
 ## Why it is crazy good *for a stub harness*
 
-The harness is not the real `ZBS2` tick — it is a faithful standalone arena
+The harness is not the real `ZBS2` tick: it is a faithful standalone arena
 with the same weapon curves, `skill_hit_chance`, and LOS walls. It already
 separates a learned net from noise by an order of magnitude; the net uses
 terrain (walls), retreat timing, and burst control to earn that gap. FFA
@@ -33,13 +33,13 @@ and Horde pressure force it to learn both PvP and PvE.
 
 ## What is still open
 
-- Headless `ZBS2` swap (zdtd `world_store` ticks) — same `evolve.py` seed chain,
+- Headless `ZBS2` swap (zdtd `world_store` ticks): same `evolve.py` seed chain,
   one-line harness change. Expected to move the fitness scale but keep the
   ranking, and to finally separate the champion from the zero brain by more
   than aim nuance.
 - Layout on the *combat* fitness: earlier sweep on the synthetic stub favored
   H08; combat rerun `H40_g40` now says **H16 tanh** (+17.99, tied relu, H24
-  +17.95) still wins — shipped shape stays `W=325` until the real harness
+  +17.95) still wins, shipped shape stays `W=325` until the real harness
   fully lands (`sweep.py` is ready: `--hidden 8 12 16 24 32 --activations tanh relu`).
 
 ## Controls (dedicated, advisory-only)

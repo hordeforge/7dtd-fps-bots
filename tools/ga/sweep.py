@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sweep.py — sweep hidden sizes / activations to find the best layout.
+"""sweep.py: sweep hidden sizes / activations to find the best layout.
 
 Usage:
   python tools/ga/sweep.py --seeds 1 --trials 2   # quick check
@@ -31,7 +31,7 @@ def run_one(hidden: int, activation: str, pop: int, gens: int, seed: int):
     so only H16 runs; every other size is skipped before any evolution.
     """
     if hidden != ga.HIDDEN:
-        print(f"  note: H{hidden} sweep not yet wired (numba HIDDEN==16) — skipping, only H16-tanh/relu are real")
+        print(f"  note: H{hidden} sweep not yet wired (numba HIDDEN==16): skipping, only H16-tanh/relu are real")
         return []
     orig_act = harness.ACTIVATION
     harness.ACTIVATION = 1 if activation == "relu" else 0
@@ -87,7 +87,7 @@ def main():
     # keep only successful curves for table/ranking/plots (non-H16 are skipped until numba templates)
     ok = {k: v for k, v in curves.items() if v}
     if not ok:
-        print("no successful curves (all skipped) — nothing to rank/plot"); return
+        print("no successful curves (all skipped): nothing to rank/plot"); return
     # summary table
     print("\n layout        best   mean@last   Δ best-mean   FLOPs/bot   W")
     print(" ────────────────────────────────────────────────────────────")
@@ -114,7 +114,7 @@ def main():
             ax.plot(xs, bs, lw=1.5, label=f"{key} best")
             ax.plot(xs, ms, lw=1.0, ls="--", alpha=0.85, label=f"{key} mean")
         ax.set_xlabel("generation"); ax.set_ylabel("fitness")
-        ax.set_title("Layout sweep — fitness over generations (pop "
+        ax.set_title("Layout sweep: fitness over generations (pop "
                      f"{args.pop} gens {args.gens} seed {args.seed}, combat)")
         ax.legend(frameon=False, fontsize=7, ncols=3)
         ax.grid(True, alpha=0.18)
@@ -125,7 +125,7 @@ def main():
         plt.close(fig)
         print(f"plot -> {out}")
     except ImportError:
-        print("(matplotlib not installed — table only)")
+        print("(matplotlib not installed: table only)")
     # also dump JSON for CI diffing
     dump = {k: [{"gen": g, "best": b, "mean": m} for (g, b, m) in v] for k, v in ok.items()}
     jpath = Path(f"evolved/runs/sweep_{args.seed}.json") if args.out is None else Path(args.out).with_suffix(".json")

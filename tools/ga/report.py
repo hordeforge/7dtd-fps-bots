@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""report.py — generate an HTML evolution report from one or more runs.
+"""report.py: generate an HTML evolution report from one or more runs.
 
 Usage:
   python tools/ga/report.py --runs evolved/runs/2026-08-19_011136_pop32_g30_s42 --out evolved/runs/2026-08-19_.../report.html
@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import datetime
 import html
 import io
 import json
@@ -70,7 +71,7 @@ def img_tag(data: bytes, alt: str) -> str:
     w, h = png_dimensions(data)
     return (f"<img src='data:image/png;base64,{b64}' alt='{alt}' width='{w}' height='{h}'"
             f" loading='lazy' decoding='async'"
-            f" style='max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:10px' />")
+            f" style='max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:10px'>")
 
 
 def load_csv(path: Path):
@@ -109,7 +110,7 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
     ax.plot(gens, median, color=ACCENT, lw=1.4, ls="--", label="median")
     ax.plot(gens, best, color="#111827", lw=1.7, label="best")
     ax.set_xlabel("generation"); ax.set_ylabel("fitness")
-    ax.set_title("Evolution — fitness over generations")
+    ax.set_title("Evolution: fitness over generations")
     ax.legend(frameon=False, ncols=4, fontsize=8)
     ax.grid(True, alpha=0.18)
     fig.tight_layout()
@@ -138,7 +139,7 @@ def weight_hist(run_dir: Path) -> str | None:
     fig, ax = plt.subplots(figsize=(9, 2.6))
     ax.hist(w, bins=28, color=CAB, alpha=0.88, edgecolor="white", lw=0.6)
     ax.set_xlabel("weight value"); ax.set_ylabel("count")
-    ax.set_title(f"Weight histogram — best of gen {last.get('gen', '?')}  (W={len(w)}, mean {np.mean(w):+.3f} σ {np.std(w):.3f})")
+    ax.set_title(f"Weight histogram: best of gen {last.get('gen', '?')}  (W={len(w)}, mean {np.mean(w):+.3f} σ {np.std(w):.3f})")
     ax.grid(True, axis="y", alpha=0.18)
     fig.tight_layout()
     return optimized_png_bytes(fig)
@@ -226,10 +227,10 @@ def build(runs: list[Path], out: Path):
         if wh:   sec.append(f"<div style='margin:10px 0'>{img_tag(wh, 'weight histogram')}</div>")
         if topo: sec.append(f"<div style='margin:10px 0'>{img_tag(topo, 'best network topology')}</div>")
         if not HAS_MPL:
-            sec.append("<p style='color:#b45309'>matplotlib not installed — showing headline only. <code>uv pip install matplotlib</code></p>")
+            sec.append("<p style='color:#b45309'>matplotlib not installed, showing headline only. <code>uv pip install matplotlib</code></p>")
         parts.append("\n".join(sec))
 
-    page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    page = f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bot Evolution Report</title>
 <style>
  body{{font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 980px; margin: 28px auto; padding: 0 18px; color:#0f172a}}
@@ -238,9 +239,9 @@ def build(runs: list[Path], out: Path):
  code{{background:#f1f5f9; padding:1px 5px; border-radius:6px; font-size:12px}}
  .muted{{color:#64748b; font-size:12px}}
 </style>
-<h1>Clanker — Evolution Report</h1>
-<p class="muted">Generated {html.escape(str(Path.cwd()))} · {__import__('datetime').datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
-{"<hr style='border:none;border-top:1px solid #e2e8f0;margin:14px 0'/>".join(parts) if parts else "<p>No runs.</p>"}
+<h1>Clanker: Evolution Report</h1>
+<p class="muted">Generated {datetime.datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
+{"<hr style='border:none;border-top:1px solid #e2e8f0;margin:14px 0'>".join(parts) if parts else "<p>No runs.</p>"}
 <footer class="muted" style="margin-top:22px">Charts score the headless combat sim (tools/ga/harness.py).</footer>
 """
     out.parent.mkdir(parents=True, exist_ok=True)

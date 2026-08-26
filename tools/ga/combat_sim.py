@@ -1,4 +1,4 @@
-"""combat_sim.py — realistic PvP + zombie combat simulator (numba, headless).
+"""combat_sim.py: realistic PvP + zombie combat simulator (numba, headless).
 
 No 7DTD binary needed. Re-uses weapon profiles, LOS, traits, and the
 BotNeuralBrain 14→16→5 contract verbatim so evolved weights drop straight
@@ -36,7 +36,7 @@ SPREAD_ADD_PER_SHOT = 0.25           # spread added per shot fired
 SPREAD_DECAY_PER_SEC = 1.0           # spread recovered per second of pause
 SPREAD_HIT_PENALTY = 0.75            # hit-chance loss at full spread (1.0)
 
-# Canonical layout — baked into the njit kernels below as compile-time
+# Canonical layout: baked into the njit kernels below as compile-time
 # literals, so sizes are NOT runtime-swappable (sweep.py therefore only wires
 # H16 tanh/relu and skips everything else). The 14→16→5 shape (W=325) is what
 # ships in BotNeuralBrain.cs.
@@ -107,7 +107,7 @@ def skill_hit_chance(skill, dist, trait_jitter):
     return base * dscale
 
 
-# World geometry — env variants (picked per-match by harness for diversity).
+# World geometry: env variants (picked per-match by harness for diversity).
 # 0: L + block (default), 1: cross (4 walls), 2: open (no walls), 3: corridor.
 WALLS = np.array([
     [20.0, 20.0, 20.0, 60.0],
@@ -127,7 +127,7 @@ WALLS_CORRIDOR = np.array([
     [0.0, 40.0, 30.0, 40.0],
     [50.0, 40.0, 80.0, 40.0],
 ], dtype=np.float32)
-# Dense choke maze — 5 shorter walls split the field into corridors so bots must
+# Dense choke maze: 5 shorter walls split the field into corridors so bots must
 # turn to keep LOS / not stand in an open field. Hardest layout (env index 4).
 WALLS_MAZE = np.array([
     [30.0, 20.0, 50.0, 20.0],
@@ -335,7 +335,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             elif env == 2: can_see = True
             elif env == 3: can_see = los_clear(bx0, by0, tx, ty, WALLS_CORRIDOR, 4)
             else: can_see = los_clear(bx0, by0, tx, ty, WALLS_MAZE, 6)
-            # build obs (14) — normalized
+            # build obs (14): normalized
             # mirrors docs/research/01 §2: keep order frozen
             # Slots 4/12 are the sustained-fire spread and rounds-left fractions.
             # The live mod feeds matching semantics (Bot._fireSpread with the
@@ -374,7 +374,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             fire_gate = sigmoid(y_raw[3])
             strafe_sig = sigmoid(y_raw[4])
 
-            # movement — policy-driven (deeper sim rework): the net controls a
+            # movement is policy-driven (deeper sim rework): the net controls a
             # 2D velocity. retreat 0 -> full approach, 1 -> full backpedal;
             # strafe_sig -> lateral; camp -> hold position (guardrail keeps the
             # anti-camp penalty bookkeeping).
@@ -427,7 +427,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 continue
             if dist > WEAPON_RANGE[bweapon[bi]] + 2.0:
                 continue
-            # R11: no fire suppression while retreating — retreat is now policy-
+            # R11: no fire suppression while retreating; retreat is now policy-
             # driven (the net kites and should be able to shoot while backpedaling)
             if fire_gate < 0.5:
                 continue
@@ -450,7 +450,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
             v, rng = _lcg01(rng)
             if v > hc2:
-                # miss — still burns burst
+                # miss: still burns burst
                 if burst_left[bi] > 0:
                     burst_left[bi] -= 1
                     if burst_left[bi] <= 0:
@@ -489,7 +489,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                     if not use_opp or best < n_evolved:
                         deaths_ev += 1
                     # respawn zombie-ish: keep FFA populated by reviving victim as fresh zombie for horde pressure?
-                    # no — leave dead for K/D accounting
+                    # no, leave dead for K/D accounting
             else:
                 zhp[best] -= dmg
                 if zhp[best] <= 0:
@@ -540,7 +540,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             if zy[zi] < 2: zy[zi] = 2
             if zy[zi] > 78: zy[zi] = 78
 
-    # sim returns raw components — harness does scalarization (so weights can sweep)
+    # sim returns raw components: harness does scalarization (so weights can sweep)
     elo = float(kills) - float(deaths)
     econ = 0.0
     if damage_taken > 1e-6:

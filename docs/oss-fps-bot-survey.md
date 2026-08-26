@@ -1,4 +1,4 @@
-# OSS FPS bot brains beyond Q3/D3 — survey for the 7DTD bots
+# OSS FPS bot brains beyond Q3/D3: survey for the 7DTD bots
 
 Companion to [`q3-inspiration-notes.md`](q3-inspiration-notes.md). That doc
 covers the id lineage (ioquake3 `botlib` + DOOM 3 AAS) already ported into
@@ -22,7 +22,7 @@ confirmations:
   reload + reposition). It was a genuine gap in our bots at survey time
   (they reloaded standing in the open); the executed port below closed it.
 - Unvanquished confirmed: `src/shared/navgen/navgen.h` includes `Recast.h`,
-  `DetourNavMesh.h`, `DetourTileCache.h` — the industry-standard OSS navmesh
+  `DetourNavMesh.h`, `DetourTileCache.h`, the industry-standard OSS navmesh
   is the real-map navigation model to follow.
 
 **Executed port (2026-08-21):** cover-while-reloading, from the CS-bot lineage:

@@ -1,6 +1,6 @@
-# Self-Improving 7DTD Bots via Neuroevolution — Overview
+# Self-Improving 7DTD Bots via Neuroevolution: Overview
 
-*Status: research brainstorm, 2026-08-18 — lives in `7dtd-fps-bots/docs/research/` so it travels with the bot mod, not the clean-room server.*
+*Status: research brainstorm, 2026-08-18: lives in `7dtd-fps-bots/docs/research/` so it travels with the bot mod, not the clean-room server.*
 
 ## 1. Goal
 
@@ -18,7 +18,7 @@ Replace the hand-tuned heuristic loop (`Bot.Tick` → `BotBrain.FindTarget` / `L
 | **Determinism.** Clanker already proved per-bot LCG (`Config.Lcg`, multiplier 1103515245) makes fights replayable. | Determinism makes fitness stable generation-over-generation; same seed → same outcome. |
 | **No client mod, EAC-off dedi.** We cannot ship a Python training loop into the mod. | Trainer can run *out-of-process* (Python or Zig harness) and export only `float[] weights` into the mod. |
 
-Gradient RL (PPO/SAC) is still viable *offline* with a surrogate simulator, but for a first self-improving loop GA is simpler, debuggable, and fits the C# mod's constraints (no native libs, `netstandard` only). NEAT (evolving topology) and OpenAI-ES / CMA-ES are natural upgrades — see `01-neuroevolution-architecture.md`.
+Gradient RL (PPO/SAC) is still viable *offline* with a surrogate simulator, but for a first self-improving loop GA is simpler, debuggable, and fits the C# mod's constraints (no native libs, `netstandard` only). NEAT (evolving topology) and OpenAI-ES / CMA-ES are natural upgrades, see `01-neuroevolution-architecture.md`.
 
 ## 3. The self-improving loop
 
@@ -63,12 +63,12 @@ Improvement is measured as Pareto fitness (§`02-environment-and-fitness.md`), n
 
 ## 5. How this doc set is organized
 
-- `01-neuroevolution-architecture.md` — network topology, genome encoding, NEAT vs fixed, why 14→16→5 fits on dedi.
-- `02-environment-and-fitness.md` — observation vector, action heads, arenas, reward shaping, determinism harness.
-- `03-genetic-algorithm.md` — selection, crossover, mutation, speciation, hyperparams, diversity tricks.
-- `04-training-pipeline.md` — offline trainer design (Python + headless sim bridge), checkpointing, curriculum, data layout.
-- `05-integration.md` — how `BotNeuralBrain.cs` plugs into `Bot.Tick` without breaking `BotBrain` fallback, serialization, dedi safety.
-- `06-experiments-and-roadmap.md` — phased experiments, ablations, metrics, risks, open questions.
+- `01-neuroevolution-architecture.md`: network topology, genome encoding, NEAT vs fixed, why 14→16→5 fits on dedi.
+- `02-environment-and-fitness.md`: observation vector, action heads, arenas, reward shaping, determinism harness.
+- `03-genetic-algorithm.md`: selection, crossover, mutation, speciation, hyperparams, diversity tricks.
+- `04-training-pipeline.md`: offline trainer design (Python + headless sim bridge), checkpointing, curriculum, data layout.
+- `05-integration.md`: how `BotNeuralBrain.cs` plugs into `Bot.Tick` without breaking `BotBrain` fallback, serialization, dedi safety.
+- `06-experiments-and-roadmap.md`: phased experiments, ablations, metrics, risks, open questions.
 
 ## 6. Non-goals (for this research phase)
 

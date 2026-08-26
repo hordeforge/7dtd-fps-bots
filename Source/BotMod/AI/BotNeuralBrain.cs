@@ -7,7 +7,7 @@ namespace BotMod.AI
 {
     /// <summary>
     /// Advisory neural brain for the neuroevolution research
-    /// (docs/research/00..06). Pure math only — no RNG, no allocs on tick,
+    /// (docs/research/00..06). Pure math only: no RNG, no allocs on tick,
     /// no framework. Handwritten forward pass with Tanh hidden and mixed
     /// output heads. When no model is loaded or the flag is off, callers fall
     /// back to the heuristic (zero behavior change).
@@ -108,7 +108,7 @@ namespace BotMod.AI
             try
             {
                 // Pack inputs in canonical order matching docs/research/01 §2.
-                // Keep this order frozen — Python trainer and C# loader share it.
+                // Keep this order frozen: Python trainer and C# loader share it.
                 // Slot semantics are aligned on both sides of the contract:
                 // slot 4 is the sustained-fire spread fraction (Bot._fireSpread,
                 // same ADD/DECAY constants as tools/ga/combat_sim.py) and slot

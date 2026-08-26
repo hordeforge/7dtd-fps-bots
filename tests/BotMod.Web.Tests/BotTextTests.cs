@@ -1,4 +1,4 @@
-// BotTextTests — pins the Unicode identity contract for names: NFC
+// BotTextTests: pins the Unicode identity contract for names: NFC
 // canonicalization on both sides of every comparison and at ingestion into
 // stored keys, so an NFD spelling ("K" + combining acute) matches the NFC
 // form the server holds, and case folding is ordinal (no host-locale traps).

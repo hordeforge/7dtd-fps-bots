@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""viz.py — neural net topology + weight visualization.
+"""viz.py: neural net topology + weight visualization.
 
 Usage:
   python tools/ga/viz.py --best evolved/best.json            # -> evolved/net.png
@@ -152,11 +152,11 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
         ax3.bar(X + off, vals, width=wbar, label=name, alpha=0.88, edgecolor="white", linewidth=0.7)
     ax3.set_xticks(X); ax3.set_xticklabels(OUT_LABELS, fontsize=8)
     ax3.set_ylabel("output (sigmoid/tanh)"); ax3.set_ylim(0, 1)
-    ax3.set_title("Activation traces — canonical observations (healthy / wounded / camp) · aim is tanh ([-1,1] shown clipped)", fontsize=8)
+    ax3.set_title("Activation traces: canonical observations (healthy / wounded / camp) · aim is tanh ([-1,1] shown clipped)", fontsize=8)
     ax3.legend(frameon=False, fontsize=7, ncols=3, loc="upper right")
     ax3.grid(True, axis="y", alpha=0.15)
 
-    fig.suptitle("BotNeuralBrain — topology + weights + activations", fontsize=9, color="#0f172a", y=0.995)
+    fig.suptitle("BotNeuralBrain: topology + weights + activations", fontsize=9, color="#0f172a", y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(out, dpi=165)
     plt.close(fig)

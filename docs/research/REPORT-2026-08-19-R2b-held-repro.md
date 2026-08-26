@@ -1,4 +1,4 @@
-# Held-Out Repro Check — pop60×80 s999 (2026-08-19)
+# Held-Out Repro Check: pop60×80 s999 (2026-08-19)
 
 *Sanity after the pop40×80 g25 promotion.*
 
@@ -10,7 +10,7 @@
 | pop60×80 s999 g64 (fresh, same harness) | `+11.64±1.02` | `+11.56` | does not beat `g25` on held-out |
 
 So the promoted `g25` holds. The sweep already showed the harness can separate
-layouts (H16 `+11.82`, H08 `+11.64` tie under noise) — no shape change needed.
+layouts (H16 `+11.82`, H08 `+11.64` tie under noise), no shape change needed.
 The next bigger run should vary the *arena* (harder Horde / closer walls), not
 just `pop`.
 

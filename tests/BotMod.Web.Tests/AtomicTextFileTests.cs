@@ -1,4 +1,4 @@
-// AtomicTextFileTests — proves the durability contract of config persists:
+// AtomicTextFileTests: proves the durability contract of config persists:
 // a completed Write leaves a complete, correct file plus a last-known-good
 // .bak, and no staging litter; recovery paths (missing primary, unreadable
 // primary) resolve to the .bak. Pure BCL; compiled and run by

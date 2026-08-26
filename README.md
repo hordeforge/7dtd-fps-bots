@@ -168,7 +168,7 @@ MANIFEST.sha256` inside the extracted directory to verify it offline.
 Released versions and upgrade notes are documented in `CHANGELOG.md`.
 
 CI runs `make check` plus `scripts/test-idempotency.sh` (the workflow installs
-mono for it, and the pinned ruff for `make lint-python` via pipx); locally
+mono for it, and the pinned ruff for `make lint-python` via `uv tool install`); locally
 `make test` needs mono, and
 `make build` needs the game's Managed DLLs (`SEVENDTD_DS_DIR`/`SEVENDTD_GAME_DIR`
 override the Steam paths scripts/build.sh probes). After editing
@@ -183,9 +183,9 @@ atomic with a `.bak` last-known-good).
 
 ```bash
 make build && make install
-./7DaysToDieServer.x86_64 -logfile /tmp/bot.log -quit -batchmode -nographics -dedicated -configfile /tmp/serverconfig.eacoff.xml
+./7DaysToDieServer.x86_64 -logfile .scratch/bot.log -quit -batchmode -nographics -dedicated -configfile .scratch/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.4.0 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True AuthBypass=False
+# [BotMod] BotMod v0.5.0 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True AuthBypass=False
 # [BotMod] BotManager ready. TargetBots=6 diff=4 weapon=mixed
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
 # [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) (1/6)

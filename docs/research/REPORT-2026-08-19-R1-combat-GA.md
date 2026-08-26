@@ -1,6 +1,6 @@
-# Evolution Report — R1 Combat GA (2026-08-19)
+# Evolution Report: R1 Combat GA (2026-08-19)
 
-*First crazy-good network from scratch — real PvP + zombie combat, not logits.*
+*First crazy-good network from scratch: real PvP + zombie combat, not logits.*
 
 ## Summary
 
@@ -12,7 +12,7 @@
 | Best | **gen 37** · fitness **+18.90** · mean **12.47** · median **12.01** |
 | Held-out (30 matches, seed 999) | **+12.09** mean (`stdev 0.50`) vs random **−0.00** (`stdev 0.08`) → **Δ +12.09** |
 | Per-arena (seed 0xABCD) | 1v1 F+4.5 K1 D1 · FFA F+15.3 K5 D5 · Horde F+24.6 K9 D3 |
-| Random on same arenas | all `F ~0.1` K0 D0 — validates that combat sim is discriminative |
+| Random on same arenas | all `F ~0.1` K0 D0, validates that combat sim is discriminative |
 
 ## Charts
 
@@ -37,7 +37,7 @@
 - `UseNeuralBrain=false` by default in `config/botmod.json`.
   `bot neural status|on|off|reload [path]` toggles live; a broken `best.json`
   falls back to heuristic with one log. `BotNeuralBrain` still advisory-only
-  (every output ANDed with LOS/range/reaction/burst/move caps — `05-integration.md`).
+  (every output ANDed with LOS/range/reaction/burst/move caps: `05-integration.md`).
 
 ## Reproduce
 
@@ -56,4 +56,4 @@ bot neural on
 
 - Phase 4 headless swap (zdtd `ZBS2` ticks) + full R1 curriculum sweep.
 - H16 vs H08 on the *combat* fitness (not the synthetic stub) to re-pick the
-  shipped shape — `sweep.py` is wired for `hidden=8,12,16,24`.
+  shipped shape: `sweep.py` is wired for `hidden=8,12,16,24`.

@@ -1,4 +1,4 @@
-// BotBrainArithTests — pins the arithmetic of the idle-camper hash gate.
+// BotBrainArithTests: pins the arithmetic of the idle-camper hash gate.
 //
 // Why: C# promotes int*uint to long and % keeps the dividend's sign, so the
 // original inline form ((me.entityId * 2654435761u) % 100 < (uint)(Camper*12))

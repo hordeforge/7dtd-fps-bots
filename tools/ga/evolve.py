@@ -26,6 +26,7 @@ import numpy as np
 
 import ga
 import harness
+from paths import repo_root
 
 DEFAULT_FITNESS = {"elo": 0.55, "econ": 0.25, "survival": 0.15, "stuck": 0.05}
 # Held-out probe: seed 999 never feeds training fitness; it is the promotion
@@ -100,7 +101,7 @@ def _held_probe(weights) -> float:
     (harness.canonical_scores: tanh + DEFAULT_FITNESS scalarization + the
     F=18 gate; docs/research/03: "eval gate pins F=18"). Training knobs are
     pinned inside canonical_scores and restored afterwards. Any failure scores
-    -inf so the run can never promote — and says why on stderr, so a broken
+    -inf so the run can never promote, and says why on stderr, so a broken
     probe is visible instead of silently gating or silently waving every
     candidate through (-inf >= -inf)."""
     try:
@@ -115,7 +116,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     # Repo root anchors every relative output path below (evolved/runs/...,
     # evolved/best.json). If the chdir fails the run must stop here with the
     # real cause instead of scattering those paths under whatever cwd it got.
-    os.chdir(Path(__file__).resolve().parents[2])
+    os.chdir(repo_root())
     rng = np.random.default_rng(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -284,7 +285,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 if g % 10 == 9 and islands > 1:
                     ga.island_mix(island_pops, rng, migrants=2)
 
-            # HOF ring — freshness gated (don't re-inject a genome already in the live pop)
+            # HOF ring: freshness gated (don't re-inject a genome already in the live pop)
             global_elites = [all_pops_flat[int(i)].copy() for i in order[-2:][::-1]] if len(all_pops_flat) >= 2 else []
             hof = (hof + global_elites)[:8]
             if g % 12 == 11 and len(hof) >= 2:
@@ -300,7 +301,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
                     tgt[random.randrange(len(tgt))] = cand.copy()
 
-    # promote best — held-gated so a weaker run never clobbers the shipped champion.
+    # promote best: held-gated so a weaker run never clobbers the shipped champion.
     # --dry-run never promotes: synthetic fitness says nothing about real combat,
     # and the run exists to exercise the loop, not to touch operator state.
     if best_w is not None:

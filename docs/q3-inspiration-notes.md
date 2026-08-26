@@ -26,7 +26,7 @@ See `chars.h`, `ai_main.c:BotChangeViewAngles/BotAimAtEnemy/BotCheckAttack`,
 
 - **View angles (BotChangeViewAngles)**: challenge mode is clamped smooth
   (`factor*diff`), normal is under-damped spring (`viewanglespeed += speed-diff`,
-  damped `0.45*(1-factor)`) — ported as `ChallengeAim` toggle.
+  damped `0.45*(1-factor)`), ported as `ChallengeAim` toggle.
 
 - **Movement / AAS**: Q3 `TFL_*` flags (WALK/JUMP/CROUCH/LADDER/SWIM/TELEPORT)
   mapped onto 7DTD `Block`/`Chunk` checks; Doom3 `AAS.FindCover/OutOfRange/
@@ -62,7 +62,7 @@ per-bot LCG (`Config.Lcg`, held as `Bot._rng` and drawn through `Rng01()`/
   dodge longer (`OnDamaged(strength)`), so snipers genuinely daze bots.
 - **Ammo pacing (from zdtd_bot).** `WeaponProfile.MagSize`/`ReloadSec` per gun;
   an empty magazine starts a reload (`TryShootBurst` holds fire, movement
-  continues) — every trigger pull consumes a round whether it hits or misses
+  continues): every trigger pull consumes a round whether it hits or misses
   (zdtd `weapon_mag`/`weapon_reload` parity).
 - **Already shared:** per-slot LCG + deterministic burst cadence (ported from
   zdtd_bot in `cross:` commits), headshot chance/multiplier, dodge-on-hit,

@@ -4,7 +4,7 @@
 	<DisplayName value="7DTD Bot - FPS Bots" />
 	<Description value="Server-side FPS bots like Quake 3: spawn with weapons, pathfind, hunt and shoot players, zombies and each other." />
 	<Author value="HordeForge" />
-	<Version value="0.4.0" />
+	<Version value="0.5.0" />
 	<Website value="https://github.com/hordeforge/7dtd-fps-bots" />
 	<SkipWithAntiCheat value="true" />
 </xml>

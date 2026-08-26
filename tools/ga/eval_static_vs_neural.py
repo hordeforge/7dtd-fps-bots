@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""eval_static_vs_neural.py — the measuring stick for "GA beats our static bots".
+"""eval_static_vs_neural.py: the measuring stick for "GA beats our static bots".
 
 Reports, per held seed, the held-out fitness of:
   - the evolved champion (evolved/best.json)
   - the static "no-brain" baseline (all-zero weights: every gate at sigmoid(0)=0.5,
-    no aim bias, neutral strafe — i.e. a bot that just always fires)
+    no aim bias, neutral strafe: i.e. a bot that just always fires)
 
 Both are measured on the SAME harness (the currently-imported evaluator), so the
 margin is apples-to-apples. The goal's finish line is
@@ -25,9 +25,11 @@ from pathlib import Path
 import numpy as np
 
 TOOLS = Path(__file__).resolve().parent          # tools/ga
-REPO = TOOLS.parent.parent                        # repo root
 sys.path.insert(0, str(TOOLS))
 import harness  # noqa: E402 -- sibling module resolves only after the sys.path bootstrap above
+from paths import repo_root  # noqa: E402 -- same bootstrap
+
+REPO = repo_root()
 
 DEFAULT_SEEDS = [999, 1234, 4242]
 

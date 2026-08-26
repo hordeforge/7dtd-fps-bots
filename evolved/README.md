@@ -1,4 +1,4 @@
-# `evolved/` — Trained-Bot Artifacts
+# `evolved/`: Trained-Bot Artifacts
 
 This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edited.
 
@@ -8,12 +8,14 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 |---|---|---|
 | `best.json` | Champion weights (flat `float[W]` + meta) loaded by `BotNeuralBrain.TryLoad` | yes, when promoted |
 | `best.meta.json` | `{ generation, fitness, configHash }` (as written by `ga.save_best`) | yes, alongside `best.json` |
+| `report.html` | `report.py` output for the current run set (multi-MB embedded base64) | no (artifact; regenerate from `runs/`) |
+| `sweeps/` | Figures and JSON a `docs/research/REPORT-*.md` cites as evidence | yes (PNG/JSON only; `report_*.html` is ignored) |
 | `runs/<ts>/` | One dir per training run: `config.json`, `gen_*.json`, `fitness.csv` | no (artifact) |
 | `archive/` | Manual holding pen for a superseded `best.json` (nothing writes here automatically; `evolve.py` overwrites `best.json` in place once its held probe beats the incumbent) | no |
 
 ## Contract
 
-- Weights order is canonical: `W1 row-maj(16×14) | b1(16) | W2 row-maj(5×16) | b2(5)` — see `docs/research/01` §4 and `Source/BotMod/AI/BotNeuralBrain.cs`.
+- Weights order is canonical: `W1 row-maj(16×14) | b1(16) | W2 row-maj(5×16) | b2(5)`, see `docs/research/01` §4 and `Source/BotMod/AI/BotNeuralBrain.cs`.
 - JSON version field must match the loader's `kVersion`; mismatch → fallback to heuristic.
 - The mod never writes here at runtime. It reads `best.json` when
   `UseNeuralBrain=true`: at world start (`ModApi.OnGameStartDone`) and on
@@ -36,4 +38,6 @@ Operators then `git pull` and `bot neural reload`.
 ## Git
 
 - `best.json` ships so a fresh clone works without re-training.
-- Everything else (`runs/`, `archive/`) is git-ignored to avoid repo bloat. A `.gitignore` here keeps the noise down while the directory stays tracked.
+- Everything else is git-ignored to avoid repo bloat: `runs/`, `archive/`, and the
+  generated `report.html` / `sweeps/report_*.html`. A `.gitignore` here keeps the
+  noise down while the directory stays tracked.

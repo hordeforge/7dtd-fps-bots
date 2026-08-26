@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""dashboard.py — one polished, self-contained training dashboard for the GA evolutions.
+"""dashboard.py: one polished, self-contained training dashboard for the GA evolutions.
 
 Assembles, into a single HTML file:
-  1. Evolution curves — every run overlaid (best/mean) with IQR band + current champion
+  1. Evolution curves: every run overlaid (best/mean) with IQR band + current champion
      highlighted, plus a champion-is-best callout.
-  2. Held-out stability strip — per-run final held (seed 999) ranked.
+  2. Held-out stability strip: per-run final held (seed 999) ranked.
   3. Neural-net controller viz (reuse viz.py's diagram, embedded as a PNG).
-  4. Arena replays — top-down canvas matches of the champion on multiple seeds/arenas
+  4. Arena replays: top-down canvas matches of the champion on multiple seeds/arenas
      (reuse replay.py; embedded as inline HTML frames).
   5. Per-run summary table (pop/gen/curriculum/islands/held/verdict).
 
@@ -36,10 +36,12 @@ except Exception:  # pragma: no cover
     HAS_MPL = False
 
 TOOLS = Path(__file__).resolve().parent          # repo/tools/ga
-REPO = TOOLS.parent.parent                        # repo root
-RUNS_DIR = REPO / "evolved"                       # repo/evolved
 import sys as _sys  # noqa: E402 -- sibling modules resolve only after the sys.path bootstrap above
 _sys.path.insert(0, str(TOOLS))
+from paths import repo_root  # noqa: E402 -- same bootstrap
+
+REPO = repo_root()
+RUNS_DIR = REPO / "evolved"                       # repo/evolved
 from replay import record_match, render_html  # noqa: E402 -- same bootstrap
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
@@ -133,7 +135,7 @@ def curves_b64(runs, best_run_name: str | None):
             ax.plot(gens, best, color="#64748b", lw=1.0, alpha=0.75, label=label)
     ax.set_xlabel("generation", fontsize=10)
     ax.set_ylabel("fitness (scalar)", fontsize=10)
-    ax.set_title("Evolution — best fitness per generation (all runs)", fontsize=13)
+    ax.set_title("Evolution: best fitness per generation (all runs)", fontsize=13)
     ax.grid(True, alpha=0.15)
     ax.legend(fontsize=7, ncols=3, frameon=False, loc="lower right")
     fig.tight_layout()
@@ -161,7 +163,7 @@ def held_strip_b64(runs):
     ax.set_xticks(range(len(helds)))
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
     ax.set_ylabel("held (seed999)")
-    ax.set_title("Held-out stability — final held per run (champion on the left)")
+    ax.set_title("Held-out stability: final held per run (champion on the left)")
     ax.grid(True, axis="y", alpha=0.2)
     fig.tight_layout()
     return fig_b64(fig)
@@ -206,7 +208,7 @@ def build(runs, out: Path, replays):
  .b{color:#38bdf8;font-weight:700}
 </style></head><body><div class="wrap">
 <h1>Bot Evolution Dashboard</h1>
-<p style="color:#94a3b8;font-size:13px">Neuroevolution of the FPS bot controller — 14&rarr;16&rarr;5 MLP, genetic algorithm, held-gated promotion.</p>
+<p style="color:#94a3b8;font-size:13px">Neuroevolution of the FPS bot controller, 14&rarr;16&rarr;5 MLP, genetic algorithm, held-gated promotion.</p>
 <div>
   <span class="chip">Champion gen <b class="b">""")
     # best.meta.json travels via git (whitelisted in evolved/.gitignore), so
@@ -260,10 +262,13 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
         cfg = run_cfg(run)
         _, _, _, _, _, held = load_run_csv(run)
         heldv = [v for v in held if v == v]
+        # A key the run config never wrote reads as "n/a", never as a value:
+        # `None` in a results table is indistinguishable from a measured zero.
         rows.append((run.name.replace("evolved/runs/", ""),
-                     cfg.get("pop"), cfg.get("gens"), cfg.get("curriculum"),
-                     cfg.get("islands"), f"{heldv[-1]:.2f}" if heldv else "—"))
-    rows.sort(key=lambda r: float(r[5]) if r[5] != "—" else 0, reverse=True)
+                     *("n/a" if cfg.get(k) is None else cfg.get(k)
+                       for k in ("pop", "gens", "curriculum", "islands")),
+                     f"{heldv[-1]:.2f}" if heldv else "n/a"))
+    rows.sort(key=lambda r: float(r[5]) if r[5] != "n/a" else 0, reverse=True)
     chunks.append("""<h2>5 · Runs</h2><div class="card"><table><caption style="text-align:left">Summary of every GA run: population, generations, curriculum, islands, final held-out score</caption><thead><tr><th scope="col">run</th><th scope="col">pop</th><th scope="col">gens</th><th scope="col">curriculum</th><th scope="col">islands</th><th scope="col">held</th></tr></thead><tbody>""")
     # Every cell is filesystem/config text (run dir names, hand-editable
     # config.json values), so it is HTML-escaped before it lands in the page:

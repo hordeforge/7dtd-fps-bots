@@ -5,3 +5,5 @@ archive/
 *.jsonl
 !best.json
 !best.meta.json
+report.html
+sweeps/report_*.html

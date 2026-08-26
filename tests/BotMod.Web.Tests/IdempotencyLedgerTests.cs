@@ -1,4 +1,4 @@
-// IdempotencyLedgerTests — proves the twice-execution property of the
+// IdempotencyLedgerTests: proves the twice-execution property of the
 // POST /api/bot replay ledger: running the same keyed request twice yields
 // one execution and the same response. Pure BCL; compiled and run by
 // scripts/test-idempotency.sh (needs mcs + mono, not part of `make check`).

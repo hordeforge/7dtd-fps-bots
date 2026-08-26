@@ -1,10 +1,10 @@
-# docs/research — Index
+# docs/research: Index
 
 The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers:
 
-- **Design docs `00..06`** — the architecture, environment/fitness, GA, training
+- **Design docs `00..06`**: the architecture, environment/fitness, GA, training
   pipeline, integration, and roadmap as originally planned.
-- **Experiment log `REPORT-*.md`** — every run/experiment as it happened, R0-R13.
+- **Experiment log `REPORT-*.md`**: every run/experiment as it happened, R0-R13.
   The R-series is the authoritative record; the design docs describe intent.
 
 ## Design docs

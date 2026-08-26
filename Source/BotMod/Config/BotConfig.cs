@@ -138,7 +138,7 @@ namespace BotMod.Config
         // Strafe / dodge
         public float StrafeChance { get; set; } = 0.9f;
         public float DodgeOnHitChance { get; set; } = 0.75f;
-        // Neural brain (docs/research/00..06) — advisory only, heuristic fallback
+        // Neural brain (docs/research/00..06): advisory only, heuristic fallback
         public bool UseNeuralBrain { get; set; } = false;
         public string BotNeuralWeightPath { get; set; } = "evolved/best.json";
 

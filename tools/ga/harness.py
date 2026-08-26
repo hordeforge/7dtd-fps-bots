@@ -1,7 +1,7 @@
-"""Headless harness — now backed by combat_sim (real PvP+zombie loop).
+"""Headless harness: now backed by combat_sim (real PvP+zombie loop).
 
 Still deterministic (LCG seed chain), still cheap, but now every tick runs
-LOS, move caps, burst fire, hit chance, and zombie pressure — so evolved
+LOS, move caps, burst fire, hit chance, and zombie pressure, so evolved
 weights actually matter for combat, not just logits.
 
 Matches docs/research/02-environment-and-fitness.md.
@@ -19,11 +19,11 @@ import numpy as np
 import combat_sim as _cs
 _simulate = _cs.simulate_match
 _simulate_relu = _cs.simulate_match_relu
-# harness activation flag (0 tanh, 1 relu) — set by sweep/evolve
+# harness activation flag (0 tanh, 1 relu): set by sweep/evolve
 ACTIVATION = 0
 # curriculum flag ("mixed" canonical; pvp_first/horde_first gate early gens via evolve.py)
 CURRICULUM = "mixed"
-# scalarization weights (tunable — fitness sweep + evolve.py --fit-* thread via these)
+# scalarization weights (tunable: fitness sweep + evolve.py --fit-* thread via these)
 FIT_ELO = 0.55
 FIT_ECON = 0.25
 FIT_SURV = 0.15

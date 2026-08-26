@@ -1,4 +1,4 @@
-"""Genetic operators — no framework, NumPy only.
+"""Genetic operators: no framework, NumPy only.
 
 Matches docs/research/03-genetic-algorithm.md.
 Flat float[] genome with W ≈ 325 (14*16 + 16 + 16*5 + 5).
@@ -16,7 +16,7 @@ from typing import List
 
 import numpy as np
 
-# Canonical shape — keep in sync with BotNeuralBrain.cs + docs/research/01 §4
+# Canonical shape: keep in sync with BotNeuralBrain.cs + docs/research/01 §4
 INPUTS = 14
 HIDDEN = 16
 OUTPUTS = 5
@@ -81,7 +81,7 @@ def mutate(w: np.ndarray, rng: np.random.Generator, sigma: float = 0.05, rank_no
         n = rng.integers(1, 4)
         idxs = rng.choice(W, n, replace=False)
         w[idxs] = rng.uniform(-0.7, 0.7, n).astype(np.float32)
-    # Block swap (hidden-unit permutation) — helps escape local optima when one unit is dead
+    # Block swap (hidden-unit permutation): helps escape local optima when one unit is dead
     p_swap = 0.12 if stagnant else 0.06
     if rng.random() < p_swap:
         a, b = rng.choice(HIDDEN, 2, replace=False)

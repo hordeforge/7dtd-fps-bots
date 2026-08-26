@@ -1,4 +1,4 @@
-// IdempotencyLedgerFuzzTests — randomized differential fuzzing of the POST
+// IdempotencyLedgerFuzzTests: randomized differential fuzzing of the POST
 // /api/bot replay ledger against an independent spec model. The ledger takes
 // untrusted "requestId" strings straight from HTTP POST bodies; this harness
 // drives TryBegin/Complete/Fail with adversarial keys, a jittering virtual
