@@ -7,6 +7,6 @@ namespace BotMod.Core
     /// Bump both together in one commit; see CHANGELOG.md.</summary>
     internal static class BotModVersion
     {
-        public const string Number = "0.4.0";
+        public const string Number = "0.5.0";
     }
 }

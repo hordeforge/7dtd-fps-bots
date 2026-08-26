@@ -10,7 +10,7 @@ The version lives in `Source/BotMod/Core/BotModVersion.cs` (canonical) and
 must match `<Version>` in `Source/BotMod/ModInfo.xml`; `scripts/build.sh`
 fails on drift between them.
 
-## [Unreleased]
+## [0.5.0] - 2026-08-26
 
 ### Added
 - `make test` now also pins the deny side of the authorization matrix
@@ -26,6 +26,23 @@ fails on drift between them.
   commit produce identical bytes.
 - The release zip carries `MANIFEST.sha256` (sha256 of every payload file,
   `sha256sum -c` format), so an extracted package can be verified offline.
+- Unknown keys in `Config/botmod.json` are reported as a WARN naming the key
+  at load instead of being silently ignored (a misspelled key used to keep
+  the built-in default with no signal).
+- A missing `characters.json` logs a WARN instead of silently falling back to
+  built-in bot characteristics.
+- Optional idempotency key for `POST /api/bot`: send `"requestId":"<unique>"`.
+  Retries reusing the key replay the recorded response within the ledger
+  retention window instead of executing twice; a concurrent duplicate gets
+  `409 REQUEST_IN_PROGRESS`; failures are not cached and may be retried.
+  Requests without `requestId` behave exactly as before.
+- Fuzz suites in `tests/BotMod.Web.Tests`, run by `scripts/test-idempotency.sh`
+  (`make test`): a differential model fuzzer hammering the idempotency ledger
+  with adversarial `requestId` shapes, clock jitter and capacity/retention
+  pressure, a mutation fuzzer for the `evolved/best.json` weights-file parser,
+  and `BotConfigLoadTests` pinning unknown-key detection, range clamping and
+  `.bak` recovery (the latter two need the game install's Newtonsoft.Json.dll
+  and are skipped when it is absent).
 
 ### Changed
 - The engine-free Config and AI layers no longer reference the `ModApi`
@@ -81,6 +98,41 @@ fails on drift between them.
   instead of failing the whole file: previously one such entry threw during
   ingestion and every custom personality in the file silently fell back to
   built-in defaults behind a generic parse warning.
+- `POST /api/bot` rejects malformed request bodies with named `400 INVALID_*`
+  codes (new: `INVALID_COUNT`, `INVALID_ENTITY_ID`, `INVALID_LEVEL`,
+  `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`, `INVALID_REQUEST_ID`) where
+  it previously silently reinterpreted them:
+  - a missing `spawnNear` `player` answered `200 {"found":false}` like a
+    departed player instead of flagging the bad request;
+  - a missing `removeOne` `entityId` ran a lookup for id 0 and answered
+    `200 {"removed":false}`;
+  - absent or non-boolean `on` on `neural`/`team`/`vs` read as `false` and
+    flipped the live setting with a `200` (a malformed squad-mode call could
+    disband teams);
+  - present-but-unparseable numeric fields (`count`, `level`, `team`)
+    substituted their defaults; omitted fields still take those defaults;
+  - a `requestId` that is present but empty or over 128 chars degraded to
+    keyless execution, so retries re-executed while the caller believed they
+    would replay; it is now rejected so the caller can fix the key.
+  Range clamps are unchanged (`count` 1..16, `skill` 0..4, teams 0..8) and
+  stay shared with the console command's setters.
+- `make lint-html` checks the HTML this repo actually ships (`git ls-files`)
+  instead of walking the tree, and warnings now fail it (`vnu --Werror`), not
+  just errors. A local `evolved/runs/<ts>/report.html` left over from training
+  can no longer fail a gate CI never sees, and the accessibility warnings the
+  old gate printed and ignored (missing `lang`, trailing slash on void
+  elements) are now build failures.
+- CI installs the pinned ruff with `uv tool install` via `astral-sh/setup-uv`
+  (SHA-pinned like every other action) instead of relying on the runner image
+  shipping pipx.
+- The GA tools resolve the repo root by walking up for the root `Makefile`
+  (`tools/ga/paths.py`) instead of counting `..` from `__file__`; moving a
+  script one directory deeper used to silently point `evolved/runs/...` at the
+  wrong tree.
+- `report.py` output no longer embeds the absolute path of the machine that
+  generated it, and declares `<html lang="en">`; `dashboard.py` renders a
+  missing run-config key as `n/a` rather than `None` or an em dash, so a value
+  the run never recorded cannot read as a measured one.
 
 ### Fixed
 - A failed `characters.json` reload (missing, unparseable, or null body) now
@@ -89,31 +141,6 @@ fails on drift between them.
   a null body re-applied the difficulty lerp onto them, so every `bot reload`
   while the file stayed broken marched aim accuracy toward 1.0 and reaction
   time toward its floor; both paths now converge on the documented defaults.
-
-### Added
-- Unknown keys in `Config/botmod.json` are reported as a WARN naming the key
-  at load instead of being silently ignored (a misspelled key used to keep
-  the built-in default with no signal).
-- A missing `characters.json` logs a WARN instead of silently falling back to
-  built-in bot characteristics.
-- Optional idempotency key for `POST /api/bot`: send `"requestId":"<unique>"`.
-  Retries reusing the key replay the recorded response within the ledger
-  retention window instead of executing twice; a concurrent duplicate gets
-  `409 REQUEST_IN_PROGRESS`; failures are not cached and may be retried.
-  Requests without `requestId` behave exactly as before.
-- Fuzz suites in `tests/BotMod.Web.Tests`, run by `scripts/test-idempotency.sh`
-  (`make test`): a differential model fuzzer hammering the idempotency ledger
-  with adversarial `requestId` shapes, clock jitter and capacity/retention
-  pressure, a mutation fuzzer for the `evolved/best.json` weights-file parser,
-  and `BotConfigLoadTests` pinning unknown-key detection, range clamping and
-  `.bak` recovery (the latter two need the game install's Newtonsoft.Json.dll
-  and are skipped when it is absent).
-
-### Performance
-- Neural/LOS evaluations memoized per tick and O(1) bot lookup in
-  `BotManager`.
-
-### Fixed
 - Target selection's finish-the-wounded bias now scales target health as a
   fraction of `BotHealth` like every other health fraction in the mod;
   previously it divided by a hardcoded 100, so with a tuned `BotHealth`
@@ -142,30 +169,21 @@ fails on drift between them.
 - The web API's `spawnNear` action rejects an off-grammar `weapon` value with
   `400 INVALID_WEAPON` instead of silently ignoring it and spawning bots with
   random loadouts (same grammar as `bot player ... [weapon]`).
+- `evolved/report.html`, `evolved/sweeps/report_*.html` and the generated
+  `dist/BotMod/Config/entityclasses.xml` are no longer committed (4.6 MB of
+  regenerable artifacts, two of which embedded the generating machine's home
+  directory). `evolved/README.md` and `tools/ga/README.md` document how to
+  regenerate them; `docs/ga-dashboard.html` stays committed because the
+  `evolved/runs/` data behind it does not ship.
 
-### Changed
-- `POST /api/bot` rejects malformed request bodies with named `400 INVALID_*`
-  codes (new: `INVALID_COUNT`, `INVALID_ENTITY_ID`, `INVALID_LEVEL`,
-  `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`, `INVALID_REQUEST_ID`) where
-  it previously silently reinterpreted them:
-  - a missing `spawnNear` `player` answered `200 {"found":false}` like a
-    departed player instead of flagging the bad request;
-  - a missing `removeOne` `entityId` ran a lookup for id 0 and answered
-    `200 {"removed":false}`;
-  - absent or non-boolean `on` on `neural`/`team`/`vs` read as `false` and
-    flipped the live setting with a `200` (a malformed squad-mode call could
-    disband teams);
-  - present-but-unparseable numeric fields (`count`, `level`, `team`)
-    substituted their defaults; omitted fields still take those defaults;
-  - a `requestId` that is present but empty or over 128 chars degraded to
-    keyless execution, so retries re-executed while the caller believed they
-    would replay; it is now rejected so the caller can fix the key.
-  Range clamps are unchanged (`count` 1..16, `skill` 0..4, teams 0..8) and
-  stay shared with the console command's setters.
+### Performance
+- Neural/LOS evaluations memoized per tick and O(1) bot lookup in
+  `BotManager`.
 
 ## [0.4.0] - 2026-08-23
 
-Not yet git-tagged; cut from commit f97ab9d.
+Tagged `v0.4.0` at commit a4a8bf3. The `v0.4.1` tag and GitHub release
+point at that same commit and ship 0.4.0; no 0.4.1 build exists.
 
 ### Added
 - Per-bot teams: assign bots to Team 0..N (0 = free-for-all); same-team bots
