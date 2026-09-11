@@ -10,6 +10,15 @@ The version lives in `Source/BotMod/Core/BotModVersion.cs` (canonical) and
 must match `<Version>` in `Source/BotMod/ModInfo.xml`; `scripts/build.sh`
 fails on drift between them.
 
+## [0.6.0] - 2026-09-11
+
+### Changed
+
+- `AGENTS.md` states what this repository owns and does not own: server-side
+  FPS bots here, LiteNetLib demand bots in `7dtd-loadgen`, stock-fidelity
+  suites in `7dtd-playtest`. Mod-only scenarios stay local via
+  `IScenarioProvider`. No behaviour change.
+
 ## [0.5.0] - 2026-08-26
 
 ### Added
