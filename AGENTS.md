@@ -4,12 +4,22 @@ Dedicated FPS combat bots mod for 7 Days to Die dedicated servers (Quake 3 inspi
 
 Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordeforge/.github/blob/main/MODDING_BEST_PRACTICES.md)
 
+## Owns
+
+| Owns | Does not own |
+|---|---|
+| Server-side FPS combat bots (spawn, pathfinding, combat AI, neural brains, Web UI) | LiteNetLib demand bots (`7dtd-loadgen`) |
+| Mod-local unit/integration tests for this mod | Stock-fidelity playtest suites (`7dtd-playtest/suites/*.json`) |
+| Mod-specific playtest cases via local `IScenarioProvider` when needed | Lab isolation / `sb` CLI (`7dtd-sandbox`) |
+| Dedicated-server install surface for Clanker | Anti-cheat evidence pipeline (`7dtd-server-guard`) |
+
 ## Scope & Boundaries
 
 - Server-side mod that spawns real FPS bots holding ranged weapons with pathfinding, combat AI, and neural decision controllers.
 - Requires Easy Anti-Cheat off (`-noeac`) on the dedicated server.
 - Vanilla clients require no client-side mod to play.
 - Keep performance overhead bounded: physics raycasts, vision cone calculations, and GA neural network inference must run efficiently within the 20 TPS (50 ms) tick budget.
+- Do not add declarative `suites/*.json` here for stock fidelity; those stay in `7dtd-playtest`. Mod-only scenarios stay local via `IScenarioProvider`.
 
 ## Known deviations from the root rules
 
