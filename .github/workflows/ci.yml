@@ -30,7 +30,7 @@ jobs:
       # so the pinned ruff must be on PATH first. Pin sourced from
       # scripts/tool-versions.sh, the same single source of truth the other
       # analyzers use.
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - run: source scripts/tool-versions.sh && uv tool install "ruff==$RUFF_VERSION"
       # The lint scripts run oxlint, tsc and vnu through bunx at pinned
       # versions; the runner preinstalls node, but not bun.
