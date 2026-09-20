@@ -47,8 +47,8 @@ def canonical_scores(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -
     """Score `w` on the shared held-out measuring stick: canonical tanh +
     default scalarization + DRAWS_PER_CONFIG=1 (F=18), `matches` draws keyed
     by (gen_key, m, run_seed). One definition for every consumer of held-out
-    numbers (evolve's promotion gate, eval.py, eval_static_vs_neural.py,
-    fitness_sweep.py), so they cannot drift apart again; training knobs set by
+    numbers (evolve's promotion gate and its eval / static-vs-neural
+    subcommands), so they cannot drift apart again; training knobs set by
     a caller are pinned to the canonical values for the duration and restored
     afterwards."""
     global ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG

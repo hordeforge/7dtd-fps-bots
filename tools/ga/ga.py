@@ -42,10 +42,10 @@ def he_init(rng: np.random.Generator, inputs: int = INPUTS, hidden: int = HIDDEN
     return w
 
 
-def clone_heuristic(rng: np.random.Generator, P: int = 32, sigma: float = 0.02):
-    """Behavioral-cloning warm-start stub: generation-0 population.
-    Phase 1 replaces this with a fitted clone; for now He init + jitter.
-    """
+def init_population(rng: np.random.Generator, P: int = 32, sigma: float = 0.02):
+    """Seed generation-0 population: He init + jitter (the flat weight
+    contract the GA evolves; formerly named clone_heuristic when a
+    behavioural-clone warm-start stub was planned)."""
     base = he_init(rng)
     pop = [base]
     for _ in range(P - 1):
@@ -102,7 +102,7 @@ def next_generation(pop_w: List[np.ndarray], ranked, order, rng: np.random.Gener
                     sigma: float = 0.05, rank_norm: float = 0.5,
                     generation: int = 0, total_gens: int = 80,
                     stagnant: bool = False) -> List[np.ndarray]:
-    """Elitism-N reproduction shared by evolve/sweep/fitness_sweep: keep the
+    """Elitism-N reproduction shared by evolve/sweep: keep the
     top-elite_k genomes, fill the rest with crossover+mutate children (or
     plain tournament copies) per docs/research/03 §3."""
     ranks = ranked.tolist()

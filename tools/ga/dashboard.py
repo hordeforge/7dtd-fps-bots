@@ -38,13 +38,12 @@ except Exception:  # pragma: no cover
 TOOLS = Path(__file__).resolve().parent          # repo/tools/ga
 import sys as _sys  # noqa: E402 -- sibling modules resolve only after the sys.path bootstrap above
 _sys.path.insert(0, str(TOOLS))
-from paths import repo_root  # noqa: E402 -- same bootstrap
-
-REPO = repo_root()
-RUNS_DIR = REPO / "evolved"                       # repo/evolved
 from replay import record_match, render_html  # noqa: E402 -- same bootstrap
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
+
+REPO = TOOLS.parent.parent.parent               # repo root
+RUNS_DIR = REPO / "evolved"                       # repo/evolved
 
 
 def fig_b64(fig) -> str:

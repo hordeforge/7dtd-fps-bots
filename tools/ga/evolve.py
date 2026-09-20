@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Offline neuroevolution loop (docs/research/03-genetic-algorithm.md,
-04-training-pipeline.md).
+04-training-pipeline.md) plus the best.json evaluation commands.
 
 Usage:
   python tools/ga/evolve.py --pop 32 --gens 40 --seed 42
+  python tools/ga/evolve.py --pop 32 --gens 40 --seed 42 --fit-elo 0.65 --fit-econ 0.20
   python tools/ga/evolve.py --resume evolved/runs/2026-08-18_foo
   python tools/ga/evolve.py --dry-run --pop 8 --gens 3
+  python tools/ga/evolve.py eval --best evolved/best.json --matches 30
+  python tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40
 
 Outputs evolved/runs/<ts>/ + evolved/best.json (see docs/research/04).
+The eval/static-vs-neural commands are the former eval.py and
+eval_static_vs_neural.py folded here: all three share canonical_scores
+(harness) and the best.json load below, and harness is their single fitness
+definition, so they cannot drift.
 """
 
 from __future__ import annotations
@@ -26,13 +33,38 @@ import numpy as np
 
 import ga
 import harness
-from paths import repo_root
+
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 DEFAULT_FITNESS = {"elo": 0.55, "econ": 0.25, "survival": 0.15, "stuck": 0.05}
 # Held-out probe: seed 999 never feeds training fitness; it is the promotion
 # measuring stick (see docs/research/04).
 HELD_SEED = 999
 HELD_MATCHES = 40
+
+
+def _mix_from_args(a) -> dict | None:
+    """Build a scalarization mix from --fit-* flags, or None when none were
+    given (meaning: use DEFAULT_FITNESS). Any float disables the defaults, so
+    a partial override still trains on a deliberate mix."""
+    if a.fit_elo is None and a.fit_econ is None and a.fit_surv is None and a.fit_stuck is None:
+        return None
+    base = DEFAULT_FITNESS.copy()
+    if a.fit_elo is not None: base["elo"] = a.fit_elo
+    if a.fit_econ is not None: base["econ"] = a.fit_econ
+    if a.fit_surv is not None: base["survival"] = a.fit_surv
+    if a.fit_stuck is not None: base["stuck"] = a.fit_stuck
+    return base
+
+
+def _set_fitness(fit: dict) -> None:
+    """Apply a scalarization mix to harness.train globals. The held-out probe
+    (canonical_scores) pins its own defaults and restores these afterwards, so
+    every mix is measured on the same stick (matches fitness_sweep)."""
+    harness.FIT_ELO = float(fit["elo"])
+    harness.FIT_ECON = float(fit["econ"])
+    harness.FIT_SURV = float(fit.get("survival", 0.0))
+    harness.FIT_STUCK = float(fit.get("stuck", 0.0))
 
 
 def _synthetic_fitness(w) -> float:
@@ -112,11 +144,13 @@ def _held_probe(weights) -> float:
         return float("-inf")
 
 
-def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed"):
+def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed", fitness: dict | None = None):
     # Repo root anchors every relative output path below (evolved/runs/...,
     # evolved/best.json). If the chdir fails the run must stop here with the
     # real cause instead of scattering those paths under whatever cwd it got.
-    os.chdir(repo_root())
+    os.chdir(ROOT)
+    mix = (fitness or DEFAULT_FITNESS).copy()
+    _set_fitness(mix)
     rng = np.random.default_rng(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -134,6 +168,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     tag = f"_{activation}" if activation != "tanh" else ""
     if islands > 1: tag += f"_is{islands}"
     if curriculum != "mixed": tag += f"_{curriculum}"
+    if fitness: tag += "_fit-custom"
     # UTC label: identical runs get identical names on every host/container
     # (a laptop in UTC+2 and a CI runner in UTC must not disagree), and the
     # fall-back hour cannot recur a label. Exclusive mkdir + numeric suffix:
@@ -152,7 +187,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             n += 1
             run_dir = Path(f"evolved/runs/{stem}_{n}")
 
-    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": DEFAULT_FITNESS, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": HELD_SEED}
+    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": mix, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": HELD_SEED}
     ga.atomic_write_text(run_dir / "config.json", json.dumps(config, indent=2))
 
     start_gen = 0
@@ -174,11 +209,11 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     # island split (ring migration)
     if islands == 1:
         if pop_w is None:
-            pop_w = ga.clone_heuristic(rng, P=pop, sigma=0.02)
+            pop_w = ga.init_population(rng, P=pop, sigma=0.02)
         island_pops: list[list] = [pop_w]
     else:
         per = max(8, pop // islands)
-        island_pops = [ga.clone_heuristic(np.random.default_rng(seed ^ (i * 0x9E3779B9)), P=per, sigma=0.02) for i in range(islands)]
+        island_pops = [ga.init_population(np.random.default_rng(seed ^ (i * 0x9E3779B9)), P=per, sigma=0.02) for i in range(islands)]
         pop_w = island_pops[0]  # alias for the single-pool bookkeeping below
 
     hof: list = []
@@ -332,15 +367,107 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     print(f"run dir: {run_dir}")
 
 
+# --- best.json evaluation commands (folded eval.py / eval_static_vs_neural.py) ---
+
+
+def _load_best(best: str):
+    """Read weights + metadata from a best.json; size-check against the genome
+    contract so a stale/foreign file fails loudly instead of mis-scoring."""
+    best_path = Path(best)
+    if not best_path.is_file():
+        raise SystemExit(f"best.json not found: {best_path} (e.g. evolved/best.json)")
+    obj = json.loads(best_path.read_text(encoding="utf-8"))
+    w = np.array(obj["weights"], dtype=np.float32)
+    if w.size != ga.W:
+        raise SystemExit(f"weights size {w.size} != want {ga.W}")
+    return w, obj
+
+
+def cmd_eval(best: str, matches: int):
+    """Re-evaluate a single best.json on the held-out pool under the shared
+    canonical stick (tanh + default scalarization, F=18): the same gate as the
+    promotion logic and static-vs-neural, so it cannot drift. (former eval.py)"""
+    os.chdir(ROOT)
+    w, meta = _load_best(best)
+    scores = harness.canonical_scores(w, 999, 999, matches)
+    print(f"best gen {meta.get('generation')} fitness {meta.get('fitness'):+.4f}")
+    print(f"held-out re-eval {len(scores)} matches  mean {np.mean(scores):+.4f}  stdev {np.std(scores):.4f}")
+    # random baseline on the same seed so combat sim is discriminative
+    rng = np.random.default_rng(123)
+    w_rand = ga.he_init(rng)
+    rand_scores = harness.canonical_scores(w_rand, 999, 999, matches)
+    print(f"random baseline  mean {np.mean(rand_scores):+.4f}  stdev {np.std(rand_scores):.4f}  (delta {np.mean(scores)-np.mean(rand_scores):+.2f})")
+
+
+def cmd_static_vs_neural(best: str, seeds: list[int], matches: int):
+    """The measuring stick for "GA beats our static bots": per seed, the
+    held-out fitness of the evolved champion vs the static no-brain baseline
+    (all-zero weights), both on the same canonical harness. The goal finish
+    line is champion_held - static_held >= +0.5 on every seed.
+    (former eval_static_vs_neural.py)"""
+    os.chdir(ROOT)
+    w_champ, _ = _load_best(best)
+    w_static = np.zeros(w_champ.shape[0], dtype=np.float32)
+
+    def _held(w: np.ndarray, seed: int) -> tuple[float, float]:
+        sc = harness.canonical_scores(w, 999, seed, matches)
+        return float(np.mean(sc)), float(np.std(sc))
+
+    rows = []
+    for seed in seeds:
+        c_mean, c_std = _held(w_champ, seed)
+        s_mean, s_std = _held(w_static, seed)
+        rows.append((seed, c_mean, s_mean, c_mean - s_mean, c_std, s_std))
+
+    print(f"{'seed':>6} {'champion':>10} {'static':>10} {'margin':>8}")
+    for seed, c, s, m, cst, sst in rows:
+        print(f"{seed:>6} {c:>10.3f} {s:>10.3f} {m:>+8.3f}   (champ stdev {cst:.2f}, static stdev {sst:.2f})")
+    ok = all(m >= 0.5 for _, _, _, m, _, _ in rows)
+    print(f"\nGOAL MET (champion - static >= +0.5 on every seed): {ok}")
+    if not ok:
+        print("NOT met. The rework must push the static baseline down ~1.0 "
+              "and evolve a champion that out-generates it by >= +0.5 per seed.")
+
+
+def _train_run(a):
+    """Wire parsed args through to run(). Top-level train flags and the eval
+    subcommands share one dispatch."""
+    return run(a.pop, a.gens, a.seed, a.dry_run, a.resume,
+               activation=a.activation, islands=a.islands,
+               curriculum=a.curriculum, fitness=_mix_from_args(a))
+
+
+def _add_train_flags(p):
+    p.add_argument("--pop", type=int, default=32)
+    p.add_argument("--gens", type=int, default=40)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
+    p.add_argument("--resume", type=str, default=None)
+    p.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"])
+    p.add_argument("--islands", type=int, default=1, help="island count 1..8 (ring migrate every 10 gens)")
+    p.add_argument("--curriculum", type=str, default="mixed", choices=["mixed", "pvp_first", "horde_first"])
+    p.add_argument("--fit-elo", type=float, default=None, help="elo scalarization weight")
+    p.add_argument("--fit-econ", type=float, default=None, help="economy scalarization weight")
+    p.add_argument("--fit-surv", type=float, default=None, help="survival scalarization weight")
+    p.add_argument("--fit-stuck", type=float, default=None, help="stuck penalty scalarization weight")
+
+
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pop", type=int, default=32)
-    ap.add_argument("--gens", type=int, default=40)
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
-    ap.add_argument("--resume", type=str, default=None)
-    ap.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"])
-    ap.add_argument("--islands", type=int, default=1, help="island count 1..8 (ring migrate every 10 gens)")
-    ap.add_argument("--curriculum", type=str, default="mixed", choices=["mixed", "pvp_first", "horde_first"])
+    ap = argparse.ArgumentParser(description="GA neuroevolution training + best.json evaluation")
+    _add_train_flags(ap)
+    ap.set_defaults(func=_train_run)
+    sub = ap.add_subparsers(dest="cmd", title="best.json evaluation commands")
+
+    e = sub.add_parser("eval", help="re-evaluate a best.json on the held-out pool")
+    e.add_argument("best", type=str, help="evolved/best.json")
+    e.add_argument("--matches", type=int, default=30)
+    e.set_defaults(func=lambda a: cmd_eval(a.best, a.matches))
+
+    s = sub.add_parser("static-vs-neural", help="canonical promotion gate: champion vs static baseline")
+    s.add_argument("--seeds", nargs="*", type=int, default=[999, 1234, 4242])
+    s.add_argument("--matches", type=int, default=40)
+    s.add_argument("--best", default="evolved/best.json")
+    s.set_defaults(func=lambda a: cmd_static_vs_neural(a.best, a.seeds, a.matches))
+
     args = ap.parse_args()
-    run(args.pop, args.gens, args.seed, args.dry_run, args.resume, activation=args.activation, islands=args.islands, curriculum=args.curriculum)
+    args.func(args)

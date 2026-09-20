@@ -18,20 +18,15 @@ tools/ga/
                          (the headless zdtd-binary bridge was the R0 stub)
   evolve.py              CLI trainer: --pop --gens --seed --resume <runDir>
                          [--islands N] [--curriculum ...] [--activation ...]
-  eval.py                re-evaluates a single best.json on the held-out pool
-  eval_static_vs_neural.py  canonical promotion gate (static vs neural,
-                         seeds/matches on the CLI, prints GOAL MET)
-  clone.py               behavioural-cloning warm-start stub (heuristic
-                         traces -> cloned net)
-  sweep.py               net-layout sweeps (default output evolved/runs/;
-                         committed copies live in tools/ga/sweeps/)
-  fitness_sweep.py       scalarization-weight sweep over harness.FIT_*
-  plot.py                fitness.csv -> plot.png (best/mean per generation)
+                         [--fit-elo/--fit-econ/--fit-surv/--fit-stuck];
+                         eval and static-vs-neural subcommands evaluate
+                         best.json (canonical promotion gate)
+  sweep.py               activation sweep (H16-tanh vs H16-relu; numba bakes
+                         H16, so hidden size is not sweepable)
   replay.py              match recorder + HTML renderer
   viz.py                 network diagram rendering
   report.py              per-run report.html generator
   dashboard.py           live training dashboard (docs/ga-dashboard.html)
-  paths.py               repo-root discovery (walks up for the root Makefile)
   requirements.txt       numpy, numba, matplotlib (+ optional Pillow)
 ```
 
@@ -61,18 +56,22 @@ uv venv .venv && . .venv/bin/activate
 uv pip install -r tools/ga/requirements.txt   # numpy, numba, matplotlib
 ```
 
-`evolve.py`/`eval.py` import `combat_sim.py`, which compiles its hot loops with
+`evolve.py` imports `combat_sim.py`, which compiles its hot loops with
 numba on first use (the first JIT pass takes a few seconds).
 
 ```bash
-python tools/ga/clone.py --heuristic-traces traces/heur.jsonl --out evolved/clone.json
 python tools/ga/evolve.py --pop 32 --gens 40 --seed 42
-python tools/ga/eval.py evolved/best.json
-python tools/ga/plot.py evolved/runs/<ts>/fitness.csv
+python tools/ga/evolve.py --pop 32 --gens 40 --seed 42 --fit-elo 0.65 --fit-econ 0.20
+python tools/ga/evolve.py eval evolved/best.json
+python tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40
 ```
 
-`evolve --resume evolved/runs/<ts>` replays from the last generation's
-checkpoint deterministically (same LCG chain as clanker/zdtd_bot).
+`python tools/ga/evolve.py --resume evolved/runs/<ts>` replays from the last
+generation's checkpoint deterministically (same LCG chain as clanker/zdtd_bot).
+The `eval` subcommand re-evaluates a single best.json on the held-out pool; the
+`static-vs-neural` subcommand is the canonical promotion gate (champion vs
+static baseline, prints GOAL MET). Both share the one canonical measuring stick
+in harness.canonical_scores.
 
 ## Disk contract
 
