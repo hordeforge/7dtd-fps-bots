@@ -59,8 +59,8 @@ static class AtomicTextFileTests
             AtomicTextFile.Write(path, "{\"v\":1}");
             AtomicTextFile.Write(path, "{\"v\":2}");
             File.Delete(path);
-            string s;
-            bool ok = AtomicTextFile.TryRead(path, out s);
+            string s, src;
+            bool ok = AtomicTextFile.TryRead(path, out s, out src);
             Check("missing primary falls back to .bak", ok && s == "{\"v\":1}");
         }
 
@@ -74,9 +74,9 @@ static class AtomicTextFileTests
             AtomicTextFile.Write(path, "{\"v\":1}");
             AtomicTextFile.Write(path, "{\"v\":2}");
             File.WriteAllText(path, "{\"v\":2"); // torn JSON
-            string s;
+            string s, src;
             Check("torn primary still readable via TryRead",
-                AtomicTextFile.TryRead(path, out s) && s == "{\"v\":2");
+                AtomicTextFile.TryRead(path, out s, out src) && s == "{\"v\":2");
             Check(".bak candidate exists for Load's fallback",
                 File.ReadAllText(AtomicTextFile.BackupPath(path)) == "{\"v\":1}");
         }
@@ -85,8 +85,8 @@ static class AtomicTextFileTests
         //    defaults, same as before this class existed).
         {
             string dir = TempDir(), path = Path.Combine(dir, "absent.json");
-            string s;
-            Check("no primary and no .bak reads false", !AtomicTextFile.TryRead(path, out s));
+            string s, src;
+            Check("no primary and no .bak reads false", !AtomicTextFile.TryRead(path, out s, out src));
             Check("failed read yields no content", s == null);
         }
 
@@ -133,8 +133,8 @@ static class AtomicTextFileTests
             Check("concurrent writers finished within timeout", finished);
             Check("concurrent writes complete without errors", errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);
-            string s;
-            bool read = AtomicTextFile.TryRead(path, out s);
+            string s, src;
+            bool read = AtomicTextFile.TryRead(path, out s, out src);
             // The final content must be ONE complete payload from a single
             // write call, never interleaved bytes from two.
             bool complete = false;
@@ -183,8 +183,8 @@ static class AtomicTextFileTests
                     {
                         while (!stopReaders.WaitOne(0))
                         {
-                            string s;
-                            if (!AtomicTextFile.TryRead(path, out s))
+                            string s, src;
+                            if (!AtomicTextFile.TryRead(path, out s, out src))
                                 lock (errors) errors.Add("read failed during swap window");
                             else if (s != pa && s != pb)
                                 lock (errors) errors.Add("torn or stale read: " + s);
@@ -197,8 +197,8 @@ static class AtomicTextFileTests
             bool finished = doneWriters.WaitOne(30000);
             stopReaders.Set();
             Check("writer finished within timeout", finished);
-            string final;
-            bool ok = AtomicTextFile.TryRead(path, out final);
+            string final, readFrom;
+            bool ok = AtomicTextFile.TryRead(path, out final, out readFrom);
             Check("final primary is the last written payload",
                 ok && final == pa); // 200 rewrites ending on an odd index rewrite pa last
             Check("reads during concurrent writes all saw a complete payload (" + reads + " reads)",

@@ -69,17 +69,10 @@ namespace BotMod.Config
         /// written by the last successful Write. Returns false when neither is
         /// readable; parse errors are the caller's problem. Serialized against
         /// Write so a concurrent swap is never observed mid-flight (see
-        /// WriteGate above).</summary>
-        public static bool TryRead(string path, out string contents)
-        {
-            string from;
-            return TryRead(path, out contents, out from);
-        }
-
-        /// <summary>TryRead variant that also names the file the content came
-        /// from (the primary or a fallback), so a caller recovering from an
-        /// unreadable primary can say which copy actually served the data.
-        /// <paramref name="readFrom"/> is null together with a false return.</summary>
+        /// WriteGate above). Names the file the content came from (the primary
+        /// or a fallback) via <paramref name="readFrom"/>, so a caller
+        /// recovering from an unreadable primary can say which copy served the
+        /// data; readFrom is null together with a false return.</summary>
         public static bool TryRead(string path, out string contents, out string readFrom)
         {
             contents = null;
