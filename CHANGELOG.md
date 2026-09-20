@@ -10,6 +10,25 @@ The version lives in `Source/BotMod/Core/BotModVersion.cs` (canonical) and
 must match `<Version>` in `Source/BotMod/ModInfo.xml`; `scripts/build.sh`
 fails on drift between them.
 
+## [0.7.0] - 2026-09-20
+
+### Added
+
+- `tools/ga/evolve.py` gains `--fit-elo/--fit-econ/--fit-surv/--fit-stuck`
+  flags to override the fitness scalarization mix (any one of them disables
+  the defaults), and `eval` / `static-vs-neural` subcommands that carry the
+  former `eval.py` and `eval_static_vs_neural.py`. All scoring paths share
+  the one canonical measuring stick in `harness.canonical_scores`.
+
+### Changed
+
+- `tools/ga` tooling cleanup: `clone.py`, `paths.py`, `plot.py`, and
+  `fitness_sweep.py` are deleted, the population seeder is renamed
+  `init_population`, and `sweep.py` now runs the H16 tanh-vs-relu ablation
+  only (numba bakes the hidden size). No in-game behaviour change.
+- `AtomicTextFile.TryRead` loses its unused two-argument overload; callers
+  use the variant that names the file the content came from.
+
 ## [0.6.0] - 2026-09-11
 
 ### Changed
