@@ -1,3 +1,5 @@
+using BotMod.Core;
+
 namespace BotMod.AI
 {
     public static class BotCombat
@@ -6,8 +8,8 @@ namespace BotMod.AI
         {
             try
             {
-                bool killerIsBot = killer != null && BotRegistry.IsBotEntity(killer.entityId);
-                bool victimIsBot = victim != null && BotRegistry.IsBotEntity(victim.entityId);
+                bool killerIsBot = killer != null && BotManager.Instance.IsBotEntity(killer.entityId);
+                bool victimIsBot = victim != null && BotManager.Instance.IsBotEntity(victim.entityId);
                 bool killerIsPlayer = killer is EntityPlayer;
                 bool victimIsPlayer = victim is EntityPlayer;
                 if (!killerIsBot && !victimIsBot && !killerIsPlayer && !victimIsPlayer) return;

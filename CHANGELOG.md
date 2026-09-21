@@ -10,6 +10,15 @@ The version lives in `Source/BotMod/Core/BotModVersion.cs` (canonical) and
 must match `<Version>` in `Source/BotMod/ModInfo.xml`; `scripts/build.sh`
 fails on drift between them.
 
+## [0.7.1] - 2026-09-21
+
+### Changed
+
+- Internal refactor only: the single-implementation `IBotRegistry` /
+  `BotRegistry` install shim is gone. `BotBrain` and `BotCombat` query
+  `BotManager.Instance` directly, with the cycle-break note now living as a
+  comment on `BotManager`. No operator-visible behavior changed.
+
 ## [0.7.0] - 2026-09-20
 
 ### Added

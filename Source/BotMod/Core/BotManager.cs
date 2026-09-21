@@ -5,12 +5,14 @@ using UnityEngine;
 
 namespace BotMod.Core
 {
-    public sealed class BotManager : BotMod.AI.IBotRegistry
+    public sealed class BotManager
     {
         public static BotManager Instance { get; } = new BotManager();
-        // Field initializers run before this static ctor, so Instance is
-        // fully built when AI's query bridge starts resolving to it.
-        static BotManager() { BotMod.AI.BotRegistry.Install(Instance); }
+        // Cycle-break note (the old AI/BotRegistry install shim, removed with
+        // 0.7.1): AI namespace query code (BotBrain, BotCombat) calls this Core
+        // singleton directly. Core already depends on AI, so an AI -> Core edge
+        // would close a namespace cycle between the two layers; it compiles in
+        // one assembly but keep Core the only layer that reaches the other way.
         readonly List<Bot> _bots = new List<Bot>();
         readonly HashSet<int> _botEntityIds = new HashSet<int>();
         // O(1) id lookup for the per-damage-event / per-shot ally checks; a linear
