@@ -68,6 +68,10 @@ static class MainThreadDispatchTests
             Check("timeout names the operation",
                 timeoutEx != null && timeoutEx.Message.Contains("spawn"));
             Check("work did not run before the timeout fired", !lateWorkRan);
+            // Without this the two checks below pass vacuously on a null
+            // callback: the `?.` would skip the late Set and the work would
+            // never run, which reads as "the abandoned path is safe".
+            Check("timed-out dispatch handed back the queued task", abandoned != null);
             try
             {
                 abandoned?.Invoke();

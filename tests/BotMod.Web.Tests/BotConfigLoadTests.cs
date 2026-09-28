@@ -26,6 +26,7 @@ using BotMod.Config;
 static class BotConfigLoadTests
 {
     static int _failures;
+    static readonly List<string> _tempDirs = new List<string>();
 
     static void Check(string name, bool ok)
     {
@@ -33,10 +34,15 @@ static class BotConfigLoadTests
         if (!ok) _failures++;
     }
 
+    // Per-process scratch root. The pid is in the name so a leaked directory
+    // names the run that left it, and so a second instance of this suite never
+    // shares a path with the first.
     static string TempDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "botmod-configtest-" + Guid.NewGuid().ToString("N"));
+        string dir = Path.Combine(Path.GetTempPath(),
+            "botmod-configload-" + System.Diagnostics.Process.GetCurrentProcess().Id + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _tempDirs.Add(dir);
         return dir;
     }
 
@@ -392,7 +398,10 @@ static class BotConfigLoadTests
             Check("non-camper personality never camps", !new BotCharacter { Camper = 0.2f }.WantsToCamp(1f, 0f));
         }
 
-        foreach (string d in Directory.GetDirectories(Path.GetTempPath(), "botmod-configtest-*"))
+        // Only the dirs this process created. Globbing Path.GetTempPath() for
+        // a prefix deletes a concurrently running instance's live directories,
+        // so its next Load sees a vanished file and fails.
+        foreach (string d in _tempDirs)
             try { Directory.Delete(d, recursive: true); } catch (IOException) { }
 
         Console.WriteLine(_failures == 0 ? "all bot config load tests passed" : _failures + " test(s) FAILED");

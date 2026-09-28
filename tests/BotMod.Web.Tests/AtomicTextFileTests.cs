@@ -13,6 +13,7 @@ using BotMod.Config;
 static class AtomicTextFileTests
 {
     static int _failures;
+    static readonly List<string> _tempDirs = new List<string>();
 
     // Run-scoped tag: the end-of-run cleanup must delete THIS process's
     // directories and nothing else. Globbing a fixed "botmod-atomictest-*"
@@ -31,32 +32,31 @@ static class AtomicTextFileTests
         if (!ok) _failures++;
     }
 
-    // Temp dirs this process created, cleaned up at the end. A blanket sweep of
-    // /tmp/botmod-atomictest-* would also delete a concurrently running
-    // instance's dirs, and its in-flight writers then fail with a vanished
-    // .tmp (reported as "concurrent writes complete without errors" plus a torn
-    // final primary). Two checkouts of this repo on one machine hit that.
-    static readonly List<string> _dirs = new List<string>();
-
+    // Per-process scratch root: only the dirs this process created are
+    // recorded and only those are deleted at the end. A blanket sweep of a
+    // shared temp prefix would delete a concurrently running instance's dirs,
+    // and its in-flight writers then fail with a vanished .tmp (reported as
+    // "concurrent writes complete without errors" plus a torn final primary).
+    // Two checkouts of this repo on one machine hit that.
     static string TempDir()
     {
         string dir = Path.Combine(Path.GetTempPath(), RunTag + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        lock (_dirs) _dirs.Add(dir);
+        lock (_tempDirs) _tempDirs.Add(dir);
         return dir;
     }
 
     static void Cleanup()
     {
-        lock (_dirs)
+        lock (_tempDirs)
         {
-            foreach (string dir in _dirs)
+            foreach (string dir in _tempDirs)
             {
                 try { Directory.Delete(dir, recursive: true); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }
-            _dirs.Clear();
+            _tempDirs.Clear();
         }
     }
 
@@ -155,7 +155,7 @@ static class AtomicTextFileTests
                         for (int i = 0; i < perWriter; i++)
                             AtomicTextFile.Write(path, "{\"writer\":" + id + ",\"seq\":" + i + ",\"pad\":\"0123456789\"}");
                     }
-                    catch (Exception ex) { lock (errors) errors.Add(ex.Message); }
+                    catch (Exception ex) { lock (errors) errors.Add(ex.ToString()); }
                     finally { if (System.Threading.Interlocked.Decrement(ref remaining) == 0) done.Set(); }
                 });
             }
@@ -227,7 +227,10 @@ static class AtomicTextFileTests
             var errors = new List<string>();
             var doneWriters = new System.Threading.ManualResetEvent(false);
             var stopReaders = new System.Threading.ManualResetEvent(false);
+            var doneReaders = new System.Threading.ManualResetEvent(false);
             int reads = 0;
+            const int readers = 4;
+            int readersLeft = readers;
             const int rewrites = 200;
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -236,10 +239,10 @@ static class AtomicTextFileTests
                     for (int i = 0; i < rewrites; i++)
                         AtomicTextFile.Write(path, i % 2 == 0 ? pb : pa);
                 }
-                catch (Exception ex) { lock (errors) errors.Add("writer: " + ex.Message); }
+                catch (Exception ex) { lock (errors) errors.Add("writer: " + ex.ToString()); }
                 finally { doneWriters.Set(); }
             });
-            for (int r = 0; r < 4; r++)
+            for (int r = 0; r < readers; r++)
             {
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
@@ -255,16 +258,23 @@ static class AtomicTextFileTests
                             System.Threading.Interlocked.Increment(ref reads);
                         }
                     }
-                    catch (Exception ex) { lock (errors) errors.Add("reader: " + ex.Message); }
+                    catch (Exception ex) { lock (errors) errors.Add("reader: " + ex.ToString()); }
+                    finally { if (System.Threading.Interlocked.Decrement(ref readersLeft) == 0) doneReaders.Set(); }
                 });
             }
             bool finished = doneWriters.WaitOne(30000);
             stopReaders.Set();
             Check("writer finished within timeout", finished);
+            // Join the readers before inspecting their findings: they keep
+            // appending to errors and reads after the stop signal, so reading
+            // either collection early reports a partial, order-dependent result.
+            Check("readers stopped within timeout", doneReaders.WaitOne(30000));
             string final, readFrom;
             bool ok = AtomicTextFile.TryRead(path, out final, out readFrom);
             Check("final primary is the last written payload",
                 ok && final == pa); // 200 rewrites ending on an odd index rewrite pa last
+            Check("readers completed a meaningful number of reads (" + reads + ")",
+                reads > 0);
             Check("reads during concurrent writes all saw a complete payload (" + reads + " reads)",
                 errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);

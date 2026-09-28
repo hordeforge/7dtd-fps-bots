@@ -202,6 +202,69 @@ static class IdempotencyLedgerTests
                 reported <= sw.Elapsed + TimeSpan.FromMilliseconds(50));
         }
 
+        // 10. Real threads on one key. The ledger's contract is "one execution"
+        // and the class doc states access is thread-safe because web handlers
+        // run on thread pool threads; scenario 2 only walks the state machine
+        // sequentially, so an unsynchronized Dictionary would still pass it.
+        // Racing TryBegin on one key must elect exactly one executor: every
+        // other caller sees InProgress, and the losers' cached bodies stay
+        // null (they must not execute and must not be handed a body).
+        {
+            const int racers = 16;
+            var errors = new System.Collections.Generic.List<string>();
+            var results = new IdempotencyLedger.BeginResult[racers];
+            var bodies = new string[racers];
+            var start = new System.Threading.ManualResetEvent(false);
+            var done = new System.Threading.ManualResetEvent(false);
+            int remaining = racers;
+            for (int i = 0; i < racers; i++)
+            {
+                int id = i;
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        start.WaitOne(30000);
+                        results[id] = IdempotencyLedger.TryBegin("race-1", out bodies[id]);
+                    }
+                    catch (Exception ex) { lock (errors) errors.Add("racer" + id + ": " + ex); }
+                    finally { if (System.Threading.Interlocked.Decrement(ref remaining) == 0) done.Set(); }
+                });
+            }
+            string k = "race-1";
+            IdempotencyLedger.Retention = TimeSpan.FromSeconds(10);
+            try
+            {
+                // Clear any earlier entry so the race starts from empty.
+                IdempotencyLedger.Fail(k);
+                start.Set();
+                bool finished = done.WaitOne(30000);
+                Check("key race finished within timeout", finished);
+                int fresh = 0, inProgress = 0, other = 0, loserBody = 0;
+                for (int i = 0; i < racers; i++)
+                {
+                    if (results[i] == IdempotencyLedger.BeginResult.Fresh) fresh++;
+                    else if (results[i] == IdempotencyLedger.BeginResult.InProgress) inProgress++;
+                    else other++;
+                    if (results[i] != IdempotencyLedger.BeginResult.Fresh && bodies[i] != null) loserBody++;
+                }
+                Check("exactly one racer executes the key (fresh=" + fresh + ")", fresh == 1);
+                Check("every loser is told the key is in progress", inProgress == racers - 1 && other == 0);
+                Check("no loser was handed a cached body", loserBody == 0);
+                Check("race raised no exceptions (" + errors.Count + ")", errors.Count == 0);
+                foreach (string e in errors) Console.WriteLine("     " + e);
+                // The winner completes; every later caller now replays that
+                // body instead of executing, which is the whole point of the
+                // ledger under a real retry storm.
+                IdempotencyLedger.Complete(k, "{\"spawned\":1}");
+                string replayed;
+                Check("post-race duplicate replays the winner's body",
+                    IdempotencyLedger.TryBegin(k, out replayed) == IdempotencyLedger.BeginResult.Replay
+                    && replayed == "{\"spawned\":1}");
+            }
+            finally { IdempotencyLedger.Retention = TimeSpan.FromMinutes(10); }
+        }
+
         Console.WriteLine(_failures == 0 ? "all idempotency ledger tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
     }
