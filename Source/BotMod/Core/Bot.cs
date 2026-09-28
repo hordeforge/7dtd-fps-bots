@@ -122,8 +122,8 @@ namespace BotMod.Core
             var e = world.GetEntity(EntityId) as EntityAlive;
             if (e == null)
             {
-                if (_missingSince == 0f) _missingSince = Time.time;
-                if (Time.time - _missingSince < 6f) return false;
+                if (_missingSince == 0f) _missingSince = BotClock.Now;
+                if (BotClock.Now - _missingSince < 6f) return false;
                 return true;
             }
             _missingSince = 0f;
@@ -152,7 +152,7 @@ namespace BotMod.Core
             // selection keeps re-acquiring the attacker even after LOS is lost
             // (Q3 vengefulness; zdtd_bot GRUDGE_TICKS parity).
             _grudgeId = attacker.entityId;
-            _grudgeUntil = Time.time + 15f;
+            _grudgeUntil = BotClock.Now + 15f;
             // Aggro swap: if not targeting anyone or under fire from closer threat, switch
             if (_target == null || _target.IsDead() || Rng01() < 0.65f)
             {
@@ -170,8 +170,8 @@ namespace BotMod.Core
                     _target = attacker;
                     _loseTargetTimer = 0f;
                     _state = BotBrain.State.Chase;
-                    _reactionUntil = Time.time + cfg.ReactionTimeSec * 0.5f; // quicker when shot
-                    _nextTargetScan = Time.time + 0.35f;
+                    _reactionUntil = BotClock.Now + cfg.ReactionTimeSec * 0.5f; // quicker when shot
+                    _nextTargetScan = BotClock.Now + 0.35f;
                 }
             }
             // Strafe-dodge (zdtd_bot phased dodge, ported back): a dodge first
@@ -183,12 +183,12 @@ namespace BotMod.Core
                 _dodgeTicks = 12;          // ~0.6 s dodge
                 _dodgeBackRemain = 4;      // first ~0.2 s is a backpedal
                 _strafeDir = Rng01() < 0.5f ? -1 : 1;
-                _strafeUntil = Time.time + 0.7f + Rng01() * 0.6f;
-                _nextPathRecalc = Time.time; // force move tick
+                _strafeUntil = BotClock.Now + 0.7f + Rng01() * 0.6f;
+                _nextPathRecalc = BotClock.Now; // force move tick
             }
             // Heavy-hit stagger (zdtd_bot parity): a hit above 25 dazes the
             // dodge longer, so a sniper (42) staggers a bot harder than an AK (16).
-            if (strength > 25) _strafeUntil = Mathf.Max(_strafeUntil, Time.time + 1.6f);
+            if (strength > 25) _strafeUntil = Mathf.Max(_strafeUntil, BotClock.Now + 1.6f);
         }
 
         public void Tick(float dt, World world)
@@ -201,7 +201,7 @@ namespace BotMod.Core
             var me = ResolveEntity(world);
             if (me == null) return;
             var cfg = ModApi.Config;
-            if (Time.time - SpawnTime < cfg.SpawnProtectionSec) return;
+            if (BotClock.Now - SpawnTime < cfg.SpawnProtectionSec) return;
 
             UpdateTargetVelocity(dt);
             AcquireTarget(me, world, cfg);
@@ -235,11 +235,11 @@ namespace BotMod.Core
         void AcquireTarget(EntityAlive me, World world, BotConfig cfg)
         {
             float scanPeriod = Mathf.Lerp(0.55f, 0.22f, cfg.Difficulty / 4f);
-            if (Time.time < _nextTargetScan) return;
-            _nextTargetScan = Time.time + scanPeriod;
+            if (BotClock.Now < _nextTargetScan) return;
+            _nextTargetScan = BotClock.Now + scanPeriod;
             // Grudge bias (zdtd_bot parity): while the revenge memory is
             // fresh, FindTarget out-scores the attacker (BotBrain.GrudgeBias).
-            bool vengeful = Time.time < _grudgeUntil;
+            bool vengeful = BotClock.Now < _grudgeUntil;
             var found = BotBrain.FindTarget(me, world, cfg, vengeful ? _grudgeId : -1);
             if (found != null)
             {
@@ -273,7 +273,7 @@ namespace BotMod.Core
             _lastTargetPos = Vector3.zero;
             _loseTargetTimer = 0f;
             _state = BotBrain.State.Chase;
-            _reactionUntil = Time.time + cfg.ReactionTimeSec;
+            _reactionUntil = BotClock.Now + cfg.ReactionTimeSec;
             _hasLastKnownTarget = false; // fresh target: no last-known until we see it again (zdtd_bot lost-sight combat memory, ported)
             // zdtd_bot skill_aimerr, ported: roll a fixed per-engagement
             // aim bias so bots are imperfect-but-stable shots; better
@@ -281,9 +281,9 @@ namespace BotMod.Core
             float acc = AimAcc;
             _aimBiasYaw = RngSym() * Mathf.Max(0.03f, (1f - acc) * 0.45f);
             // announce occasionally
-            if (Time.time > _nextTaunt && Rng01() < 0.12f)
+            if (BotClock.Now > _nextTaunt && Rng01() < 0.12f)
             {
-                _nextTaunt = Time.time + 12f + Rng01() * 10f;
+                _nextTaunt = BotClock.Now + 12f + Rng01() * 10f;
                 ModApi.Log($"{Name} acquired target #{found.entityId}");
             }
         }
@@ -323,8 +323,8 @@ namespace BotMod.Core
             // Cover search costs 8 LOS raycasts + ground scans, so it runs on the
             // shared path-recalc cadence like every other MoveTo branch instead of
             // every frame while retreating.
-            if (Time.time < _nextPathRecalc) return;
-            _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
+            if (BotClock.Now < _nextPathRecalc) return;
+            _nextPathRecalc = BotClock.Now + cfg.PathRecalcIntervalSec;
             Vector3 cover = BotBrain.FindCover(me, _target, world);
             if (cover == Vector3.zero) return;
             _state = BotBrain.State.Wander; // Retreat (reuse Wander while seeking cover)
@@ -428,20 +428,20 @@ namespace BotMod.Core
             // direction, flip mine so the team splits around the target (FPS handshake)
             // instead of clumping on one side. FlankAway walks every other bot's
             // entity, so it scans on a 0.25 s cadence rather than every frame.
-            if (Time.time >= _nextFlankScan)
+            if (BotClock.Now >= _nextFlankScan)
             {
-                _nextFlankScan = Time.time + 0.25f;
+                _nextFlankScan = BotClock.Now + 0.25f;
                 if (FlankAway(me, world, _target, _strafeDir)) _strafeDir = -_strafeDir;
             }
             // Cover-while-reloading (CS-bot lineage, docs/oss-fps-bot-survey.md):
             // an empty mag with a live visible target seeks cover instead of
             // standing in the open. Gated by the path-recalc cadence.
-            if (Time.time < _reloadUntil && Time.time >= _nextPathRecalc)
+            if (BotClock.Now < _reloadUntil && BotClock.Now >= _nextPathRecalc)
             {
                 Vector3 cover = BotBrain.FindCover(me, _target, world);
                 if (cover != Vector3.zero)
                 {
-                    _nextPathRecalc = Time.time + 0.6f;
+                    _nextPathRecalc = BotClock.Now + 0.6f;
                     BotBrain.MoveTo(me, cover);
                 }
                 else
@@ -457,27 +457,27 @@ namespace BotMod.Core
             if (_dodgeTicks > 0)
             {
                 _dodgeTicks--;
-                if (Time.time >= _nextPathRecalc)
+                if (BotClock.Now >= _nextPathRecalc)
                 {
                     if (_dodgeBackRemain > 0) { _dodgeBackRemain--; BotBrain.Backpedal(me, _target, _strafeDir); }
                     else { _strafeDir = -_strafeDir; BotBrain.Strafe(me, _target, _strafeDir); }
-                    _nextPathRecalc = Time.time + 0.12f;
+                    _nextPathRecalc = BotClock.Now + 0.12f;
                 }
             }
-            else if (_strafeUntil > Time.time || Rng01() < cfg.StrafeChance * 0.35f)
+            else if (_strafeUntil > BotClock.Now || Rng01() < cfg.StrafeChance * 0.35f)
             {
                 if (dist > tooClose)
                 {
-                    if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
+                    if (BotClock.Now >= _nextPathRecalc) { _nextPathRecalc = BotClock.Now + 0.18f; BotBrain.Strafe(me, _target, _strafeDir); }
                 }
                 else // inside standoff - backpedal to reopen range
                 {
-                    if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
+                    if (BotClock.Now >= _nextPathRecalc) { _nextPathRecalc = BotClock.Now + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
                 }
             }
             else if (dist < tooClose)
             {
-                if (Time.time >= _nextPathRecalc) { _nextPathRecalc = Time.time + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
+                if (BotClock.Now >= _nextPathRecalc) { _nextPathRecalc = BotClock.Now + 0.25f; BotBrain.Backpedal(me, _target, _strafeDir); }
             }
             else if (Rng01() < 0.12f) _strafeDir = -_strafeDir;
         }
@@ -489,21 +489,21 @@ namespace BotMod.Core
         {
             _state = BotBrain.State.Chase;
             Vector3 chaseDest = _hasLastKnownTarget ? _lastKnownTargetPos : tPos;
-            if (Time.time >= _nextPathRecalc)
+            if (BotClock.Now >= _nextPathRecalc)
             {
-                _nextPathRecalc = Time.time + cfg.PathRecalcIntervalSec;
+                _nextPathRecalc = BotClock.Now + cfg.PathRecalcIntervalSec;
                 // FPS cover advance: when healthy and the target is out of sight, route
                 // through a nearby cover point between us and the target (peek from cover)
                 // rather than walking straight into the open. Gated by a cooldown so it
                 // doesn't jitter.
-                bool routeCover = !canSee && me.Health > cfg.BotHealth * 0.55f && Time.time >= _nextCoverRoute;
+                bool routeCover = !canSee && me.Health > cfg.BotHealth * 0.55f && BotClock.Now >= _nextCoverRoute;
                 if (routeCover)
                 {
                     Vector3 cover = BotBrain.FindCover(me, _target, world);
                     if (cover != Vector3.zero && Vector3.Distance(cover, chaseDest) > Vector3.Distance(me.position, chaseDest) * 0.72f)
                     {
                         BotBrain.MoveTo(me, cover);
-                        _nextCoverRoute = Time.time + 3f + Rng01() * 3f;
+                        _nextCoverRoute = BotClock.Now + 3f + Rng01() * 3f;
                     }
                     else BotBrain.MoveTo(me, chaseDest);
                 }
@@ -512,8 +512,8 @@ namespace BotMod.Core
             float moved = Vector3.Distance(myPos, _lastPos);
             if (moved < 0.18f)
             {
-                if (_stuckSince == 0f) _stuckSince = Time.time;
-                else if (Time.time - _stuckSince > cfg.StuckTimeoutSec)
+                if (_stuckSince == 0f) _stuckSince = BotClock.Now;
+                else if (BotClock.Now - _stuckSince > cfg.StuckTimeoutSec)
                 {
                     // Stuck perpendicular-juke (zdtd_bot memory-juke, ported back):
                     // offset perpendicular to the obstacle so the bot goes AROUND its
@@ -539,7 +539,7 @@ namespace BotMod.Core
                         try { BotBrain.JumpOrStrafe(me); }
                         catch (Exception ex) { ModApi.WarnRateLimited(() => "stuck jump-or-strafe threw for " + Name + ": " + ex.Message); }
                     }
-                    _stuckSince = 0f; _nextPathRecalc = Time.time + 0.2f;
+                    _stuckSince = 0f; _nextPathRecalc = BotClock.Now + 0.2f;
                 }
             }
             else { _stuckSince = 0f; _lastPos = myPos; }
@@ -567,21 +567,21 @@ namespace BotMod.Core
                 // Camp hold + facing sweep (zdtd_bot camp, ported back): instead of
                 // drifting to a wander point, pick a spot once, hold there for a few
                 // seconds and slowly sweep the facing (Q3/Doom3 LTG camper).
-                if (_campHoldUntil < Time.time && Time.time >= _nextWander)
+                if (_campHoldUntil < BotClock.Now && BotClock.Now >= _nextWander)
                 {
-                    _nextWander = Time.time + 9f + Rng01() * 5f;
-                    _campHoldUntil = Time.time + 4f + Rng01() * 3f; // hold ~4-7 s
+                    _nextWander = BotClock.Now + 9f + Rng01() * 5f;
+                    _campHoldUntil = BotClock.Now + 4f + Rng01() * 3f; // hold ~4-7 s
                     _campYaw = 0f;
                     _wanderTarget = BotBrain.FindCover(me, me, world);
                     if (_wanderTarget == Vector3.zero) _wanderTarget = BotBrain.PickWanderTarget(me, world, 10f, Rng01(), Rng01());
                     BotBrain.MoveTo(me, _wanderTarget);
                 }
-                else if (Vector3.Distance(me.position, _wanderTarget) < 3f || _campHoldUntil > Time.time)
+                else if (Vector3.Distance(me.position, _wanderTarget) < 3f || _campHoldUntil > BotClock.Now)
                 {
                     // Holding: sweep the facing slowly instead of standing static.
-                    if (Time.time >= _nextPathRecalc)
+                    if (BotClock.Now >= _nextPathRecalc)
                     {
-                        _nextPathRecalc = Time.time + 0.2f;
+                        _nextPathRecalc = BotClock.Now + 0.2f;
                         _campYaw += 0.05f;
                         try { me.SetLookPosition(me.position + Quaternion.Euler(0, _campYaw * Mathf.Rad2Deg, 0) * Vector3.forward); }
                         catch (Exception ex) { ModApi.WarnRateLimited(() => "camp facing sweep failed for " + Name + ", bot holds a fixed facing: " + ex.Message); }
@@ -591,9 +591,9 @@ namespace BotMod.Core
             else
             {
                 _state = BotBrain.State.Wander;
-                if (Time.time >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
+                if (BotClock.Now >= _nextWander || Vector3.Distance(me.position, _wanderTarget) < 2.2f)
                 {
-                    _nextWander = Time.time + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
+                    _nextWander = BotClock.Now + cfg.RandomWanderIntervalSec * (0.7f + Rng01() * 0.6f);
                     // Active hunt: prefer the nearest other bot/player so bots converge and
                     // fight; fall back to random wander when none is close (FPS combat seeking).
                     Vector3 seek = SeekNearestEnemy(me, world, cfg, cfg.VisionRange * 3f);
@@ -709,15 +709,15 @@ namespace BotMod.Core
             // FindTarget already excludes them via IsFriendly; this covers a stale
             // target picked up before a toggle or an aggro-swap past the scan.
             if (target != null && BotManager.Instance.AreAllies(me.entityId, target.entityId)) return;
-            if (Time.time < _reactionUntil) return;
-            if (Time.time < _burstPauseUntil) return;
+            if (BotClock.Now < _reactionUntil) return;
+            if (BotClock.Now < _burstPauseUntil) return;
             // Ammo pacing (zdtd_bot parity): an empty magazine starts a reload
             // during which the bot holds fire (movement continues in Tick).
-            if (Time.time < _reloadUntil) return;
+            if (BotClock.Now < _reloadUntil) return;
             if (_ammo <= 0)
             {
                 _ammo = Weapon.MagSize;
-                _reloadUntil = Time.time + Weapon.ReloadSec;
+                _reloadUntil = BotClock.Now + Weapon.ReloadSec;
                 return;
             }
             // Neural fire gate (docs/research/05): when loaded, the net can hold fire
@@ -818,8 +818,8 @@ namespace BotMod.Core
             // Fire-rate gate: spacing inside a burst is the next-shot pause set
             // here (FireRate); BurstPause only separates bursts (±15% roll,
             // zdtd parity jitter).
-            _burstPauseUntil = Time.time + Weapon.FireRate * 0.95f;
-            if (_burstLeft <= 0) _burstPauseUntil = Time.time + Weapon.BurstPause * (0.85f + Rng01() * 0.3f);
+            _burstPauseUntil = BotClock.Now + Weapon.FireRate * 0.95f;
+            if (_burstLeft <= 0) _burstPauseUntil = BotClock.Now + Weapon.BurstPause * (0.85f + Rng01() * 0.3f);
         }
 
         public string Status(World world)
@@ -948,7 +948,7 @@ namespace BotMod.Core
             try { ammoFrac = Mathf.Clamp01(_ammo / (float)System.Math.Max(1, Weapon.MagSize)); }
             catch (Exception ex) { WarnInputSlot("ammoLeftFrac", ammoFrac, ex); }
             float stuck = 0f;
-            try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); }
+            try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(BotClock.Now - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); }
             catch (Exception ex) { WarnInputSlot("stuckFrac", stuck, ex); }
             return new BotNeuralBrain.NeuralInputs
             {

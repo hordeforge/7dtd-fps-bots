@@ -203,7 +203,7 @@ namespace BotMod.Core
                 return false;
             }
             BotSpawner.ConfigureBotEntity(e, cfg, wp.GunId, name);
-            var bot = new Bot(e.entityId, name, Time.time, wp, character);
+            var bot = new Bot(e.entityId, name, BotClock.Now, wp, character);
             _bots.Add(bot); _botEntityIds.Add(e.entityId); _botById[e.entityId] = bot;
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
             return true;

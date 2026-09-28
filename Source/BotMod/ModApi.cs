@@ -32,6 +32,10 @@ namespace BotMod
         {
             try
             {
+                // Before anything that can tick: every sim-time read in the mod
+                // goes through BotClock, and an unbound clock throws rather than
+                // reporting a time no caller asked for.
+                BotClock.Bind(() => Time.time, () => Time.deltaTime);
                 // Config-layer warnings route through the same WARN log line.
                 BotConfig.Warn = Warn;
                 AtomicTextFile.Warn = Warn;
@@ -95,7 +99,7 @@ namespace BotMod
             try
             {
                 if (!ShouldRun()) return;
-                BotManager.Instance.Tick(Time.deltaTime);
+                BotManager.Instance.Tick(BotClock.Delta);
             }
             catch (Exception ex) { Error("GameUpdate tick failed: " + ex); }
         }
@@ -183,10 +187,10 @@ namespace BotMod
         /// walks the stack): the factory runs only when the gate is open, so a
         /// failure repeating every frame pays the string construction once per
         /// cooldown window instead of on every suppressed call.
-        /// Main-thread only (reads UnityEngine.Time.time).</summary>
+        /// Main-thread only (reads the bound clock).</summary>
         public static void WarnRateLimited(Func<string> msgFactory)
         {
-            float now = Time.time;
+            float now = BotClock.Now;
             if (now < _warnGateUntil) { _warnSuppressed++; return; }
             EmitRateLimitedWarn(now, msgFactory());
         }

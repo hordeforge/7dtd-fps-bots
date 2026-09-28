@@ -330,7 +330,7 @@ namespace BotMod.AI
             try
             {
                 float stepSpeed = 1.6f;
-                Vector3 step = dir * (stepSpeed * UnityEngine.Time.deltaTime);
+                Vector3 step = dir * (stepSpeed * BotClock.Delta);
                 if (step.magnitude > dist) step = dir * dist;
                 Vector3 np = me.position + step;
                 // The assignment itself is the only way a trader body moves, and a

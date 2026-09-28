@@ -20,7 +20,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 all_suites=(
   idempotency atomictextfile idempotencyfuzz mainthreaddispatch logsanitize
   spawnpointxmlfuzz logsanitizerfuzz requestfields combatgates bottext lcg
-  botargparser botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz
+  botclock botargparser botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz
   adminsettersfuzz botchararith weaponprofile weaponprofilefuzz teamshammer
   botconfig webapiauthz botarith
 )
@@ -198,6 +198,12 @@ mono "$work/bottextfuzz.exe" "$root"
 run_suite lcg \
   "$root/Source/BotMod/Foundation/Lcg.cs" \
   "$root/tests/BotMod.Tests/LcgTests.cs"
+
+# Injected-time contract: the mod reads sim time through BotClock, so a
+# harness can drive the bot timers from a virtual clock and replay a run.
+run_suite botclock \
+  "$root/Source/BotMod/Foundation/BotClock.cs" \
+  "$root/tests/BotMod.Tests/BotClockTests.cs"
 
 # Positional grammar of `bot spawn` / `bot player`: strict parse, named
 # errors for leftover tokens (see Source/BotMod/Commands/BotArgParser.cs).

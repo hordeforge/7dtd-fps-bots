@@ -100,6 +100,8 @@ The current `zdtd` passes already rely on this (stuck, LOS, wander hash). Evolut
 
 *Result:* rerunning the same generation on the same build replays byte-for-bit. Debugging a "why did genome 7 beat 12" is a matter of diffing traces.
 
+In the mod, time enters through one seam, `Foundation/BotClock.cs`: `Now` and `Delta` are the only reads of sim time in `Bot`, `BotManager`, `BotBrain` and `ModApi` (reaction windows, scan cadence, wander, stuck detection, the rate-limited warn gate), and `ModApi.InitMod` binds them to `UnityEngine.Time`. An unbound clock throws rather than reporting 0 s, which would park every deadline in the past and read as a healthy idle bot. The frame schedule is what remains of run-to-run drift on the live path: the tick stream is real time, so a live run replays only as far as a harness feeds a virtual clock in place of the engine's.
+
 ## 5. Running the environment
 
 > Status (2026-08-19, R1 pivot): training actually runs on the self-contained
