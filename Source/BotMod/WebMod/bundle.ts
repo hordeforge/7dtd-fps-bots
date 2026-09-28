@@ -174,13 +174,25 @@ function toCount(v: string): number {
 
 // One idempotency key per logical command (per click): the server records the
 // first response under this key, so a retried POST (lost response after the
-// server acted, proxy retry) replays it instead of spawning twice.
+// server acted, proxy retry) replays it instead of spawning twice. The key
+// must not repeat across clicks, so the fallback stays on the CSPRNG:
+// Math.random() is seeded per context and its output is predictable, which
+// would let a retried request collide with (and replay) a different click's
+// response.
 function newRequestId(): string {
   const c: Crypto | undefined = typeof crypto === "undefined" ? undefined : crypto;
   if (c !== undefined && typeof c.randomUUID === "function") {
     return c.randomUUID();
   }
-  return `botmod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  if (c !== undefined && typeof c.getRandomValues === "function") {
+    const bytes = c.getRandomValues(new Uint8Array(16));
+    let hex = "";
+    for (const b of bytes) {
+      hex += b.toString(16).padStart(2, "0");
+    }
+    return `botmod-${hex}`;
+  }
+  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4_294_967_296).toString(36)}`;
 }
 
 function botCount(count: number | undefined): string {

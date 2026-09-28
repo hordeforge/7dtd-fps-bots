@@ -35,9 +35,11 @@ of them removes a config key or a console command.
   replays. A client that reused one key per session for a varying body has to
   send a fresh key per logical request.
 - Every `/api/bot` response, on both verbs and on 200/400/409/500, now carries
-  `Cache-Control: no-store` (the body contract is documented in the README).
-  Before: the header was absent, so an intermediary or the browser HTTP cache
-  could hand back a stale roster. Nothing in the shipped panel depended on
+  `Cache-Control: no-store` and `X-Content-Type-Options: nosniff` (the body
+  contract is documented in the README). Before: the cache header was absent,
+  so an intermediary or the browser HTTP cache could hand back a stale roster,
+  and no security header was sent at all, so a browser pointed at `/api/bot`
+  could sniff a body as HTML. Nothing in the shipped panel depended on
   caching, but an external consumer reading the scoreboard through a shared
   cache has to revalidate.
 - `BotNeuralBrain.TryLoad` now rejects any champion whose `activation` is not
@@ -162,6 +164,11 @@ of them removes a config key or a console command.
   `best.meta.json` without the run `seed` that `dashboard.build` matches
   against each run's `config.json`, so the comparison was `None == <int>` for
   every real run. The seed now travels with the champion.
+- The web panel's `requestId` fallback (used when `crypto.randomUUID` is
+  missing) built its idempotency key from `Math.random()`, which is seeded per
+  context and predictable, so two clicks could land on the same key and a retry
+  would replay a different command's response. It now draws 16 bytes from
+  `crypto.getRandomValues`.
 - `IdempotencyLedger.cs` and `IdempotencyLedgerFuzzTests.cs` imported
   `BotMod.Config` for the `BotText` character count they call, which lives in
   `BotMod.Foundation`. The suites compile a reduced source set without

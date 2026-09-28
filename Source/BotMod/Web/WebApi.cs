@@ -62,8 +62,9 @@ namespace BotMod.Web
     /// every outcome, so a failed call is traceable to one log line.
     ///
     /// Caching: every response (200, 400, 409, 500, on both verbs) carries
-    /// Cache-Control: no-store; see MarkNoStore. The bodies are live state,
-    /// not a stable representation of anything.
+    /// Cache-Control: no-store plus X-Content-Type-Options: nosniff; see
+    /// MarkNoStore. The bodies are live state, not a stable representation of
+    /// anything.
     /// </summary>
     public sealed class Bot : AbsRestApi
     {
@@ -482,18 +483,34 @@ namespace BotMod.Web
             return Mathf.RoundToInt(v);
         }
 
-        /// <summary>Mark every response uncacheable. Nothing this API returns is
-        /// a stable representation of anything: GET is live world state
-        /// (alive bots, health, positions' nearest player) and every POST
-        /// mutates config or the world, so a shared cache, the dashboard's
-        /// HTTP cache, or a replayed GET after a bfcache restore would hand an
-        /// admin a bot roster and config that no longer exist. Called at the
-        /// top of both handlers so every send path (200, 400, 409, 500) carries
-        /// it; the listener writes headers when the response is sent, not
-        /// before, so setting them here is still in time.</summary>
+        /// <summary>Header name/value pairs every /api/bot answer carries,
+        /// applied by MarkNoStore. A table rather than inline assignments so
+        /// the contract is assertable: WebApiAuthzTests reads it without a
+        /// live RequestContext, which only exists inside a running server.
+        /// Cache-Control: no-store because nothing this API returns is a
+        /// stable representation of anything (GET is live world state: alive
+        /// bots, health, nearest player; every POST mutates config or the
+        /// world), so a shared cache, the dashboard's HTTP cache, or a replayed
+        /// GET after a bfcache restore would hand an admin a roster and config
+        /// that no longer exist. X-Content-Type-Options: nosniff because the
+        /// stock webserver sets no security header on any response (no CSP,
+        /// HSTS or nosniff anywhere in its send path), so a browser pointed at
+        /// /api/bot could otherwise sniff a body as HTML and run an admin's
+        /// bot roster as script in the dashboard's origin.</summary>
+        internal static readonly string[][] ResponseHeaders =
+        {
+            new[] { "Cache-Control", "no-store" },
+            new[] { "X-Content-Type-Options", "nosniff" },
+        };
+
+        /// <summary>Apply <see cref="ResponseHeaders"/>. Called at the top of
+        /// both handlers so every send path (200, 400, 409, 500) carries them;
+        /// the listener writes headers when the response is sent, not before,
+        /// so setting them here is still in time.</summary>
         static void MarkNoStore(RequestContext context)
         {
-            context.Response.Headers["Cache-Control"] = "no-store";
+            for (int i = 0; i < ResponseHeaders.Length; i++)
+                context.Response.Headers[ResponseHeaders[i][0]] = ResponseHeaders[i][1];
         }
 
         /// <summary>Run a world-touching action on the game's main thread and

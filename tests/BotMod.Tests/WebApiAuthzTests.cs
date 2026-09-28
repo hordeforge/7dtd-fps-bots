@@ -35,6 +35,16 @@ static class WebApiAuthzTests
         if (!ok) _failures++;
     }
 
+    /// <summary>True when the API's response-header table carries this exact
+    /// name/value pair. A class method, not a local function: mcs (the build
+    /// backend for the suites) has no C# 7 local functions.</summary>
+    static bool HasHeader(string[][] headers, string name, string value)
+    {
+        foreach (string[] h in headers)
+            if (h[0] == name && h[1] == value) return true;
+        return false;
+    }
+
     static int Main()
     {
         // The dispatch contract the declaration indexes into. If a game
@@ -59,6 +69,18 @@ static class WebApiAuthzTests
         var cmd = (BotMod.Commands.ConsoleCmdBot)FormatterServices.GetUninitializedObject(
             typeof(BotMod.Commands.ConsoleCmdBot));
         Check("console command keeps default permission level 0", cmd.DefaultPermissionLevel == 0);
+
+        // Response headers the API sets on every answer. The stock webserver
+        // sends none of them itself, so dropping one here is silent: a body an
+        // admin can fetch becomes a body a browser may cache or sniff as
+        // script. Asserted against the table MarkNoStore applies, because a
+        // live RequestContext only exists inside a running server.
+        var headers = BotMod.Web.Bot.ResponseHeaders;
+        Check("every response is uncacheable", HasHeader(headers, "Cache-Control", "no-store"));
+        Check("every response forbids content-type sniffing",
+            HasHeader(headers, "X-Content-Type-Options", "nosniff"));
+        for (int i = 0; i < headers.Length; i++)
+            Check("response header " + headers[i][0] + " carries a value", headers[i].Length == 2 && headers[i][1] != "");
 
         Console.WriteLine(_failures == 0 ? "all web api authz matrix tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
