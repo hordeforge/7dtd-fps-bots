@@ -108,6 +108,22 @@ namespace BotMod.Commands
             return "";
         }
 
+        /// <summary>Suffix for a command that changed a config field, saying
+        /// when the change did not reach disk. Every mutating console command
+        /// used to end in "(persisted)" unconditionally, while
+        /// ModApi.PersistConfigFields only logs a skipped or failed write to the
+        /// server log: an install with no botmod.json reachable (read-only
+        /// image, wrong mount, BOTMOD_CONFIG pointing at a path that does not
+        /// exist) answered "(persisted)" and the setting silently reverted on
+        /// the next restart. The console echo is the only place the operator
+        /// who typed the command is looking, so the outcome belongs here.</summary>
+        static string PersistNote(bool persisted)
+        {
+            return persisted
+                ? " (persisted)."
+                : " NOT persisted: no botmod.json was written (see server log). The change applies to this session only and reverts on restart.";
+        }
+
         public override void Execute(List<string> _params, CommandSenderInfo _senderInfo)
         {
             string sub = _params.Count > 0 ? _params[0].ToLowerInvariant() : "help";
@@ -146,8 +162,8 @@ namespace BotMod.Commands
                     case "skill": case "difficulty": DoSkill(_params); break;
                     case "player": case "near": case "at": DoPlayer(_params, _senderInfo); break;
                     case "reload": ModApi.ReloadConfig(); SdtdConsole.Instance.Output("BotMod config reloaded. diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon + " neural=" + (ModApi.Config.UseNeuralBrain ? "on" : "off") + " (" + BotMod.AI.BotNeuralBrain.LastReason + ")"); break;
-                    case "enable": ModApi.Config.Enabled = true; ModApi.PersistConfigField("Enabled", true); SdtdConsole.Instance.Output("BotMod enabled (persisted)."); break;
-                    case "disable": ModApi.Config.Enabled = false; ModApi.PersistConfigField("Enabled", false); SdtdConsole.Instance.Output("BotMod disabled (persisted). Existing bots remain until removed."); break;
+                    case "enable": ModApi.Config.Enabled = true; SdtdConsole.Instance.Output("BotMod enabled" + PersistNote(ModApi.PersistConfigField("Enabled", true))); break;
+                    case "disable": ModApi.Config.Enabled = false; SdtdConsole.Instance.Output("BotMod disabled" + PersistNote(ModApi.PersistConfigField("Enabled", false)) + " Existing bots remain until removed."); break;
                     case "neural": DoNeural(_params); break;
                     case "vs": case "shoot": DoVs(_params); break;
                     case "team": case "squad": DoTeam(_params); break;
@@ -248,7 +264,9 @@ namespace BotMod.Commands
         {
             if (p.Count < 2 || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
             { SdtdConsole.Instance.Output($"Usage: bot count <n>  (0..{ModApi.Config.MaxBots})"); return; }
-            n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n; ModApi.PersistConfigField("TargetBotCount", n); SdtdConsole.Instance.Output($"Target bot count set to {n} (persisted). Will converge within a few seconds.");
+            n = Math.Max(0, Math.Min(ModApi.Config.MaxBots, n)); ModApi.Config.TargetBotCount = n;
+            bool persisted = ModApi.PersistConfigField("TargetBotCount", n);
+            SdtdConsole.Instance.Output($"Target bot count set to {n}{PersistNote(persisted)} Will converge within a few seconds.");
         }
         void DoPlayer(List<string> p, CommandSenderInfo sender)
         {
@@ -337,20 +355,22 @@ namespace BotMod.Commands
             // no item (ItemClass lookup misses) while running pistol stats.
             if (!BotArgParser.LooksLikeWeapon(p[1]))
             { SdtdConsole.Instance.Output($"Unknown weapon '{p[1]}'. Weapon ids start with 'gun' (or use 'mixed').\n  Usage: bot weapon <gunId|mixed>"); return; }
-            ModApi.Config.BotWeapon = p[1]; ModApi.PersistConfigField("BotWeapon", p[1]); SdtdConsole.Instance.Output($"Default weapon set to {p[1]} (persisted). Next spawns use it; existing bots keep theirs.");
+            ModApi.Config.BotWeapon = p[1];
+            bool persisted = ModApi.PersistConfigField("BotWeapon", p[1]);
+            SdtdConsole.Instance.Output($"Default weapon set to {p[1]}{PersistNote(persisted)} Next spawns use it; existing bots keep theirs.");
         }
         void DoSkill(List<string> p)
         {
             if (p.Count < 2 || !int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int d)) { SdtdConsole.Instance.Output($"Skill {ModApi.Config.Difficulty} (0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare). Usage: bot skill <0-4>"); return; }
             // Clamp + Normalize live in BotConfig.SetDifficulty (shared with the
             // web `skill` action); the persisted value is the post-clamp property.
-            ModApi.PersistConfigField(ModApi.Config.SetDifficulty(d), ModApi.Config.Difficulty);
+            bool persisted = ModApi.PersistConfigField(ModApi.Config.SetDifficulty(d), ModApi.Config.Difficulty);
             // Reports the reaction time, which is the tunable the preset
             // actually moves here; aim tightness and burst shape are the
             // characters' and the weapon profile's, so naming them as
             // consequences of `bot skill` would claim an effect it does not
             // have. The next spawn picks up the new lerp.
-            SdtdConsole.Instance.Output($"Skill set to {ModApi.Config.Difficulty} (persisted). Reaction {ModApi.Config.ReactionTimeSec:F2}s, vision {ModApi.Config.VisionRange:F0}m, headshot {ModApi.Config.HeadshotChance:P0}.");
+            SdtdConsole.Instance.Output($"Skill set to {ModApi.Config.Difficulty}{PersistNote(persisted)} Reaction {ModApi.Config.ReactionTimeSec:F2}s, vision {ModApi.Config.VisionRange:F0}m, headshot {ModApi.Config.HeadshotChance:P0}.");
         }
         void DoVs(List<string> p)
         {
@@ -366,8 +386,10 @@ namespace BotMod.Commands
                 SdtdConsole.Instance.Output("Unknown target: " + target + ". Use bot|zombie|player.");
                 return;
             }
-            ModApi.PersistConfigField(field, on);
-            SdtdConsole.Instance.Output("Bots will now shoot " + target + ": " + (on ? "ON" : "OFF") + (ModApi.Config.BotTeam && target.StartsWith("bot", StringComparison.OrdinalIgnoreCase) ? " (note: squad mode overrides vs bot)" : "") + ".");
+            bool persisted = ModApi.PersistConfigField(field, on);
+            SdtdConsole.Instance.Output("Bots will now shoot " + target + ": " + (on ? "ON" : "OFF")
+                + (ModApi.Config.BotTeam && target.StartsWith("bot", StringComparison.OrdinalIgnoreCase) ? " (note: squad mode overrides vs bot)" : "")
+                + PersistNote(persisted));
         }
         void DoTeam(List<string> p)
         {
@@ -375,8 +397,8 @@ namespace BotMod.Commands
             if (ParseOnOff(p.Count >= 2 ? p[1] : "", out bool on))
             {
                 ModApi.Config.BotTeam = on;
-                ModApi.PersistConfigField("BotTeam", on);
-                SdtdConsole.Instance.Output(on ? "Squad mode ON: all bots are allies. (players/zombies still fair game)" : "Squad mode OFF: bots fight per team assignment.");
+                SdtdConsole.Instance.Output((on ? "Squad mode ON: all bots are allies. (players/zombies still fair game)" : "Squad mode OFF: bots fight per team assignment.")
+                    + PersistNote(ModApi.PersistConfigField("BotTeam", on)));
                 return;
             }
             switch (sub2)
@@ -416,8 +438,10 @@ namespace BotMod.Commands
                     : "Team name is empty or longer than " + BotConfig.MaxTeamNameChars + " characters; not stored.");
                 return;
             }
-            ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
-            SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).") + (live ? "" : " No live bot with that name - applies to future spawns."));
+            bool persisted = ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
+            SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).")
+                + (live ? "" : " No live bot with that name - applies to future spawns.")
+                + PersistNote(persisted));
         }
         void DoTeamList()
         {
@@ -431,8 +455,8 @@ namespace BotMod.Commands
         void DoTeamClear()
         {
             ModApi.Config.ClearTeamAssignments();
-            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
-            SdtdConsole.Instance.Output("All team assignments cleared - every bot is free-for-all.");
+            bool persisted = ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
+            SdtdConsole.Instance.Output("All team assignments cleared - every bot is free-for-all." + PersistNote(persisted));
         }
         void DoTeams(List<string> p)
         {
@@ -442,12 +466,13 @@ namespace BotMod.Commands
             }
             // Clamp + assignment pruning live in BotConfig.SetTeamCount (shared
             // with the web `teamCount` action).
-            ModApi.PersistConfigFields(new[]
+            bool persisted = ModApi.PersistConfigFields(new[]
             {
                 new KeyValuePair<string, object>(ModApi.Config.SetTeamCount(n), ModApi.Config.BotTeamCount),
                 new KeyValuePair<string, object>("TeamAssignments", ModApi.Config.SnapshotTeamAssignments())
             });
-            SdtdConsole.Instance.Output("Team count set to " + ModApi.Config.BotTeamCount + (ModApi.Config.BotTeamCount == 0 ? " - free-for-all only." : "."));
+            SdtdConsole.Instance.Output("Team count set to " + ModApi.Config.BotTeamCount
+                + (ModApi.Config.BotTeamCount == 0 ? " - free-for-all only." : ".") + PersistNote(persisted));
         }
         static bool ParseOnOff(string v, out bool on)
         {
@@ -469,19 +494,20 @@ namespace BotMod.Commands
                     break;
                 case "on": case "enable": case "true": case "1":
                     ModApi.Config.UseNeuralBrain = true;
-                    ModApi.PersistConfigField("UseNeuralBrain", true);
+                    bool persistedOn = ModApi.PersistConfigField("UseNeuralBrain", true);
                     {
                         // LoadNeuralWeights logs the server-side outcome; the
                         // user-facing echo reads LastReason (TryLoad records it
                         // on both the success and failure path).
                         bool ok = ModApi.LoadNeuralWeights("loaded", ", using heuristic.");
-                        SdtdConsole.Instance.Output(ok ? "Neural ON, loaded: " + BotMod.AI.BotNeuralBrain.LastReason : "Neural ON but load failed: " + BotMod.AI.BotNeuralBrain.LastReason + ", heuristic until reload succeeds.");
+                        SdtdConsole.Instance.Output((ok ? "Neural ON, loaded: " + BotMod.AI.BotNeuralBrain.LastReason : "Neural ON but load failed: " + BotMod.AI.BotNeuralBrain.LastReason + ", heuristic until reload succeeds.")
+                            + PersistNote(persistedOn));
                     }
                     break;
                 case "off": case "disable": case "false": case "0":
                     ModApi.Config.UseNeuralBrain = false;
-                    ModApi.PersistConfigField("UseNeuralBrain", false);
-                    SdtdConsole.Instance.Output("Neural OFF (persisted), using heuristic. (weights stay cached; `bot neural on` re-enables)");
+                    SdtdConsole.Instance.Output("Neural OFF, using heuristic. (weights stay cached; `bot neural on` re-enables)"
+                        + PersistNote(ModApi.PersistConfigField("UseNeuralBrain", false)));
                     break;
                 case "reload": case "load":
                     {

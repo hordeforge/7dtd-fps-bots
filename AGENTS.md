@@ -76,9 +76,9 @@ not C#; `scripts/build.sh` compiles it into the shipped `Mods/BotMod/WebMod/`.
 
 Recorded so they stay visible instead of being rediscovered as "someone forgot".
 
-- **Empty `catch` blocks: 34 sites**, counted by
+- **Empty `catch` blocks: 33 sites**, counted by
   `rg -U 'catch\s*(\(Exception\))?\s*\{\s*\}' Source/BotMod`
-  (`BotSpawner.cs` 18, `BotBrain.cs` 8, `BotCombat.cs` 6, and 2 in
+  (`BotSpawner.cs` 17, `BotBrain.cs` 8, `BotCombat.cs` 6, and 2 in
   `MainThreadDispatch.cs`). They guard
   7DTD/Unity calls whose failure must not abort a bot tick or a spawn attempt.
   The root rule wants each one to name what it swallows and to wrap exactly one

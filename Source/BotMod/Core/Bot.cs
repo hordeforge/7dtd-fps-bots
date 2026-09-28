@@ -711,7 +711,12 @@ namespace BotMod.Core
                 }
                 return false;
             }
-            catch { return false; }
+            // Reported, not silent: a throw here ends the whole peer scan, so the
+            // bot never learns a peer is on the same side and keeps strafing
+            // straight through the other shooter instead of splitting. "No peer
+            // to flank" and "the scan broke" are the same answer to the caller,
+            // so only the log can tell them apart.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "flank scan failed for " + Name + ", bot holds its strafe side: " + ex.Message); return false; }
         }
 
         void TryShootBurst(EntityAlive me, EntityAlive target, World world, BotConfig cfg, bool wantToFire)

@@ -205,8 +205,23 @@ namespace BotMod.Config
                         foreach (var kv in parsed)
                         {
                             if (kv.Value == null) continue;
+                            // An entry name that canonicalizes to nothing (all
+                            // control or invisible characters) can never be
+                            // looked up: ForName derives the same key and falls
+                            // back to "Grunt". Storing it under the empty key
+                            // would drop the traits into an unreachable slot,
+                            // so it is refused and named, the same contract
+                            // BotConfig.Normalize applies to a TeamAssignments
+                            // key.
+                            string key = BotText.IdentityKey(kv.Key);
+                            if (key.Length == 0)
+                            {
+                                BotConfig.Warn("characters.json entry name in " + path
+                                    + " is empty once control and invisible characters are removed; not stored, those bots use built-in default characteristics");
+                                continue;
+                            }
                             kv.Value.Normalize();
-                            next[BotText.IdentityKey(kv.Key)] = kv.Value;
+                            next[key] = kv.Value;
                         }
                     }
                 }

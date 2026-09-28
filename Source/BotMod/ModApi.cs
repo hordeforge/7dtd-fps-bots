@@ -118,10 +118,6 @@ namespace BotMod
             catch (Exception ex) { Warn("WorldShuttingDown cleanup failed: " + ex); }
         }
 
-        // Latch for the dedicated-server probe below. Main-thread only (ShouldRun
-        // is called from the mod events), so no barrier is needed.
-        static bool _dedicatedProbeFailed;
-
         public static bool ShouldRun()
         {
             if (!Active || Config == null || !Config.Enabled) return false;
@@ -129,16 +125,14 @@ namespace BotMod
             try { return GameManager.IsDedicatedServer; }
             catch (Exception ex)
             {
-                // Reported once, not per tick: ShouldRun runs on every
-                // GameUpdate, so a plain warn here is a line per tick for as
-                // long as the condition lasts, and a false here is
-                // indistinguishable from "the mod is disabled" - no bots, no
-                // ticks, and previously nothing in the log to say why.
-                if (!_dedicatedProbeFailed)
-                {
-                    _dedicatedProbeFailed = true;
-                    Warn("dedicated-server probe threw, running no bots (DedicatedOnly=" + Config.DedicatedOnly + "): " + ex);
-                }
+                // Reported, never silent: this is the gate both game handlers
+                // pass through on every tick, so a swallowed throw holds the
+                // whole mod out of the world indefinitely and the server looks
+                // like a plain vanilla one - no bots, no tick lines, nothing in
+                // the log. The shared flood gate keeps the per-tick probe
+                // bounded, and the main thread is the only caller, which is
+                // where the gate is safe to read the clock from.
+                WarnRateLimited(() => "dedicated-server probe failed, running no bots (DedicatedOnly=" + Config.DedicatedOnly + "): " + ex.Message);
                 return false;
             }
         }
@@ -300,9 +294,13 @@ namespace BotMod
             return paths;
         }
 
-        public static void PersistConfigField(string key, object value)
+        /// <summary>Persist one field. Returns what
+        /// <see cref="PersistConfigFields"/> returns, so a surface can tell the
+        /// operator that the change did not reach disk instead of claiming it
+        /// did.</summary>
+        public static bool PersistConfigField(string key, object value)
         {
-            PersistConfigFields(new[] { new KeyValuePair<string, object>(key, value) });
+            return PersistConfigFields(new[] { new KeyValuePair<string, object>(key, value) });
         }
 
         /// <summary>Persist several fields of one logical mutation in a single
@@ -315,10 +313,17 @@ namespace BotMod
         /// action, the second one restoring the intermediate state as
         /// last-known-good. One pass per file gives the same end state with one
         /// write; the gate below keeps the whole batch serialized against other
-        /// persists exactly as the single-field path is.</summary>
-        public static void PersistConfigFields(KeyValuePair<string, object>[] fields)
+        /// persists exactly as the single-field path is.
+        ///
+        /// Returns whether the change reached at least one config file. A
+        /// surface that echoes "(persisted)" while nothing was written is worse
+        /// than a refused command: the setting silently reverts on the next
+        /// restart, and the issuing session never said so. The server log has
+        /// always carried the outcome; the return value lets the surface say it
+        /// too.</summary>
+        public static bool PersistConfigFields(KeyValuePair<string, object>[] fields)
         {
-            if (fields == null || fields.Length == 0) return;
+            if (fields == null || fields.Length == 0) return false;
             lock (PersistGate)
             {
                 bool wrote = false;
@@ -340,13 +345,18 @@ namespace BotMod
                 // run with no config file present must say so instead of logging a
                 // persist that never happened (the toggle would silently revert on
                 // restart despite the log).
-                if (!wrote) Warn("bot config persist skipped for '" + Describe(fields) + "': no botmod.json found (expected /mods/BotMod/Config or beside the assembly)");
+                if (!wrote)
+                {
+                    Warn("bot config persist skipped for '" + Describe(fields) + "': no botmod.json found (expected /mods/BotMod/Config or beside the assembly)");
+                    return false;
+                }
                 // One audit line per persisted mutation, covering both surfaces
                 // (web API handlers log their own request outcome; console
                 // commands only echo to the issuing telnet/console session,
                 // which never reaches the server log). Keeps state changes
                 // reconstructable from the log alone.
                 Log("config persist " + Describe(fields));
+                return true;
             }
         }
 

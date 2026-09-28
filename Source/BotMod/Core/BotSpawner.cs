@@ -366,7 +366,15 @@ namespace BotMod.Core
                 string managed = Path.GetDirectoryName(typeof(World).Assembly.Location) ?? "";
                 string dataWorld = Path.Combine(Path.GetDirectoryName(managed) ?? "", "..", "Data", "Worlds", worldName, "spawnpoints.xml");
                 // normalize ".." via GetFullPath
-                try { dataWorld = Path.GetFullPath(dataWorld); } catch { }
+                try { dataWorld = Path.GetFullPath(dataWorld); }
+                catch (Exception ex)
+                {
+                    // Not fatal (File.Exists resolves the un-normalized path the
+                    // same way), but the outer catch below never sees this one,
+                    // so report it rather than letting a swallowed path fault
+                    // look identical to "no spawnpoints.xml in this install".
+                    ModApi.WarnRateLimited(() => "spawnpoints path could not be normalized (" + ex.Message + "), probing the raw path: " + dataWorld);
+                }
                 string[] roots = new[]
                 {
                     dataWorld,
