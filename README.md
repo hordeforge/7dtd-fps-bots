@@ -31,7 +31,7 @@ make backup       # snapshots Mods/BotMod/Config + evolved champions to backups/
 # then restart the dedicated server (EAC must be off for code mods)
 ```
 
-Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`). Edit and `bot reload` live. EAC off: `<property name="EACEnabled" value="false"/>`. Offline LAN/loadgen clients with synthetic Steam ids additionally need `"AllowSyntheticAuthBypass": true` (off by default; the bypass accepts ids in a fixed test range without Steam auth). `make uninstall` snapshots the config before deleting it; `make backup` (point `BOTMOD_STATE_BACKUP_DIR` off-host) is the copy that also survives host loss, and `make restore SNAPSHOT=backups/<stamp>` puts it back. Details in `docs/recovery.md`.
+Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`; `BOTMOD_CONFIG` overrides the path). Edit and `bot reload` live. EAC off: `<property name="EACEnabled" value="false"/>`. Offline LAN/loadgen clients with synthetic Steam ids additionally need `"AllowSyntheticAuthBypass": true` (off by default; the bypass accepts ids in a fixed test range without Steam auth). `make uninstall` snapshots the config before deleting it; `make backup` (point `BOTMOD_STATE_BACKUP_DIR` off-host) is the copy that also survives host loss, and `make restore SNAPSHOT=backups/<stamp>` puts it back. Details in `docs/recovery.md`.
 
 ## Web dashboard
 
@@ -188,6 +188,18 @@ bot reload | bot enable | bot disable
 ```
 
 ## Tuning (`config/botmod.json`)
+
+The file is read from `Mods/BotMod/Config/botmod.json` (the repo default is
+`config/botmod.json`). Set `BOTMOD_CONFIG` to read and persist a different
+path, for a config mounted outside the mod directory; unset or blank means the
+path beside the assembly. `characters.json` is looked up next to whichever
+botmod.json is in use. If no config file is found at all, the mod logs a WARN
+naming the paths it tried and runs on built-in defaults.
+
+To see what the server is actually running, `bot config` prints the file it
+read plus the effective values, and the same dump is logged at startup and on
+`bot reload`. That dump is post-clamp: it shows values `Normalize` corrected
+and the difficulty preset moved, which the file on disk does not.
 
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
 - Combat feel: `HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.

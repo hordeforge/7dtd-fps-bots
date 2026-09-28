@@ -39,11 +39,16 @@ namespace BotMod
                 // Neural weight-path resolution anchors on the mod root (see
                 // BotNeuralBrain.ModRoot); wired before any TryLoad call.
                 BotMod.AI.BotNeuralBrain.ModRoot = ModPath;
-                Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
+                string configPath = BotConfig.ConfigPath();
+                Config = BotConfig.Load(configPath);
                 Config.Normalize();
                 try { BotCharacterDB.Load(Config); }
                 catch (Exception ex) { Warn("characters.json load failed, using defaults: " + ex); }
-                Log($"BotMod v{BotModVersion.Number} loading. ModPath={ModPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly} AuthBypass={Config.AllowSyntheticAuthBypass}");
+                Log($"BotMod v{BotModVersion.Number} loading. ModPath={ModPath} ConfigPath={configPath} Enabled={Config.Enabled} DedicatedOnly={Config.DedicatedOnly} AuthBypass={Config.AllowSyntheticAuthBypass}");
+                // The effective config, post-Normalize: the file alone does not
+                // say which values were clamped, which the difficulty preset
+                // moved, or that a field was never set at all.
+                Log("Config: " + Config.EffectiveSummary());
 
                 if (!Config.Enabled)
                     Log("Disabled by config (enabled=false). Use 'bot enable' or edit Config/botmod.json then 'bot reload'.");
@@ -112,11 +117,13 @@ namespace BotMod
 
         public static void ReloadConfig()
         {
-            Config = BotConfig.Load(BotConfig.DefaultPathBesideAssembly());
+            string configPath = BotConfig.ConfigPath();
+            Config = BotConfig.Load(configPath);
             Config.Normalize();
             try { BotMod.Config.BotCharacterDB.Load(Config); }
             catch (Exception ex) { Warn("characters.json load failed, keeping previous characters: " + ex); }
-            Log($"Config reloaded: Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
+            Log($"Config reloaded: ConfigPath={configPath} Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
+            Log("Config: " + Config.EffectiveSummary());
             if (Config.UseNeuralBrain)
                 LoadNeuralWeights("reloaded", ", keeping heuristic.");
         }
@@ -209,18 +216,24 @@ namespace BotMod
 
         // Candidate config locations, de-duplicated by normalized full path.
         // A dedi install places the assembly under /mods/BotMod, so the
-        // hardcoded server path and DefaultPathBesideAssembly() routinely name
-        // the same file. Writing it twice is not merely wasted work:
+        // hardcoded server path and ConfigPath() routinely name the same
+        // file. Writing it twice is not merely wasted work:
         // AtomicTextFile stages the previous content into <path>.bak, so the
         // second pass would back up the content the first pass just wrote and
         // the last-known-good would no longer predate the live value. That is
         // exactly the recovery copy BotConfig.Load reaches for when the next
         // write is interrupted, so each distinct file must be written once.
+        // With BOTMOD_CONFIG set, the operator named one file as the config:
+        // the /mods mount is a different path in that deployment, and writing
+        // the same toggle into both would leave the authoritative one behind.
         static List<string> ConfigWritePaths()
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var paths = new List<string>(2);
-            foreach (string candidate in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
+            string[] candidates = BotConfig.ConfigPathOverride() != null
+                ? new[] { BotConfig.ConfigPath() }
+                : new[] { "/mods/BotMod/Config/botmod.json", BotConfig.ConfigPath() };
+            foreach (string candidate in candidates)
             {
                 if (string.IsNullOrEmpty(candidate)) continue;
                 // GetFullPath is what makes "./Config/botmod.json" and

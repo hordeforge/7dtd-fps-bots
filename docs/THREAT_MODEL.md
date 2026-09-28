@@ -43,7 +43,14 @@ not reviewed here), the host OS, and the dev-side GA training tools
   persisted admin decision; a torn write resets state to defaults
   (`docs/recovery.md`). Protected by atomic write + `.bak`
   (`Source/BotMod/Config/AtomicTextFile.cs:42,76`, fallback in `BotConfig.Load`,
-  `Source/BotMod/Config/BotConfig.cs:192-250`).
+  `Source/BotMod/Config/BotConfig.cs:192-250`). The file's location is operator
+  controlled and can be redirected with `BOTMOD_CONFIG`
+  (`BotConfig.ConfigPath`), which then also owns the persist target, so the
+  file an admin's toggle lands in is the file the next boot reads. The full
+  effective config is logged at startup and reload
+  (`BotConfig.EffectiveSummary`, `Source/BotMod/ModApi.cs:46`): BotConfig
+  carries no credentials, so the dump adds no secret exposure, and the
+  security-relevant switch `AllowSyntheticAuthBypass` is in it by name.
 - **A4 Audit trail integrity** - one log line per executed/replayed/rejected
   mutation is the investigation record (`Source/BotMod/Web/WebApi.cs:104-131`).
   Loss: repudiation, hidden actions.

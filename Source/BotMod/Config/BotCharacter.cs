@@ -124,9 +124,19 @@ namespace BotMod.Config
 
         public static void Load(BotConfig cfg)
         {
-            string path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json");
-            if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine(".", "config", "characters.json");
-            if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine("config", "characters.json");
+            // characters.json sits beside the botmod.json that is actually
+            // being read, so a BOTMOD_CONFIG pointing at a mounted config
+            // directory brings its characters with it. Without that the two
+            // halves of the config would come from different trees and a
+            // deployment could never override the character traits.
+            var candidates = new List<string>();
+            string configPath = BotConfig.ConfigPath();
+            string configDir = string.IsNullOrEmpty(configPath) ? null : System.IO.Path.GetDirectoryName(configPath);
+            if (!string.IsNullOrEmpty(configDir)) candidates.Add(System.IO.Path.Combine(configDir, "characters.json"));
+            candidates.Add(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json"));
+            candidates.Add(System.IO.Path.Combine(".", "config", "characters.json"));
+            candidates.Add(System.IO.Path.Combine("config", "characters.json"));
+            string path = null;
             // Built privately and published once at the end: the default
             // minting and the difficulty lerp below mutate the map, and a
             // reader holding the published reference would otherwise observe
@@ -136,9 +146,13 @@ namespace BotMod.Config
             // reload` with a broken file drift aim/reaction/aggression further
             // toward their clamps.
             var next = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
-            if (!System.IO.File.Exists(path))
+            foreach (string candidate in candidates)
             {
-                BotConfig.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
+                if (System.IO.File.Exists(candidate)) { path = candidate; break; }
+            }
+            if (path == null)
+            {
+                BotConfig.Warn("characters.json not found (looked beside the config and under the mod dir); bots use built-in default characteristics");
             }
             else
             {

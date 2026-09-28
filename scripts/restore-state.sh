@@ -10,8 +10,9 @@
 #   bash scripts/restore-state.sh <snapshot-dir> [--apply]
 #
 # Restored config lands in <server>/Mods/BotMod/Config/ (created if the mod
-# is not installed). Champion weights are printed, not copied: they are
-# committed in the repo, so a restore of weights means a git checkout, and
+# is not installed), or in the file BOTMOD_CONFIG names when this snapshot was
+# taken from such a deployment. Champion weights are printed, not copied: they
+# are committed in the repo, so a restore of weights means a git checkout, and
 # this script's job is to say what the snapshot holds.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -87,6 +88,25 @@ if [[ "$apply" == 0 ]]; then
 fi
 
 restored=0
+# A snapshot taken with BOTMOD_CONFIG set holds the config under its own name
+# (the file lives outside the mod dir on that deployment). It can only go
+# back where the server will read it, so the same variable must be set here:
+# writing it into Mods/BotMod/Config instead would restore a file the server
+# ignores and report success.
+if [[ -f "$SNAP/botmod.config-path.json" || -f "$SNAP/botmod.config-path.json.bak" ]]; then
+  if [[ -z "${BOTMOD_CONFIG:-}" ]]; then
+    echo "ERROR: this snapshot holds a BOTMOD_CONFIG-mounted config; set BOTMOD_CONFIG to that path and retry." >&2
+    echo "  (backup host path: $(sed -n 's/^# config-path=//p' "$MANIFEST"))" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$BOTMOD_CONFIG")"
+  for f in botmod.config-path.json botmod.config-path.json.bak; do
+    [[ -f "$SNAP/$f" ]] || continue
+    cp "$SNAP/$f" "$BOTMOD_CONFIG${f#botmod.config-path.json}"
+    echo "Restored -> $BOTMOD_CONFIG${f#botmod.config-path.json}"
+    restored=$((restored + 1))
+  done
+fi
 for f in botmod.json botmod.json.bak; do
   [[ -f "$SNAP/$f" ]] || continue
   mkdir -p "$DS/Mods/BotMod/Config"

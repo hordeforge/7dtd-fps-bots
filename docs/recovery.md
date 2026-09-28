@@ -9,7 +9,7 @@ back. Everything here is derived from code and scripts in this repo
 
 | State | Lives where | Mutable at runtime? | Survives |
 |---|---|---|---|
-| Operator config | `<dedi>/Mods/BotMod/Config/botmod.json` (+ `.bak`) | yes: dashboard actions and console persists write it live (`ModApi.PersistConfigField`: `Enabled`, `TargetBotCount`, `Difficulty`, `BotWeapon`, `UseNeuralBrain`, `BotVsBot/Zombie/Player`, `BotTeam`, `BotTeamCount`, `TeamAssignments`) | reinstalls (install.sh preserves it), torn/corrupt writes (.bak fallback in `BotConfig.Load`), `make uninstall` (snapshot first). Does NOT survive instance/disk loss unless snapshots are written off-host. |
+| Operator config | `<dedi>/Mods/BotMod/Config/botmod.json` (+ `.bak`), or the file `BOTMOD_CONFIG` names | yes: dashboard actions and console persists write it live (`ModApi.PersistConfigField`: `Enabled`, `TargetBotCount`, `Difficulty`, `BotWeapon`, `UseNeuralBrain`, `BotVsBot/Zombie/Player`, `BotTeam`, `BotTeamCount`, `TeamAssignments`) | reinstalls (install.sh preserves the mod-dir copy; a `BOTMOD_CONFIG` file lives outside it and is never touched), torn/corrupt writes (.bak fallback in `BotConfig.Load`), `make uninstall` (snapshot first). Does NOT survive instance/disk loss unless snapshots are written off-host. `make backup` snapshots whichever file is live: set `BOTMOD_CONFIG` on the backup host too, and `make restore` refuses a `BOTMOD_CONFIG` snapshot without it. |
 | Champion weights | `evolved/best.json` + `best.meta.json` | no (mod reads only; promotion is a git commit per `evolved/README.md`) | anything short of losing git remote + all clones |
 | Default config template | repo `config/botmod.json`, shipped fresh on every build/install | no | git |
 | Training-run artifacts | `evolved/runs/<ts>/` | written by tools/ga during training | nothing (git-ignored by design); reproducible only by re-running training (seeds are in the dir names; runs cost up to days, see docs/research REPORTs). Mitigate by promoting champions to git. |
@@ -43,7 +43,8 @@ host and the operator, not by the mod.
 ## Backup and restore
 
 `scripts/backup-state.sh` snapshots the whole recovery surface (deployed
-`botmod.json` + `.bak`, plus the champion weights) into
+`botmod.json` + `.bak`, or the `BOTMOD_CONFIG` file when the deployment mounts
+its config elsewhere, plus the champion weights) into
 `$BOTMOD_STATE_BACKUP_DIR/<utc-timestamp>/`, git-ignored by default at
 `backups/`. `scripts/restore-state.sh` verifies the snapshot against its
 `MANIFEST` (sha256 per file, plus a check that no unlisted file is present)

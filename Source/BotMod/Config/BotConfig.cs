@@ -234,6 +234,15 @@ namespace BotMod.Config
                 }
                 catch (Exception ex) { Warn("BotConfig parse failed (" + source + "): " + ex.Message); }
             }
+            // Neither the primary nor its .bak was readable. A shipped install
+            // always has the file (config/botmod.json lands in Config/), so
+            // silence here is how a deleted file, a bad BOTMOD_CONFIG or a wrong
+            // Mods layout turns into "the mod runs, but on the C# property
+            // defaults" (difficulty 2, 100 hp) with nothing in the log. Say so
+            // and name every path that was tried.
+            Warn("no config file found (" + path + ", " + AtomicTextFile.BackupPath(path)
+                + "); running on built-in defaults" + (ConfigPathOverride() != null
+                    ? " - check the " + ConfigPathEnvVar + " override" : ""));
             return new BotConfig();
         }
 
@@ -359,7 +368,54 @@ namespace BotMod.Config
             if (Difficulty <= 1) { HeadshotChance = Math.Min(HeadshotChance, 0.04f); }
             else if (Difficulty >= 3) HeadshotChance = Math.Max(HeadshotChance, 0.1f + Difficulty * 0.02f);
         }
-        public static string DefaultPathBesideAssembly()
+        /// <summary>One-line JSON of the effective configuration: every value
+        /// as it will run, after Normalize has clamped and cross-checked it.
+        /// This is the answer to "what is the server actually running", for the
+        /// startup log line and the `bot config` dump; the raw file still hides
+        /// the clamps, the difficulty preset and every field the operator never
+        /// set. BotConfig holds no credentials, so the whole object is safe to
+        /// log and print (see docs/THREAT_MODEL.md for the field inventory).</summary>
+        public string EffectiveSummary()
+        {
+            return JsonConvert.SerializeObject(this, Formatting.None);
+        }
+
+        /// <summary>Environment variable naming the botmod.json to read and
+        /// persist, overriding the assembly-relative default. Same
+        /// environment-over-defaults contract as SEVENDTD_DS_DIR in the repo's
+        /// shell scripts: unset (or blank) means "next to the assembly". It
+        /// exists so a deployment that mounts its config outside the mod
+        /// directory - a bind-mounted host file, a config map, a read-only
+        /// image with a writable copy elsewhere - does not have to also mount
+        /// the config into Config/, and so the read path and the persist path
+        /// can never end up on two different files.</summary>
+        public const string ConfigPathEnvVar = "BOTMOD_CONFIG";
+
+        /// <summary>The BOTMOD_CONFIG value, or null when unset or blank.
+        /// Blank (exported empty by a wrapper script) is treated as unset, not
+        /// as a request to read from the current directory.</summary>
+        public static string ConfigPathOverride()
+        {
+            string env = null;
+            try { env = Environment.GetEnvironmentVariable(ConfigPathEnvVar); }
+            catch (Exception) { env = null; } // no env in some sandboxes
+            if (string.IsNullOrEmpty(env) || env.Trim().Length == 0) return null;
+            return env.Trim();
+        }
+
+        /// <summary>Path of the config file to read, and the file
+        /// PersistConfigField writes: the override when set, else
+        /// Config/botmod.json beside the assembly. One resolver, so the load
+        /// path and the write path cannot disagree about which file is
+        /// authoritative.</summary>
+        public static string ConfigPath()
+        {
+            string env = ConfigPathOverride();
+            if (env != null) return env;
+            return DefaultPathBesideAssembly();
+        }
+
+        static string DefaultPathBesideAssembly()
         {
             string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
             string a = Path.Combine(dir, "Config", "botmod.json");

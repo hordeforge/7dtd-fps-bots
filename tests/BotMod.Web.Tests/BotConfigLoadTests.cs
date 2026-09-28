@@ -28,6 +28,20 @@ static class BotConfigLoadTests
     static int _failures;
     static readonly List<string> _tempDirs = new List<string>();
 
+    /// <summary>Swap BotConfig.Warn for a collector and return the previous
+    /// sink, so a case can assert on what the loader told the operator instead
+    /// of only on the config it produced. The default sink writes to stdout,
+    /// which the suite would otherwise bury under unrelated noise.</summary>
+    static class WarnCapture
+    {
+        public static Action<string> Set(Action<string> sink)
+        {
+            Action<string> prev = BotConfig.Warn;
+            BotConfig.Warn = sink;
+            return prev;
+        }
+    }
+
     static void Check(string name, bool ok)
     {
         Console.WriteLine((ok ? "ok   " : "FAIL ") + name);
@@ -271,12 +285,59 @@ static class BotConfigLoadTests
                 cfg != null && cfg.TargetBotCount == 6 && !cfg.AllowSyntheticAuthBypass);
         }
 
-        // Nothing on disk (fresh install): clean defaults, no throw.
+        // Nothing on disk (fresh install): clean defaults, no throw, and a
+        // warning naming the paths tried. A shipped install always has
+        // Config/botmod.json, so silence there is how a deleted file or a bad
+        // BOTMOD_CONFIG becomes "the mod runs, on different defaults".
         {
             string dir = TempDir();
-            BotConfig cfg = BotConfig.Load(Path.Combine(dir, "absent.json"));
+            List<string> warnings = new List<string>();
+            Action<string> prev = WarnCapture.Set(msg => warnings.Add(msg));
+            BotConfig cfg;
+            try { cfg = BotConfig.Load(Path.Combine(dir, "absent.json")); }
+            finally { WarnCapture.Set(prev); }
             Check("missing file -> defaults", cfg.Enabled && cfg.DedicatedOnly && !cfg.AllowSyntheticAuthBypass);
             Check("auth bypass stays off by default", !cfg.AllowSyntheticAuthBypass);
+            bool named = false;
+            foreach (string w in warnings)
+                if (w.Contains("absent.json")) named = true;
+            Check("missing config file warns with the path", named);
+        }
+
+        // Config path resolution: BOTMOD_CONFIG names the one file that owns
+        // the config, and a blank value is unset, not "current directory".
+        {
+            string dir = TempDir();
+            string path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"TargetBotCount\": 3 }");
+            string prev = Environment.GetEnvironmentVariable(BotConfig.ConfigPathEnvVar);
+            try
+            {
+                Environment.SetEnvironmentVariable(BotConfig.ConfigPathEnvVar, "  " + path + "  ");
+                Check("override trims and wins",
+                    BotConfig.ConfigPathOverride() == path && BotConfig.ConfigPath() == path);
+                Check("override path is what Load reads", BotConfig.Load(BotConfig.ConfigPath()).TargetBotCount == 3);
+                Environment.SetEnvironmentVariable(BotConfig.ConfigPathEnvVar, "");
+                Check("blank override counts as unset", BotConfig.ConfigPathOverride() == null);
+            }
+            finally { Environment.SetEnvironmentVariable(BotConfig.ConfigPathEnvVar, prev); }
+            Check("no override falls back to the assembly-relative path",
+                BotConfig.ConfigPathOverride() == null
+                && BotConfig.ConfigPath().EndsWith("botmod.json", StringComparison.Ordinal));
+        }
+
+        // The effective dump is the only place the clamped, preset-adjusted
+        // values are visible; it must show the running values, not the file's.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"Difficulty\": 4, \"TargetBotCount\": 99 }");
+            BotConfig cfg = BotConfig.Load(path);
+            string summary = cfg.EffectiveSummary();
+            Check("summary is one line", summary.IndexOf('\n') < 0 && summary.IndexOf('\r') < 0);
+            Check("summary shows the clamped value", summary.Contains("\"TargetBotCount\":64"));
+            Check("summary shows the preset-adjusted vision range",
+                summary.Contains("\"VisionRange\":" + cfg.VisionRange.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            Check("summary names the auth-bypass switch", summary.Contains("\"AllowSyntheticAuthBypass\":"));
         }
 
         // SetVsTarget: the admin alias surface shared by `bot vs` and the web

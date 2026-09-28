@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using BotMod.Config;
 using BotMod.Core;
 using UnityEngine;
 
@@ -19,6 +20,7 @@ namespace BotMod.Commands
             "  bot list                         - alive bots (weapon/state/target/hp/burst)\n" +
             "  bot status                       - config summary + alive count\n" +
             "Config (persisted to Config/botmod.json):\n" +
+            "  bot config                       - effective config (post-clamp) + the file it was read from\n" +
             "  bot count <n>                    - keep n alive\n" +
             "  bot weapon <gunId|mixed>         - default weapon for future spawns\n" +
             "  bot skill <0-4>                  - 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare\n" +
@@ -41,7 +43,7 @@ namespace BotMod.Commands
 
         static readonly string[] Subcommands =
         {
-            "help", "status", "list", "spawn", "player", "remove", "count", "weapon",
+            "help", "status", "config", "list", "spawn", "player", "remove", "count", "weapon",
             "skill", "neural", "vs", "team", "teams", "reload", "enable", "disable"
         };
 
@@ -63,6 +65,16 @@ namespace BotMod.Commands
                 {
                     case "help": case "?": case "h": SdtdConsole.Instance.Output(GetHelp()); break;
                     case "status": DoStatus(); break;
+                    // Every effective value, from the file the server actually
+                    // read. `bot status` is the six fields an admin watches;
+                    // this is the answer to "is the config what I think it is",
+                    // including values Normalize clamped or the difficulty
+                    // preset moved and fields the file never set.
+                    case "config": case "cfg":
+                        SdtdConsole.Instance.Output("Config source: " + BotConfig.ConfigPath()
+                            + (BotConfig.ConfigPathOverride() != null ? " (BOTMOD_CONFIG)" : ""));
+                        SdtdConsole.Instance.Output("Effective: " + ModApi.Config.EffectiveSummary());
+                        break;
                     case "list": case "ls": DoList(); break;
                     case "spawn": case "add": DoSpawn(_params); break;
                     case "remove": case "rm": case "kick": case "clear": DoRemove(_params); break;
