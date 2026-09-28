@@ -107,13 +107,35 @@ namespace BotMod.Config
     // Loads config/characters.json which mirrors Q3 bots/*.c skill blocks. Fallback is defaults lerped by Difficulty.
     public static class BotCharacterDB
     {
-        public static Dictionary<string, BotCharacter> Characters { get; private set; } = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
+        static Dictionary<string, BotCharacter> _characters = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Fully built character table. Load builds a private
+        /// instance and publishes it with one reference store, so a concurrent
+        /// ForName (the game tick reads this per bot) sees either the whole
+        /// previous table or the whole new one, never a half-filled map or a
+        /// character whose traits are half lerped. The field is volatile for
+        /// the same reason the ledger's sink is: a plain static field lets a
+        /// reader cache the old reference across the store indefinitely.</summary>
+        public static Dictionary<string, BotCharacter> Characters
+        {
+            get { return System.Threading.Volatile.Read(ref _characters); }
+            private set { System.Threading.Volatile.Write(ref _characters, value); }
+        }
+
         public static void Load(BotConfig cfg)
         {
             string path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json");
             if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine(".", "config", "characters.json");
             if (!System.IO.File.Exists(path)) path = System.IO.Path.Combine("config", "characters.json");
-            bool loaded = false;
+            // Built privately and published once at the end: the default
+            // minting and the difficulty lerp below mutate the map, and a
+            // reader holding the published reference would otherwise observe
+            // that half-finished table. Starting empty also means every failure
+            // mode (missing, unparseable, null body) rebuilds from pristine
+            // defaults; reusing the published instances would let every `bot
+            // reload` with a broken file drift aim/reaction/aggression further
+            // toward their clamps.
+            var next = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
             if (!System.IO.File.Exists(path))
             {
                 BotConfig.Warn("characters.json not found (looked beside the assembly and under ./config); bots use built-in default characteristics");
@@ -154,39 +176,26 @@ namespace BotMod.Config
                         // "{\"Grunt\": null}") carries no data: drop it instead
                         // of letting Normalize's dereference fail the whole
                         // file behind a generic parse warning.
-                        var canon = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
                         foreach (var kv in parsed)
                         {
                             if (kv.Value == null) continue;
                             kv.Value.Normalize();
-                            canon[BotText.IdentityKey(kv.Key)] = kv.Value;
+                            next[BotText.IdentityKey(kv.Key)] = kv.Value;
                         }
-                        Characters = canon;
-                        loaded = true;
                     }
                 }
                 catch (Exception ex) { BotConfig.Warn("characters.json parse failed (" + path + "): " + ex.Message); }
-            }
-            if (!loaded)
-            {
-                // Rebuild from pristine defaults on EVERY failure mode
-                // (missing, unparseable, null body): Characters would otherwise
-                // keep the instances a previous Load already shifted by the
-                // difficulty lerp below, and every `bot reload` while the file
-                // stays broken would drift aim/reaction/aggression further
-                // toward their clamps.
-                Characters = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
             }
             // Ensure at least defaults for known names (BaseName is NFC, same
             // canonical form as the keys above).
             foreach (var n in cfg.BotNames)
             {
                 string key = BotText.BaseName(n);
-                if (!Characters.ContainsKey(key)) Characters[key] = BotCharacter.Defaults(key);
+                if (!next.ContainsKey(key)) next[key] = BotCharacter.Defaults(key);
             }
             // Apply difficulty lerp if characters have multiple skills (stored as skill 1 vs 5) - here we just scale by cfg.Difficulty
             float diffSkill = cfg.Difficulty / 4f;
-            foreach (var kv in new List<KeyValuePair<string,BotCharacter>>(Characters))
+            foreach (var kv in new List<KeyValuePair<string,BotCharacter>>(next))
             {
                 var ch = kv.Value;
                 // Difficulty gently overrides core aim/reaction/aggro
@@ -196,6 +205,7 @@ namespace BotMod.Config
                 ch.Alertness = Math.Max(0.1f, Math.Min(1f, ch.Alertness + diffSkill * 0.3f - 0.15f));
                 ch.Aggression = Math.Max(0f, Math.Min(1f, ch.Aggression + diffSkill * 0.2f - 0.1f));
             }
+            Characters = next;
         }
 
         /// <summary>(Entry name, unknown trait key) pairs for every character

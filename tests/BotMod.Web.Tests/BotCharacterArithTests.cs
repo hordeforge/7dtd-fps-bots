@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using BotMod.Config;
 
@@ -276,6 +277,52 @@ static class BotCharacterArithTests
                 nullBodyAcc == absentAcc);
             Check("pristine default re-lerps from 0.75, not from the good load's 0.63",
                 Math.Abs(absentAcc - 0.88f) < 1e-4f);
+        }
+
+        // 11. Publication is atomic: Load fills a private table and publishes
+        //     it with one reference store, so a reader (the game tick calls
+        //     ForName per bot) never sees a character whose traits are half
+        //     lerped. Publishing first and mutating after made a concurrent
+        //     ForName observable on the un-lerped values between the store
+        //     and the last lerped field.
+        {
+            const string file = "{ \"Grunt\": { \"AimAccuracy\": 0.5, \"Aggression\": 0.5 } }";
+            var cfg = new BotConfig { Difficulty = 4 };
+            var expected = LoadCharacters(file, cfg)["Grunt"];
+            float wantAcc = expected.AimAccuracy, wantAgg = expected.Aggression;
+            int torn = 0, reads = 0;
+            string dir = Path.Combine(Path.GetTempPath(), "botmod-chardb-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(dir, "config"));
+            File.WriteAllText(Path.Combine(dir, "config", "characters.json"), file, Encoding.UTF8);
+            string oldCwd = Environment.CurrentDirectory;
+            Action<string> prevWarn = BotConfig.Warn;
+            try
+            {
+                Environment.CurrentDirectory = dir;
+                BotConfig.Warn = _ => { };
+                var writer = new Thread(() =>
+                {
+                    for (int i = 0; i < 300; i++) BotCharacterDB.Load(cfg);
+                });
+                writer.Start();
+                while (writer.IsAlive)
+                {
+                    var c = BotCharacterDB.ForName("Grunt");
+                    reads++;
+                    // Aims: 0.63 accuracy / 0.6 aggression at difficulty 4.
+                    // Anything else means the reader saw the table mid-build.
+                    if (c.AimAccuracy != wantAcc || c.Aggression != wantAgg) torn++;
+                }
+                writer.Join();
+            }
+            finally
+            {
+                Environment.CurrentDirectory = oldCwd;
+                BotConfig.Warn = prevWarn;
+                try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+            }
+            Check("concurrent reloads never expose a half-lerped character (" + reads + " reads, " + torn + " torn)",
+                reads > 0 && torn == 0);
         }
 
         if (_failures == 0) { Console.WriteLine("all bot character arithmetic tests passed"); return 0; }

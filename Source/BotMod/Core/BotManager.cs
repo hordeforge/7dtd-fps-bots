@@ -98,9 +98,17 @@ namespace BotMod.Core
         {
             _started = true; _tickAccum = 0f; _spawnRetryTimer = 0f;
             _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
+            BotSpawner.InvalidateDmSpawnCache();
             ModApi.Log("BotManager ready. TargetBots=" + ModApi.Config.TargetBotCount + " diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon);
         }
-        public void OnWorldShuttingDown() { _started = false; _bots.Clear(); _botEntityIds.Clear(); _botById.Clear(); }
+        public void OnWorldShuttingDown()
+        {
+            _started = false; _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
+            // The spawnpoint memo is keyed on the world name, so a new world
+            // carrying the same name would keep getting the old world's
+            // coordinates. Drop it with the rest of the per-world state.
+            BotSpawner.InvalidateDmSpawnCache();
+        }
         public void Tick(float dt)
         {
             if (!_started) return;

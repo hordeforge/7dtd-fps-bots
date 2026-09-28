@@ -16,8 +16,24 @@ namespace BotMod.Core
         static float Rng01() { return _rng.Next01(); }
         static int RngInt(int lo, int hi) { return _rng.Range(lo, hi); }
         static int RngPick(int n) { return _rng.Index(n); }
+        // Memoized spawnpoints.xml parse, keyed on the world name alone. The
+        // name is the whole key, so anything that leaves the folder it was
+        // parsed from behind the same name (a regenerated world, a world
+        // reload in the same process) keeps serving the old coordinates for
+        // the process lifetime. InvalidateDmSpawnCache is the write-side
+        // hook: it runs from BotManager.OnWorldShuttingDown, the same
+        // teardown that drops the bot registry.
         static List<Vector3> _dmSpawns;
         static string _dmSpawnsWorld;
+
+        /// <summary>Drop the memoized spawnpoints.xml parse. Called when the
+        /// world goes away so the next spawn re-reads the file rather than
+        /// placing bots at coordinates from the world that just unloaded.</summary>
+        public static void InvalidateDmSpawnCache()
+        {
+            _dmSpawns = null;
+            _dmSpawnsWorld = null;
+        }
 
         public static string PickName(BotConfig cfg)
         {
