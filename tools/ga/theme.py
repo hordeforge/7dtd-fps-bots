@@ -41,6 +41,15 @@ SERIES = ACCENT
 SERIES_DIM = "#8c8378"
 SERIES_BEST = "#3a332c"
 
+# Render resolution for every chart these tools emit. The figures are 8.5-13.5
+# in wide and land in a max-width 1040 px container, so the old 150-165 dpi
+# spent up to 2.1x more pixels than any display shows, and the charts are
+# base64-embedded in a committed HTML page where their bytes are the document's
+# first-paint cost. 120 dpi still renders a 1080 px figure at 1:1 there and
+# leaves a 1.5x margin on a 2x display, and cuts the champion diagram from 67 KB
+# to 45 KB.
+CHART_DPI = 120
+
 _BASE = """
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; padding: 0 20px 56px; }

@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 import ga
+import theme
 
 # Obs semantics follow combat_sim._simulate (docs/research/01 §2): slot 4 is
 # the sustained-fire spread (the old lose-timer placeholder) and slot 12 is the
@@ -58,7 +59,7 @@ def _sigmoid(x) -> float:
     return 1.0 / (1.0 + math.exp(-float(np.clip(x, -8, 8))))
 
 
-def draw(w, hidden, inputs, title: str, out: Path, traces=None):
+def draw(w, hidden, inputs, title: str, out: Path, traces=None, dpi=theme.CHART_DPI):
     if not HAS_MPL:
         print("matplotlib not available")
         return
@@ -150,7 +151,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
 
     fig.suptitle("BotNeuralBrain: topology + weights + activations", fontsize=9, color="#0f172a", y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig(out, dpi=165)
+    fig.savefig(out, dpi=dpi)
     plt.close(fig)
     print(f"net viz -> {out}")
 

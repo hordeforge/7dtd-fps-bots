@@ -63,7 +63,7 @@ def quantized_png_bytes(raw: bytes) -> bytes:
 
 def optimized_png_bytes(fig) -> bytes:
     bio = io.BytesIO()
-    fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
+    fig.savefig(bio, format="png", dpi=theme.CHART_DPI, bbox_inches="tight")
     plt.close(fig)
     return quantized_png_bytes(bio.getvalue())
 

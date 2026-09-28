@@ -25,6 +25,7 @@ import numpy as np
 
 import ga
 import harness
+import theme
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -122,7 +123,7 @@ exit status:
         fig.tight_layout()
         out = Path(args.out) if args.out else ROOT / f"evolved/runs/sweep_H{args.pop}_g{args.gens}_s{args.seed}.png"
         out.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out, dpi=150)
+        fig.savefig(out, dpi=theme.CHART_DPI)
         plt.close(fig)
         print(f"plot -> {out}")
     except ImportError:
