@@ -15,7 +15,6 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 
 ## Scope & Boundaries
 
-- Server-side mod that spawns real FPS bots holding ranged weapons with pathfinding, combat AI, and neural decision controllers.
 - Requires Easy Anti-Cheat off (`<property name="EACEnabled" value="false"/>` in the server config; see README Install).
 - Vanilla clients require no client-side mod to play.
 - Keep performance overhead bounded: physics raycasts, vision cone calculations, and GA neural network inference must run efficiently within the 20 TPS (50 ms) tick budget.
@@ -31,8 +30,8 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 | `Config/` | the operator-config layer: `BotConfig`, `BotCharacter`, `WeaponProfile`, `CombatGates` | `Foundation` |
 | `AI/` | decision-making: `BotBrain`, `BotCombat`, `BotNeuralBrain` | `Core`, `Config`, `Foundation` |
 | `Core/` | runtime: `Bot`, `BotManager`, `BotSpawner`, `BotModVersion` | `AI`, `Config`, `Foundation` |
-| `Commands/`, `Web/` | transport: console commands and the `/api/bot` handler | `Core` and below |
-| `Patches/` | Harmony patches onto game types | `Config` |
+| `Commands/`, `Web/` | transport: console commands and the `/api/bot` handler | `Core`, `AI`, and below |
+| `Patches/` | Harmony patches onto game types | `Config`, `Core`, `ModApi` |
 
 `ModApi.cs` at the root is the mod entry point (load, config read, Web API
 and console command registration). `WebMod/` holds the dashboard's TypeScript,
