@@ -101,7 +101,7 @@ that, and then the state is gone.
    `bot team on/off`, `bot teams <n>`, `bot team assign <name> <id>`,
    `bot enable/disable` (all persisted).
 4. Start the server and verify against the README Validation block
-   (`[BotMod] BotMod v0.4.0 loading...`, DM spawns line, bots alive). A
+   (`[BotMod] BotMod v<current> loading...`, DM spawns line, bots alive). A
    restored-from-backup config logs `BotConfig restored from backup`.
 5. Neural brain: `bot neural status` should report the loaded weight hash; if
    `UseNeuralBrain=true` was part of the old config it reloads automatically,

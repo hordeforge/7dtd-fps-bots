@@ -17,10 +17,11 @@ namespace BotMod.Config
         public bool AllowSyntheticAuthBypass { get; set; } = false;
         public int TargetBotCount { get; set; } = 6;
         public int MaxBots { get; set; } = 16;
-        // Bot body. "mixed" picks zombieSoldier variants: mod-spawned trader bodies
-        // (npcTraderJoel) render nothing on this dedi and survivor classes come back
-        // negative, so soldiers are the working visible FPS bodies (our loop drives
-        // their combat, not the zombie AI).
+        // Bot body. "mixed" resolves to the one class this mod can spawn and
+        // render: mod-spawned trader bodies (npcTraderJoel) render nothing on
+        // this dedi and survivor classes come back negative, so zombieSoldier is
+        // the working visible FPS body (our loop drives its combat, not the
+        // zombie AI). The value is accepted for config compatibility.
         public string BotEntityClass { get; set; } = "mixed";
         public string BotWeapon { get; set; } = "mixed"; // mixed=random per bot from LoadoutPool, or a single gun id
         public string BotAmmo { get; set; } = "ammo762mmBulletBall";
@@ -171,8 +172,8 @@ namespace BotMod.Config
 
         /// <summary>Clamp + apply the team-bucket count from an admin surface
         /// (web `teamCount` action, `bot teams` console command): one
-        /// definition of the 0..8 range, then Normalize drops assignments
-        /// outside the new range. Returns the JSON field name to pass to
+        /// definition of the 0..8 range, then Normalize rewrites assignments
+        /// outside the new range to 0. Returns the JSON field name to pass to
         /// ModApi.PersistConfigField (persist SnapshotTeamAssignments()
         /// alongside it).</summary>
         public string SetTeamCount(int count)

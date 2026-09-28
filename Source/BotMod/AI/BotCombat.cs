@@ -86,7 +86,9 @@ namespace BotMod.AI
         /// against GameManager/ChatMessageServer so the exact API signature never breaks the
         /// build; no-op when the API differs or no players are connected. A persistent
         /// no-send (game update changed every probed signature) is surfaced through the
-        /// rate-limited warn gate instead of disabling announcements silently forever.</summary>
+        /// rate-limited warn gate instead of disabling announcements silently forever.
+        /// Exception: with no GameManager the method returns before that gate, so
+        /// announcements go quiet unlogged.</summary>
         static void ChatMessageServer(string msg)
         {
             bool sent = false;

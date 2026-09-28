@@ -208,7 +208,10 @@ bot reload | bot enable | bot disable
   logs a WARN and bots use built-in default characteristics; misspelled trait
   keys are reported as WARNs and keep the built-in default.
 
-Quake-style names by default: `Grunt/Ranger/Phobos/Dozer/...` (12).
+Quake-style names by default: `Grunt/Visor/Ranger/Phobos/Dozer/...` (13 in
+`config/characters.json`). Only `AimAccuracy`, `AimSkill`, `Aggression`,
+`SelfPreservation` and `Camper` change behavior; the remaining Q3 slots are
+carried so the file matches the Q3 bot layout.
 
 Admin mutations persist: `bot enable|disable`, `bot count`, `bot skill`,
 `bot weapon`, `bot neural on/off`, `bot vs ...`, `bot team ...`, `bot teams`

@@ -56,7 +56,8 @@ namespace BotMod.Core
                     string name = p.EntityName ?? p.PlayerDisplayName ?? "";
                     if (Config.BotText.NameMatches(name, ident)) return p;
                 }
-                // exact entityId string already tried; try prefix match
+                // Numeric lookup above resolves the id through ClientInfo, which
+                // misses when the connection is gone but the player is still listed.
                 foreach (var p in world.Players.list) if (p != null) {
                     if (p.entityId.ToString(CultureInfo.InvariantCulture) == ident) return p;
                 }

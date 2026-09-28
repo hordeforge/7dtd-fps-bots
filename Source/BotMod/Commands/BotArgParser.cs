@@ -14,7 +14,7 @@ namespace BotMod.Commands
     ///
     /// The previous scanner classified tokens independently and silently
     /// dropped whatever it could not place: "bot spawn 163 818" ate 163 as a
-    /// count (spawning up to MaxSpawn bots) and ignored 818, so the documented
+    /// count (spawning up to MaxSpawnCount bots) and ignored 818, so the documented
     /// coordinate form spawned at a random position instead; "bot spawn 2 abc"
     /// just spawned 2 bots. Every leftover token is now a named usage error,
     /// and with exactly two numeric tokens they are coordinates (count stays

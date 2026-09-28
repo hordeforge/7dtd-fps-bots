@@ -21,7 +21,8 @@ namespace BotMod.Core
         float _nextPathRecalc;
         float _stuckSince;
         Vector3 _lastPos;
-        // When GetEntity last returned null (grace for transient entity-dict lookup misses)
+        // Set when IsDeadOrUnloaded first fails to resolve the entity, cleared on
+        // the next success; the 6s grace absorbs transient world-dict misses.
         float _missingSince;
         Vector3 _wanderTarget;
         float _nextWander;

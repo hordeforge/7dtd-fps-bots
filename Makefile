@@ -24,7 +24,9 @@ Targets:
   make lint-webui   tsc strict type-check, oxlint, committed-bundle freshness gate (needs bun/bunx)
   make install      copy dist/BotMod into the dedicated server's Mods dir
   make uninstall    remove Mods/BotMod from the server (snapshots operator config first)
-  make backup       snapshot operator config + champion weights into backups/<utc>/ (make restore SNAPSHOT=... puts config back)
+  make backup       snapshot operator config + champion weights into backups/<utc>/
+  make verify-snapshot SNAPSHOT=backups/<utc>  check a snapshot's digests, write nothing
+  make restore SNAPSHOT=backups/<utc>  verify the snapshot, then put the config back
   make clean        remove dist/ and C# obj/bin intermediates
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
 SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip

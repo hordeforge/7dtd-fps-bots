@@ -17,15 +17,13 @@ namespace BotMod.AI
         const int kVersion = 1;
         // Frozen observation layout of version 1 (docs/research/01 §2, trainer
         // tools/ga/ga.py INPUTS): TryEval packs exactly these 14 features into
-        // fixed scratch slots, so any other "inputs" value would load and then
-        // fail every evaluation (or read/write past the scratch buffer).
+        // fixed scratch slots, so any other "inputs" value would read/write
+        // past the scratch buffer. Load rejects a mismatch.
         const int kInputs = 14;
         // Frozen action layout of version 1 (docs/research/01 §3, "Action heads
         // (5 out)"): TryEval reads exactly these five heads by index (camp,
-        // retreat, aimBiasYaw, fireGate, strafe). A file declaring fewer heads
-        // would load and then drive the fire/strafe gates from stale scratch
-        // slots left over from the previous model; more heads would silently
-        // ignore them. Same rejection contract as the inputs pin above.
+        // retreat, aimBiasYaw, fireGate, strafe). More heads would be silently
+        // ignored, so load rejects a mismatch, same as the inputs pin above.
         const int kOutputs = 5;
         // Only hidden activation the forward pass below can reproduce (tanh).
         // Trainer counterpart: harness.ACTIVATION / tools/ga/ga.py save_best.
@@ -71,7 +69,7 @@ namespace BotMod.AI
             public bool WantCamp;
             public bool WantRetreat;
             public float AimBiasYaw; // radians, already clamped to ±0.45*(1-acc) window by caller
-            public bool ShouldFire;  // still ANDed with reaction/burst/LOS/range in TryShootBurst
+            public bool ShouldFire;  // still ANDed with reaction/burst/reload/magazine in TryShootBurst; the caller gates LOS and range
             public int StrafeDir;    // -1 or 1
             public float CampLogit;
             public float RetreatLogit;

@@ -46,8 +46,9 @@ namespace BotMod.Config
         internal static readonly object WriteGate = new object();
 
         /// <summary>Replace path with contents atomically, keeping the previous
-        /// content at path.bak. Throws only if the new content could not be
-        /// staged; a failure after staging leaves the old file intact.</summary>
+        /// content at path.bak. A staging failure leaves the old file intact; a
+        /// failure during the swap leaves no primary, and BotConfig.Load then
+        /// recovers from the .bak snapshot.</summary>
         public static void Write(string path, string contents)
         {
             lock (WriteGate)

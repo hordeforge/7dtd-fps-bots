@@ -5,7 +5,11 @@ using UnityEngine;
 
 namespace BotMod.Patches
 {
-    // EAC-off LAN uses synthetic ids; client never finishes full EOS/Steam handshake, so any post-Steam authorizer (Eac, Crossplay, etc.) would stall loopback joins. Let loopback synthetic ids auto-pass all IAuthorizer chains after PlayerId/Basic checks. Generic patch covers every authorizer type that implements IAuthorizer.Authorize, not just Steam.
+    // EAC-off LAN uses synthetic ids; the client never finishes the full EOS/Steam
+    // handshake, so letting loopback synthetic ids auto-pass the Steam auth server's
+    // BeginUserAuthentication keeps those joins from stalling. Patching AuthorizationManager
+    // generically was tried and interfered with normal sync/async dispatch, so the
+    // bypass is limited to this concrete Steam patch.
     // Gated by AllowSyntheticAuthBypass (default off): the range is predictable, so an
     // always-on bypass lets anyone join a server running this mod without owning the game.
     [HarmonyPatch(typeof(Platform.Steam.AuthenticationServer), "AuthenticateUser")]
@@ -55,8 +59,6 @@ namespace BotMod.Patches
         }
     }
 
-    // Generic authorizer bypass was too broad; keep only the concrete Steam auth server bypass above. AuthorizationManager dispatches sync+async; patching it generically interferes with normal flow.
-
     /// <summary>Server console lp/listplayers should also list [Bot] entries so operators see bots in the roster.</summary>
     [HarmonyPatch(typeof(ConsoleCmdListPlayers), "Execute")]
     public static class Patch_ListPlayers_Bots
@@ -93,7 +95,8 @@ namespace BotMod.Patches
     /// <summary>Bot-victim death side effects: nudge a stat refresh so the HUD score
     /// column tracks (the vanilla lane only fires for <c>EntityPlayer</c> killers;
     /// bot-shooter scoring is handled in <see cref="BotCombat.OnKilled"/>), mark the
-    /// manager's bookkeeping dead, and drop loot unless configured otherwise.</summary>
+    /// manager's bookkeeping dead, and clear the bot's loot roll unless
+    /// <c>DropLootOnDeath</c> is set.</summary>
     [HarmonyPatch(typeof(EntityAlive), "OnEntityDeath")]
     public static class BotDeathPatch
     {

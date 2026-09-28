@@ -112,9 +112,10 @@ namespace BotMod.AI
             return best;
         }
 
-        /// <summary>Q3 LTG analog for idle bots: hold ground when hurt enough that
-        /// BotWantsToRetreat fires, or when a committed camper rolls a hold. The
-        /// kill/item/roam goal picks collapse here to "not camping".</summary>
+        /// <summary>Q3 LTG analog for idle bots: hold ground when health falls
+        /// into the retreat band (0.35 + SelfPreservation*0.18), or when a
+        /// committed camper rolls a hold. The kill/item/roam goal picks
+        /// collapse here to "not camping".</summary>
         public static bool WantsIdleCamp(EntityAlive me, BotConfig cfg, BotCharacter ch)
         {
             float hp = me.Health / System.Math.Max(1f, cfg.BotHealth);

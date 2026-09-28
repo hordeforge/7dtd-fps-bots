@@ -7,9 +7,10 @@ using Newtonsoft.Json.Linq;
 
 namespace BotMod.Config
 {
-    // Direct port of Q3's 80 characteristic slots (chars.h). Only the subset used by
-    // BotAimAtEnemy/BotCheckAttack/BotChangeViewAngles + BotWantsTo* is required,
-    // but we keep the full table so character files match Q3 layout.
+    // Direct port of Q3's 80 characteristic slots (chars.h). Only the six
+    // slots the engine reads (AimAccuracy, AimSkill, Aggression,
+    // SelfPreservation, Camper, and WantsToCamp below) affect behavior; the
+    // rest are carried so character files match the Q3 layout.
     public sealed class BotCharacter
     {
         // 0 name, 1 gender, 2 attack_skill, 3 weaponweights, 4 view_factor, 5 view_maxchange,
@@ -98,7 +99,7 @@ namespace BotMod.Config
             return v;
         }
 
-        // Q3-style camp decision (BotWantsToCamp helper) - used by BotBrain
+        // Q3-style camp decision, consumed by BotBrain.
         // Deterministic overload: caller supplies a 0..1 roll from the bot's per-slot LCG (zdtd parity).
         public bool WantsToCamp(float healthFrac, float roll01) { return Camper > 0.45f && healthFrac > 0.55f && roll01 < Camper * 0.4f; }
     }
