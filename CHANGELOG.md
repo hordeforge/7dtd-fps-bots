@@ -166,6 +166,25 @@ of them removes a config key or a console command.
   collecting the run's report would read a failure as a passing check's
   output. Failures go to stderr; `--help` is accepted and an unexpected
   argument exits 2.
+- `make package` archived whatever was in `dist/BotMod` as long as
+  `BotMod.dll` was there, so a `make build` that failed after the C# compile
+  (the `bunx tsc` emit, a missing config file) still produced a release zip,
+  missing `WebMod/`. The payload's required files are now checked and a
+  partial one is refused by name.
+- `make verify-reproducible` copied `Source/BotMod/obj` and `bin` into its
+  second build tree, so the dotnet backend could answer the cross-path
+  comparison out of intermediates written at the first tree's path. The
+  mirror is now source only, and leg 1 starts from no intermediates either.
+- `scripts/webmod-minify.sh` and `scripts/lint-webui.sh` did not pin
+  `LC_ALL`/`TZ` the way `scripts/build.sh` does, so the bundle freshness gate
+  computed its reference bytes under the runner's locale while the build
+  computed the shipped bytes under `LC_ALL=C`.
+- `scripts/coverage-cs.sh` piped each suite's `dotnet build` into
+  `/dev/null`, so a compile failure surfaced as a bare exit with no
+  diagnostics; the log is now printed on failure.
+- `make preflight` did not name `curl`, which `make lint-webui` needs to fetch
+  the pinned anti-slop archive, so a host without it failed mid-gate instead
+  of at preflight.
 - The `mixed` weapon literal was matched case-sensitively in
   `WeaponProfile.ForGun` and `BotSpawner.PickWeapon` while every surface that
   accepts it (`BotArgParser.LooksLikeWeapon`, `bot weapon`, the web `spawnNear`

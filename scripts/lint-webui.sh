@@ -24,6 +24,10 @@
 # Requires: bun (bunx).
 
 set -euo pipefail
+# The freshness check below compares bytes against a committed bundle.js that
+# scripts/build.sh compiled under LC_ALL=C; keep this gate in the same locale
+# and timezone so a locale-dependent emit cannot read as a stale bundle.
+export LC_ALL=C TZ=UTC
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/tool-versions.sh"

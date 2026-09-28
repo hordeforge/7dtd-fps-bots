@@ -6,6 +6,9 @@
 # game-DLL-gated suites. Output: merged coverage.cobertura.xml at the repo
 # root; the badge filters to /Source/.
 set -euo pipefail
+# The suite loop feeds a merged cobertura report, so the order its glob
+# resolves in must not follow the runner's locale.
+export LC_ALL=C TZ=UTC
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # .scratch/, not $TMPDIR: /tmp is tmpfs on most boxes and eight dotnet
@@ -57,7 +60,14 @@ xmls=()
 for d in "$work"/*/; do
 	name="$(basename "$d")"
 	pushd "$d" > /dev/null
-	dotnet build -c Release -v q 2>&1 | tail -1 > /dev/null
+	# The build log is kept and printed on failure: piping it into /dev/null
+	# leaves a compile error with no diagnostics at all, so the only symptom
+	# of a broken suite is a bare `set -e` exit.
+	if ! dotnet build -c Release -v q > "$work/$name.build.log" 2>&1; then
+		echo "FAIL: suite $name did not compile" >&2
+		cat "$work/$name.build.log" >&2
+		exit 1
+	fi
 	dll="$(find bin -name 'cov.dll' | head -1)"
 	dotnet-coverage collect -f cobertura -o "$work/$name.xml" -- dotnet "$dll" > /dev/null 2>&1 || {
 		echo "FAIL: suite $name under the coverage profiler" >&2

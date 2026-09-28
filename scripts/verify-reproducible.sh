@@ -20,13 +20,28 @@ trap 'rm -rf "$work"' EXIT
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct 2>/dev/null || echo 0)}"
 
 echo "verify-reproducible: leg 1/3, build in place"
+# Same reason as the mirror excludes below: a stale obj from an earlier local
+# build would make leg 1 short-circuit, and leg 2 (clean mirror) would then
+# differ for a reason that has nothing to do with the build path.
+rm -rf "$root/Source/BotMod/obj" "$root/Source/BotMod/bin"
 bash "$root/scripts/build.sh" > /dev/null
 cp -a "$root/dist/BotMod" "$work/first"
 
 echo "verify-reproducible: leg 2/3, rebuild from a different absolute path"
 mirror="$work/a/much/deeper/path/clanker"
 mkdir -p "$mirror"
-tar -c -C "$root" --exclude=.git --exclude=dist --exclude=.scratch . | tar -x -C "$mirror"
+# The C# intermediates are excluded with dist: carrying leg 1's
+# Source/BotMod/obj into the mirror lets the dotnet backend short-circuit leg
+# 2 off a cache written at the other absolute path, so the diff would compare
+# leg 1's own output against itself and pass on a non-reproducible build. The
+# mirror must hold source only. backups/ and coverage.cobertura.xml are
+# git-ignored local state that no build step reads, excluded to keep the copy
+# to what a clone would have.
+tar -c -C "$root" \
+  --exclude=.git --exclude=dist --exclude=.scratch --exclude=backups \
+  --exclude=coverage.cobertura.xml \
+  --exclude=./Source/BotMod/obj --exclude=./Source/BotMod/bin \
+  . | tar -x -C "$mirror"
 bash "$mirror/scripts/build.sh" > /dev/null
 if ! diff -r "$work/first" "$mirror/dist/BotMod" > "$work/diff.txt" 2>&1; then
   echo "ERROR: payload differs when built from a different path (build path or timestamp leaked into an artifact):" >&2

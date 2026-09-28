@@ -18,6 +18,12 @@
 # (same contract as tsc/oxlint/vnu). Requires: bun (bunx).
 
 set -euo pipefail
+# This step produces the shipped bundle.js, and its bytes are compared against
+# the committed copy by scripts/lint-webui.sh, which does not go through
+# scripts/build.sh (where LC_ALL=C is already exported). Pin the same locale
+# and timezone here or the two callers can compute different bytes from one
+# input under two environments.
+export LC_ALL=C TZ=UTC
 
 if [ "$#" -ne 2 ]; then
   echo "usage: webmod-minify.sh <in.js> <out.js>" >&2

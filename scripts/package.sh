@@ -2,6 +2,10 @@
 # Zip the built mod payload (dist/BotMod) into dist/BotMod-<version>.zip,
 # reproducibly. Run scripts/build.sh first.
 #
+# scripts/build.sh stages dist/BotMod from scratch, but a build that fails
+# part way leaves the earlier steps' output behind; the completeness check
+# below refuses to archive such a payload.
+#
 # Reproducibility contract (verify by running twice and comparing sha256):
 #   - entry order is sorted (LC_ALL=C), never readdir order
 #   - every timestamp is SOURCE_DATE_EPOCH, defaulting to the HEAD commit time
@@ -19,8 +23,27 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/digest.sh"
 SRC="$ROOT/dist/BotMod"
 
-if [[ ! -f "$SRC/BotMod.dll" ]]; then
-  echo "ERROR: $SRC/BotMod.dll missing; run scripts/build.sh first" >&2
+# A build that dies after the C# compile (the bunx tsc emit, a missing config
+# file) leaves a BotMod.dll behind in a half-populated dist/BotMod, and this
+# script would happily archive that as a release. The payload is installed
+# server-side, so every file the runtime reads is required here, not optional.
+required=(
+  BotMod.dll
+  ModInfo.xml
+  Config/botmod.json
+  Config/entityclasses.xml
+  WebMod/bundle.js
+  WebMod/styling.css
+)
+missing=()
+for f in "${required[@]}"; do
+  [[ -f "$SRC/$f" ]] || missing+=("$f")
+done
+if ((${#missing[@]})); then
+  echo "ERROR: payload incomplete, refusing to package a half-built mod:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "Re-run scripts/build.sh and read its error; it stages dist/BotMod from" >&2
+  echo "scratch and the last failing step leaves the payload partial." >&2
   exit 1
 fi
 

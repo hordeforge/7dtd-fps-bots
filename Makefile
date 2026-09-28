@@ -16,7 +16,7 @@ Targets:
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make verify-reproducible  build the payload twice (second time from another path) and package twice, then compare bytes
   make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness
-  make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff)
+  make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff, curl)
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
   make lint-yaml    yamllint over the CI workflows (config: .yamllint.yml, --strict)
@@ -66,7 +66,7 @@ lint-yaml:
 
 preflight:
 	@missing=""; \
-	for tool in shellcheck yamllint java bun ruff; do \
+	for tool in shellcheck yamllint java bun ruff curl; do \
 	  command -v "$$tool" > /dev/null || missing="$$missing $$tool"; \
 	done; \
 	if [ -n "$$missing" ]; then \
