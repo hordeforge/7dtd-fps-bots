@@ -28,6 +28,52 @@ jobs:
       # Actions pinned by full commit SHA (tag in comment) so a moved tag or a
       # compromised major-version release cannot inject code into the pipeline.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release commit's tag history is the input to the immutability
+          # check below; the default shallow fetch has only the pushed tag.
+          fetch-depth: 0
+      - name: Check the tag is a new, immutable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          # A published version is immutable: consumers pin a tag, and a
+          # release that moves under them is a different build wearing a
+          # version they already trust. Three shapes reach this workflow.
+          #
+          # 1. A tag update rather than a new tag. Every commit since v0.7.1
+          #    still declares 0.7.1, so moving v0.7.1 onto one of them
+          #    satisfies the ModInfo.xml check below and republishes the
+          #    release. The ref that recorded the old target is gone once the
+          #    move lands, so the push event is the only place the move is
+          #    still visible.
+          # 2. A commit carrying more than one release tag. v0.4.1 is in this
+          #    repository's history as a second tag on the v0.4.0 commit, so
+          #    the tag named a build that never existed.
+          # 3. A second tag naming a version some earlier tag already shipped.
+          if [ "${{ github.event.forced }}" = "true" ]; then
+            echo "ERROR: $TAG is an update of an existing tag, not a new release" >&2
+            echo "       a published version is immutable; cut a new one (a patch or" >&2
+            echo "       minor bump under the 0.x policy at the top of CHANGELOG.md)" >&2
+            exit 1
+          fi
+          SIBLINGS="$(git tag --points-at HEAD | grep -vFx "$TAG" || true)"
+          if [ -n "$SIBLINGS" ]; then
+            echo "ERROR: $TAG and $(echo "$SIBLINGS" | tr '\n' ' ')point at $(git rev-parse --short HEAD)" >&2
+            echo "       one commit ships one release; a tag with no build of its own is not a release" >&2
+            exit 1
+          fi
+          # This tag is merged into its own commit, so it is filtered out:
+          # the check is for an *earlier* tag that already shipped the
+          # version, which is what a second release of it would leave.
+          PUBLISHED="$(git tag --merged HEAD | grep -vFx "$TAG" | sed 's/^v//' | grep -Fx "$VERSION" || true)"
+          if [ -n "$PUBLISHED" ]; then
+            echo "ERROR: version $VERSION was already released; $TAG would republish it" >&2
+            echo "       cut a new version, or put $TAG back on the commit it already names" >&2
+            exit 1
+          fi
+          echo "ok: $TAG is a new release commit"
       - name: Check the tag matches Source/BotMod/ModInfo.xml
         shell: bash
         run: |

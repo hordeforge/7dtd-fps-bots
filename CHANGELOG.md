@@ -19,7 +19,10 @@ Cutting a release, in this order:
    version.
 3. `make ci`, then tag `v<version>` and attach `make package`'s zip.
    `.github/workflows/release.yml` rejects a tag that disagrees with
-   `ModInfo.xml` or that has no notes in this file.
+   `ModInfo.xml`, that has no notes in this file, that carries a second
+   release tag on one commit, or that moves a tag already published. A
+   published version is immutable, so a rebuild that has to change anything
+   is a new version, not a moved tag.
 
 ## [Unreleased]
 
