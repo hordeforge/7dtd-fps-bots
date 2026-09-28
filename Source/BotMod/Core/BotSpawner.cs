@@ -160,13 +160,15 @@ namespace BotMod.Core
                 return true;
             } catch (Exception ex)
             {
-                // "In sight", the opposite of the true-fallback BotBrain's LOS
-                // uses: both call sites only penalize a positive (spawn
-                // protection is off / the candidate is skipped), so a throw here
-                // would quietly turn spawn protection off rather than merely
-                // losing a candidate. Cheap to keep and worth saying out loud.
-                ModApi.WarnRateLimited(() => "spawn line-of-sight check failed, treating the candidate as visible (spawn protection off): " + ex.Message);
-                return false;
+                // "In sight", so a throw cannot hand the caller the answer that
+                // rewards a spawn. True is the safe answer at both call sites:
+                // the DM scorer only adds its out-of-sight bonus on false (true
+                // leaves the candidate on its distance score alone) and the
+                // radial rings skip a candidate reported visible. False would do
+                // the reverse of both, boosting a candidate whose visibility
+                // was never established.
+                ModApi.WarnRateLimited(() => "spawn line-of-sight check failed, treating the candidate as visible: " + ex.Message);
+                return true;
             }
         }
 
