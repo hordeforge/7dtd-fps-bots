@@ -10,6 +10,28 @@ The version lives in `Source/BotMod/Core/BotModVersion.cs` (canonical) and
 must match `<Version>` in `Source/BotMod/ModInfo.xml`; `scripts/build.sh`
 fails on drift between them.
 
+## [Unreleased]
+
+### Fixed
+
+- `tools/ga/evolve.py static-vs-neural` exits 1 when the promotion gate is not
+  met instead of printing `GOAL MET: False` and exiting 0, and `tools/ga/sweep.py`
+  exits 1 when no activation produced a curve. A CI step reading either exit code
+  was treating both failures as passes.
+- A best.json that is missing, malformed, or the wrong genome size now fails with
+  a one-line message naming the file in `evolve.py`, `replay.py` and `viz.py`
+  instead of a JSON `KeyError` traceback. `replay.py` range-checks `--n-bots`,
+  `--n-zombies`, `--max-ticks` and `--env` before recording.
+- `tools/ga/sweep.py`'s docstring showed `--seeds` / `--trials` usage examples
+  that no longer exist; they now show `--pop` / `--gens` / `--seed`.
+
+### Changed
+
+- Every `tools/ga` CLI (`evolve.py`, `sweep.py`, `report.py`, `dashboard.py`,
+  `viz.py`, `replay.py`) now has a `description`, per-flag help, worked examples
+  and an exit-status section in `--help`, all following the same 0/1/2
+  convention as argparse itself.
+
 ## [0.7.1] - 2026-09-21
 
 ### Changed

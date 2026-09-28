@@ -7,8 +7,8 @@ evolution. What remains a real, discriminative knob is the activation, so this
 sweep runs H16-tanh vs H16-relu and nothing else.
 
 Usage:
-  python tools/ga/sweep.py --seeds 1 --trials 2      # quick check
-  python tools/ga/sweep.py                           # H16 tanh+relu ablation
+  python tools/ga/sweep.py --pop 4 --gens 2 --seed 1   # quick check
+  python tools/ga/sweep.py                             # H16 tanh+relu ablation
 
 Each activation re-runs a short evolution (same seed chain, same combat-sim
 fitness), plots both runs on one chart, and prints the ranking.
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -59,12 +60,26 @@ def run_one(activation: str, pop: int, gens: int, seed: int):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pop", type=int, default=24)
-    ap.add_argument("--gens", type=int, default=20)
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--activations", nargs="*", default=None, choices=["tanh", "relu"])
-    ap.add_argument("--out", default=None, help="plot PNG path")
+    ap = argparse.ArgumentParser(
+        description="Activation sweep (tanh vs relu) at the baked H16 hidden size.",
+        epilog="""examples:
+  %(prog)s --pop 4 --gens 2 --seed 1        # quick check
+  %(prog)s --activations tanh               # one activation only
+  %(prog)s --out evolved/sweeps/ablation.png
+
+exit status:
+  0  the sweep ran and produced at least one curve
+  1  no activation produced a curve (nothing to rank or plot)
+  2  bad command line""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--pop", type=int, default=24, help="population size (default: %(default)s)")
+    ap.add_argument("--gens", type=int, default=20, help="generations per activation (default: %(default)s)")
+    ap.add_argument("--seed", type=int, default=42, help="RNG seed (default: %(default)s)")
+    ap.add_argument("--activations", nargs="*", default=None, choices=["tanh", "relu"],
+                    help="activations to sweep (default: tanh relu)")
+    ap.add_argument("--out", default=None,
+                    help="plot PNG path (default: evolved/runs/sweep_H<pop>_g<gens>_s<seed>.png; "
+                         "the JSON summary lands beside it)")
     args = ap.parse_args()
 
     acts = args.activations or ["tanh", "relu"]
@@ -78,7 +93,8 @@ def main():
 
     ok = {k: v for k, v in curves.items() if v}
     if not ok:
-        print("no successful curves: nothing to rank/plot"); return
+        print("no successful curves: nothing to rank/plot", file=sys.stderr)
+        return 1
     # summary table
     print("\n layout           best   mean@last   Δ best-mean   FLOPs/bot   W")
     print(" ────────────────────────────────────────────────────────────")
@@ -112,10 +128,6 @@ def main():
         ax.grid(True, alpha=0.18)
         fig.tight_layout()
         out = Path(args.out) if args.out else ROOT / f"evolved/runs/sweep_H{args.pop}_g{args.gens}_s{args.seed}.png"
-        if args.out is not None:
-            out = Path(args.out)
-        else:
-            out = ROOT / f"evolved/runs/sweep_H{args.pop}_g{args.gens}_s{args.seed}.png"
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=150)
         plt.close(fig)
@@ -130,7 +142,8 @@ def main():
     jpath.parent.mkdir(parents=True, exist_ok=True)
     ga.atomic_write_text(jpath, json.dumps(dump, indent=2))
     print(f"json -> {jpath}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

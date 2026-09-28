@@ -7,7 +7,7 @@ Usage:
   python tools/ga/evolve.py --pop 32 --gens 40 --seed 42 --fit-elo 0.65 --fit-econ 0.20
   python tools/ga/evolve.py --resume evolved/runs/2026-08-18_foo
   python tools/ga/evolve.py --dry-run --pop 8 --gens 3
-  python tools/ga/evolve.py eval --best evolved/best.json --matches 30
+  python tools/ga/evolve.py eval evolved/best.json --matches 30
   python tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40
 
 Outputs evolved/runs/<ts>/ + evolved/best.json (see docs/research/04).
@@ -376,8 +376,14 @@ def _load_best(best: str):
     best_path = Path(best)
     if not best_path.is_file():
         raise SystemExit(f"best.json not found: {best_path} (e.g. evolved/best.json)")
-    obj = json.loads(best_path.read_text(encoding="utf-8"))
-    w = np.array(obj["weights"], dtype=np.float32)
+    try:
+        obj = json.loads(best_path.read_text(encoding="utf-8"))
+        w = np.array(obj["weights"], dtype=np.float32)
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
+        # Without this the caller gets a KeyError traceback naming numpy
+        # internals, not the file it passed and how to fix it.
+        raise SystemExit(f"{best_path} is not a best.json: {ex.__class__.__name__}: {ex} "
+                         f"(expected a JSON object with a 'weights' array, e.g. evolved/best.json)") from None
     if w.size != ga.W:
         raise SystemExit(f"weights size {w.size} != want {ga.W}")
     return w, obj
@@ -426,7 +432,9 @@ def cmd_static_vs_neural(best: str, seeds: list[int], matches: int):
     print(f"\nGOAL MET (champion - static >= +0.5 on every seed): {ok}")
     if not ok:
         print("NOT met. The rework must push the static baseline down ~1.0 "
-              "and evolve a champion that out-generates it by >= +0.5 per seed.")
+              "and evolve a champion that out-generates it by >= +0.5 per seed.",
+              file=sys.stderr)
+    return 0 if ok else 1
 
 
 def _train_run(a):
@@ -438,14 +446,17 @@ def _train_run(a):
 
 
 def _add_train_flags(p):
-    p.add_argument("--pop", type=int, default=32)
-    p.add_argument("--gens", type=int, default=40)
-    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--pop", type=int, default=32, help="population size (default: %(default)s)")
+    p.add_argument("--gens", type=int, default=40, help="generations to evolve (default: %(default)s)")
+    p.add_argument("--seed", type=int, default=42, help="RNG seed (default: %(default)s)")
     p.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
-    p.add_argument("--resume", type=str, default=None)
-    p.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"])
+    p.add_argument("--resume", type=str, default=None,
+                   help="run dir or gen_NNN.json to resume from")
+    p.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"],
+                   help="hidden activation (default: %(default)s)")
     p.add_argument("--islands", type=int, default=1, help="island count 1..8 (ring migrate every 10 gens)")
-    p.add_argument("--curriculum", type=str, default="mixed", choices=["mixed", "pvp_first", "horde_first"])
+    p.add_argument("--curriculum", type=str, default="mixed", choices=["mixed", "pvp_first", "horde_first"],
+                   help="opponent mix (default: %(default)s)")
     p.add_argument("--fit-elo", type=float, default=None, help="elo scalarization weight")
     p.add_argument("--fit-econ", type=float, default=None, help="economy scalarization weight")
     p.add_argument("--fit-surv", type=float, default=None, help="survival scalarization weight")
@@ -453,21 +464,51 @@ def _add_train_flags(p):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="GA neuroevolution training + best.json evaluation")
+    epilog = """examples:
+  %(prog)s --pop 32 --gens 40 --seed 42
+  %(prog)s --pop 32 --gens 40 --seed 42 --fit-elo 0.65 --fit-econ 0.20
+  %(prog)s --resume evolved/runs/2026-08-18_foo
+  %(prog)s --dry-run --pop 8 --gens 3
+  %(prog)s eval evolved/best.json --matches 30
+  %(prog)s static-vs-neural --seeds 999 1234 4242 --matches 40
+
+exit status:
+  0  training finished, or the evaluation gate passed
+  1  static-vs-neural gate not met
+  2  bad command line"""
+    ap = argparse.ArgumentParser(
+        description="GA neuroevolution training + best.json evaluation",
+        epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
     _add_train_flags(ap)
     ap.set_defaults(func=_train_run)
     sub = ap.add_subparsers(dest="cmd", title="best.json evaluation commands")
 
-    e = sub.add_parser("eval", help="re-evaluate a best.json on the held-out pool")
-    e.add_argument("best", type=str, help="evolved/best.json")
-    e.add_argument("--matches", type=int, default=30)
+    e = sub.add_parser("eval", help="re-evaluate a best.json on the held-out pool",
+                       description="Re-evaluate a best.json on the held-out seed-999 pool "
+                                   "against a random-init baseline.",
+                       epilog="example: %(prog)s evolved/best.json --matches 30",
+                       formatter_class=argparse.RawDescriptionHelpFormatter)
+    e.add_argument("best", type=str, help="path to the best.json to score")
+    e.add_argument("--matches", type=int, default=30,
+                   help="held-out matches per pool (default: %(default)s)")
     e.set_defaults(func=lambda a: cmd_eval(a.best, a.matches))
 
-    s = sub.add_parser("static-vs-neural", help="canonical promotion gate: champion vs static baseline")
-    s.add_argument("--seeds", nargs="*", type=int, default=[999, 1234, 4242])
-    s.add_argument("--matches", type=int, default=40)
-    s.add_argument("--best", default="evolved/best.json")
+    s = sub.add_parser("static-vs-neural", help="canonical promotion gate: champion vs static baseline",
+                       description="Promotion gate: per seed, compare the evolved champion "
+                                   "against the static (all-zero weights) baseline. "
+                                   "Exits 1 unless the margin is >= +0.5 on every seed.",
+                       epilog="example: %(prog)s --seeds 999 1234 4242 --matches 40",
+                       formatter_class=argparse.RawDescriptionHelpFormatter)
+    s.add_argument("--seeds", nargs="*", type=int, default=[999, 1234, 4242],
+                   help="evaluation seeds (default: %(default)s)")
+    s.add_argument("--matches", type=int, default=40,
+                   help="held-out matches per seed (default: %(default)s)")
+    s.add_argument("--best", default="evolved/best.json",
+                   help="champion to score (default: %(default)s)")
     s.set_defaults(func=lambda a: cmd_static_vs_neural(a.best, a.seeds, a.matches))
 
     args = ap.parse_args()
-    args.func(args)
+    # Sub-commands report success/failure through their return code; without
+    # this a failing promotion gate still exits 0 and a CI step reading it
+    # silently treats a failed gate as a pass.
+    sys.exit(args.func(args) or 0)

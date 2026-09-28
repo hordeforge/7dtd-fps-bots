@@ -25,6 +25,8 @@ from pathlib import Path
 
 import numpy as np
 
+import ga
+
 INPUTS = 14
 WEAPON_DAMAGE = [16, 14, 16, 42, 9, 9]
 WEAPON_RANGE = [40, 22, 55, 90, 22, 35]
@@ -495,24 +497,56 @@ draw(F[0]);
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--best", default="evolved/best.json")
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--n-bots", type=int, default=4)
-    ap.add_argument("--n-zombies", type=int, default=3)
-    ap.add_argument("--max-ticks", type=int, default=1200)
-    ap.add_argument("--skill", type=int, default=3)
+    ap = argparse.ArgumentParser(
+        description="Record a deterministic arena match for the champion and render a "
+                    "self-contained HTML canvas replay.",
+        epilog="""examples:
+  %(prog)s --best evolved/best.json --seed 42 --n-bots 4 --n-zombies 3
+  %(prog)s --best evolved/best.json --env 3 --out /tmp/match.html
+  %(prog)s --best evolved/best.json --verify
+
+--out is relative to the current directory, --best too. --env picks the arena
+layout (0..4); without it the arena follows the seed.
+
+exit status:
+  0  the replay HTML was written
+  1  --best is missing or is not a valid best.json
+  2  bad command line, or a numeric flag outside its documented range""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--best", default="evolved/best.json", metavar="BEST_JSON",
+                    help="champion weights to replay (default: %(default)s)")
+    ap.add_argument("--seed", type=int, default=42, help="arena RNG seed (default: %(default)s)")
+    ap.add_argument("--n-bots", type=int, default=4, help="bot count, >= 1 (default: %(default)s)")
+    ap.add_argument("--n-zombies", type=int, default=3, help="zombie count, >= 0 (default: %(default)s)")
+    ap.add_argument("--max-ticks", type=int, default=1200, help="tick cap, >= 1 (default: %(default)s)")
+    ap.add_argument("--skill", type=int, default=3, help="bot skill level (default: %(default)s)")
     ap.add_argument("--weapon", type=int, default=-1,
                     help="pin every bot to this weapon index (0 pistol, 1 shotgun, 2 AK, "
                          "3 sniper, 4 auto-shotgun, 5 SMG); negative rolls mixed loadouts")
-    ap.add_argument("--env", type=int, default=None)
-    ap.add_argument("--out", default="docs/ga-replay.html")
+    ap.add_argument("--env", type=int, default=None,
+                    help="arena layout index 0..%d (default: derived from --seed)" % (len(WALLS) - 1))
+    ap.add_argument("--out", default="docs/ga-replay.html", help="output HTML path (default: %(default)s)")
     ap.add_argument("--verify", action="store_true", help="compare summary to numba eval on same seed")
     args = ap.parse_args()
+    # argparse types the shape but not the range; every one of these lands as an
+    # IndexError/ZeroDivisionError traceback naming replay internals otherwise.
+    for flag, value, minimum in (("--n-bots", args.n_bots, 1),
+                                 ("--n-zombies", args.n_zombies, 0),
+                                 ("--max-ticks", args.max_ticks, 1)):
+        if value < minimum:
+            ap.error(f"{flag} must be >= {minimum}, got {value}")
+    if args.env is not None and not 0 <= args.env < len(WALLS):
+        ap.error(f"--env must be 0..{len(WALLS) - 1}, got {args.env}")
     best_path = Path(args.best)
     if not best_path.is_file():
         raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
-    w = np.array(json.loads(best_path.read_text(encoding="utf-8"))["weights"], dtype=float)
+    try:
+        w = np.array(json.loads(best_path.read_text(encoding="utf-8"))["weights"], dtype=float)
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
+        raise SystemExit(f"{best_path} is not a best.json: {ex.__class__.__name__}: {ex} "
+                         f"(expected a JSON object with a 'weights' array)") from None
+    if w.size != ga.W:
+        raise SystemExit(f"{best_path}: weights size {w.size} != want {ga.W}")
     summary, frames = record_match(w, args.seed, args.n_bots, args.n_zombies, args.max_ticks,
                                    args.skill, args.weapon, args.env)
     walls = WALLS[args.env if args.env is not None else args.seed % 5]

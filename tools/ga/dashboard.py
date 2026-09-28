@@ -42,7 +42,7 @@ from replay import record_match, render_html  # noqa: E402 -- same bootstrap
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
 
-REPO = TOOLS.parent.parent.parent               # repo root
+REPO = TOOLS.parent.parent                         # repo root (TOOLS is already repo/tools/ga)
 RUNS_DIR = REPO / "evolved"                       # repo/evolved
 
 
@@ -287,15 +287,33 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", nargs="*", default=None)
-    ap.add_argument("--all", action="store_true", help="use every run in evolved/runs")
-    ap.add_argument("--out", default="docs/ga-dashboard.html")
+    ap = argparse.ArgumentParser(
+        description="Assemble every GA run into one self-contained HTML dashboard.",
+        epilog="""examples:
+  %(prog)s                          # every run in evolved/runs
+  %(prog)s --runs runs/<ts> --out /tmp/dash.html
+  %(prog)s --replays                # embed arena replays (deterministic, ~seconds)
+
+--runs paths are relative to evolved/. Paths given to --out are relative to
+the current directory.
+
+exit status:
+  0  the dashboard was written
+  1  a required run or evolved/best.json is missing
+  2  bad command line""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--runs", nargs="*", default=None, metavar="DIR",
+                    help="run dirs relative to evolved/ (default: every run in evolved/runs)")
+    ap.add_argument("--all", action="store_true",
+                    help="use every run in evolved/runs (the default when --runs is omitted)")
+    ap.add_argument("--out", default="docs/ga-dashboard.html", help="output HTML path (default: %(default)s)")
     ap.add_argument("--replays", action="store_true", help="include arena replays (deterministic, ~seconds)")
     args = ap.parse_args()
 
     if args.all or not args.runs:
-        runs = sorted(RUNS_DIR.glob("runs/*"))
+        # Only directories are runs; a stray sweep PNG or a report.html sitting
+        # beside them must not abort the whole dashboard.
+        runs = sorted(p for p in RUNS_DIR.glob("runs/*") if p.is_dir())
     else:
         runs = [RUNS_DIR / r for r in args.runs]
     missing = [str(r) for r in runs if not r.is_dir()]

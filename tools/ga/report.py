@@ -250,10 +250,28 @@ def build(runs: list[Path], out: Path):
     return out
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", nargs="+", required=True, help="evolved/runs/<ts> dirs")
-    ap.add_argument("--out", default=None, help="output HTML path")
+    ap = argparse.ArgumentParser(
+        description="Build a self-contained HTML evolution report from one or more runs.",
+        epilog="""examples:
+  %(prog)s --runs evolved/runs/2026-08-19_011136_pop32_g30_s42
+  %(prog)s --runs run1 run2 --out compare.html
+
+--out defaults to <run>/report.html for a single run, else evolved/report.html.
+
+exit status:
+  0  the report was written
+  1  a --runs dir is missing or held no usable data
+  2  bad command line""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--runs", nargs="+", required=True, metavar="DIR",
+                    help="evolved/runs/<ts> dirs (one or more)")
+    ap.add_argument("--out", default=None,
+                    help="output HTML path (default: <run>/report.html, or evolved/report.html "
+                         "when comparing runs)")
     args = ap.parse_args()
     runs = [Path(p) for p in args.runs]
+    missing = [str(r) for r in runs if not r.is_dir()]
+    if missing:
+        raise SystemExit(f"--runs dir not found: {missing[0]} (e.g. evolved/runs/2026-08-19_011136_pop32_g30_s42)")
     out = Path(args.out) if args.out else (runs[0] / "report.html" if len(runs) == 1 else Path("evolved/report.html"))
     build(runs, out)

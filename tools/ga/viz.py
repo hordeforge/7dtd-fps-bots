@@ -164,21 +164,43 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--best", default=None)
+    ap = argparse.ArgumentParser(
+        description="Render the 14-16-5 net: edge opacity by |weight|, bias rings, "
+                    "and an activation trace on 3 canonical inputs.",
+        epilog="""examples:
+  %(prog)s --best evolved/best.json            # -> evolved/net.png
+  %(prog)s --run evolved/runs/<ts>             # -> <run>/net.png (last gen)
+  %(prog)s --best evolved/best.json --out x.png
+
+Exactly one of --best / --run is required.
+
+exit status:
+  0  the PNG was written
+  1  the --best / --run path is missing or unusable
+  2  bad command line""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--best", default=None, metavar="BEST_JSON",
+                    help="champion weights (e.g. evolved/best.json)")
     ap.add_argument("--run", default=None, help="evolved/runs/<ts> (uses best of last gen)")
     ap.add_argument("--out", default=None,
                     help="output PNG (default: net.png beside the --best file or inside the --run dir)")
     args = ap.parse_args()
     out = Path(args.out) if args.out else None
+    if args.run and args.best:
+        ap.error("--best and --run are mutually exclusive; pass exactly one")
     if args.run:
         run_dir = Path(args.run)
+        if not run_dir.is_dir():
+            raise SystemExit(f"--run dir not found: {run_dir} (e.g. evolved/runs/2026-08-19_011136_pop32_g30_s42)")
         cands = sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key)
         path = Path(cands[-1]) if cands else None
         if path is None:
             raise SystemExit(f"no gen_*.json in {args.run}")
-        obj = json.loads(path.read_text(encoding="utf-8"))
-        w = np.array(obj["top3"][0], dtype=float)
+        try:
+            obj = json.loads(path.read_text(encoding="utf-8"))
+            w = np.array(obj["top3"][0], dtype=float)
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as ex:
+            raise SystemExit(f"{path} is not a gen_*.json checkpoint: {ex.__class__.__name__}: {ex}") from None
         hidden, inputs = 16, 14
         meta_title = f"{run_dir.name} gen {obj.get('gen','?')}  best {obj.get('best_fitness',0):+.3f}"
         draw(w, hidden, inputs, title=meta_title, out=out or (run_dir / "net.png"))

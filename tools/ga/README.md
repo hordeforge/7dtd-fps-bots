@@ -73,6 +73,21 @@ The `eval` subcommand re-evaluates a single best.json on the held-out pool; the
 static baseline, prints GOAL MET). Both share the one canonical measuring stick
 in harness.canonical_scores.
 
+## Exit codes
+
+All six CLIs follow the same convention, and each one documents it under
+`--help`:
+
+| Code | Meaning |
+|---|---|
+| 0 | the command ran and did what it says |
+| 1 | the command understood its arguments but could not finish: a missing or malformed `best.json`, a missing run dir, a failed promotion gate, a sweep with no usable curve |
+| 2 | bad command line: unknown flag, missing required argument, or a value outside its documented range |
+
+Data (scores, ranking tables, output paths) goes to stdout; diagnostics and
+failures go to stderr, so `evolve.py static-vs-neural | tee gate.txt` stays
+parseable and a CI step can branch on the exit code.
+
 ## Disk contract
 
 See `evolved/README.md` and `docs/research/04` §3 for the `evolved/runs/<ts>/`
