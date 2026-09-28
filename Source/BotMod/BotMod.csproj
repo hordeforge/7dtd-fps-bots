@@ -16,6 +16,12 @@
     <RootNamespace>BotMod</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>$(BotModOutput)</OutputPath>
+    <!-- OutputPath is the shipped payload, so the SDK default (a portable
+         BotMod.pdb carrying the absolute build path of every source file)
+         would ship debug symbols and leak the build directory. The mcs
+         backend emits no pdb, so this also makes the two backends produce
+         the same payload file set. -->
+    <DebugType>none</DebugType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
   <ItemGroup>

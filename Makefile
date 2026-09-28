@@ -1,7 +1,7 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test test-list ci package install uninstall backup restore verify-snapshot clean lint-html lint-webui lint-shell lint-python lint-yaml check preflight
+.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot clean lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -14,6 +14,7 @@ Targets:
   make test-list    print the C# suite names SUITE= accepts
   make ci           everything CI runs: make check then make test
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
+  make verify-reproducible  build the payload twice (second time from another path) and package twice, then compare bytes
   make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness
   make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff)
   make lint-shell   shellcheck over scripts/*.sh
@@ -48,6 +49,8 @@ test-list:
 ci: check test
 package:
 	bash "$(SCRIPTS)/package.sh"
+verify-reproducible:
+	bash "$(SCRIPTS)/verify-reproducible.sh"
 lint-html:
 	bash "$(SCRIPTS)/lint-html.sh"
 lint-webui:

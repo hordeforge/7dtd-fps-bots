@@ -227,6 +227,7 @@ make test-list     # names of the individual C# suites
 make test SUITE=lcg # one suite (SUITE=lcg bottext for several)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod
 make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip
+make verify-reproducible  # build and package twice, then compare bytes
 make check         # what CI runs (shellcheck, yamllint, vnu HTML lint, tsc/oxlint/bundle freshness, ruff)
 make ci            # the full local gate: make check then make test
 ```
@@ -242,6 +243,10 @@ and permissions are normalized. Two packages of the same commit compare equal
 with `sha256sum`, regardless of build machine or directory. The zip carries a
 `MANIFEST.sha256` covering every payload file; run `sha256sum -c
 MANIFEST.sha256` inside the extracted directory to verify it offline.
+`make verify-reproducible` runs that claim end to end: it builds the payload,
+rebuilds it from a different absolute path, diffs the two trees, then packages
+twice and compares the archive hashes. It needs the same prerequisites as
+`make build`, so CI does not run it.
 
 Released versions and upgrade notes are documented in `CHANGELOG.md`.
 

@@ -37,6 +37,10 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
   carries the same constraints for the dotnet backend.
 - `make build` needs the game Managed DLLs. Override the probe with
   `SEVENDTD_DS_DIR` or `SEVENDTD_GAME_DIR`.
+- `make verify-reproducible` builds the payload twice, the second time from a
+  different absolute path, then packages twice and compares bytes. Both build
+  backends ship no debug symbols; `scripts/build.sh` fails the build if a `.pdb`
+  or `.mdb` reaches the payload. CI cannot run it (no game install).
 - Suites needing the game install (config parsers, full-mod compile) skip with a
   message instead of failing when no install is found. A skip is not a pass.
 

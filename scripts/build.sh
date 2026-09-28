@@ -60,8 +60,18 @@ mkdir -p "$OUT/Config"
 copy_payload() {
   cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
   cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
-  if [ -f "$ROOT/config/characters.json" ]; then cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"; fi
-  if [ -f "$ROOT/evolved/best.json" ]; then mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"; fi
+  # Both files fall back to defaults at runtime, so their absence is not a
+  # build failure, but a silently thinner payload is a shipped surprise.
+  if [ -f "$ROOT/config/characters.json" ]; then
+    cp "$ROOT/config/characters.json" "$OUT/Config/characters.json"
+  else
+    echo "WARNING: config/characters.json not found; payload ships with default characters" >&2
+  fi
+  if [ -f "$ROOT/evolved/best.json" ]; then
+    mkdir -p "$OUT/evolved" && cp "$ROOT/evolved/best.json" "$OUT/evolved/best.json"
+  else
+    echo "WARNING: evolved/best.json not found; payload ships without GA champion weights" >&2
+  fi
   cp "$ROOT/config/entityclasses.xml" "$OUT/Config/entityclasses.xml"
   echo "patch -> $OUT/Config/entityclasses.xml"
 }
@@ -80,6 +90,19 @@ build_webmod() {
   cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"
 }
 
+# The payload is installed on servers as-is, so a compiler default that
+# silently adds a file (the SDK's portable pdb is the one that has bitten us)
+# must fail the build rather than ship.
+assert_payload_clean() {
+  local stray
+  stray="$(find "$OUT" -type f \( -name '*.pdb' -o -name '*.mdb' \) -print)"
+  if [ -n "$stray" ]; then
+    echo "ERROR: debug symbols in the payload (both backends must ship none):" >&2
+    echo "$stray" >&2
+    exit 1
+  fi
+}
+
 BUILD_BACKEND="${SEVENDTD_BUILD_BACKEND:-auto}"
 if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && [[ -n "$(dotnet --list-sdks 2>/dev/null)" ]]; then
   echo "Building with dotnet SDK against: $MANAGED"
@@ -88,6 +111,7 @@ if [[ "$BUILD_BACKEND" != "mcs" ]] && command -v dotnet >/dev/null 2>&1 && [[ -n
     -p:BotModOutput="$OUT/"
   copy_payload
   build_webmod
+  assert_payload_clean
   echo "OK -> $OUT/BotMod.dll"
   ls -la "$OUT"
   exit 0
@@ -118,5 +142,6 @@ mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 -warnaserro
   -out:"$OUT/BotMod.dll" "${refs[@]}" "${sources[@]}"
 copy_payload
 build_webmod
+assert_payload_clean
 echo "OK -> $OUT/BotMod.dll"
 ls -la "$OUT"
