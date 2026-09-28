@@ -401,10 +401,10 @@ namespace BotMod.Core
                     foreach (var alias in new[] { "zombieSoldier", "zombieBoe", "npcTraderJoel", "npcSurvivorRanged" })
                     {
                         classId = EntityClass.FromString(alias);
-                        if (classId >= 0) { want = alias; ModApi.Warn("Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
+                        if (classId >= 0) { want = alias; ModApi.WarnRateLimited(() => "Entity class '" + entityClassName + "' not found, using fallback '" + alias + "'"); break; }
                     }
                 }
-                if (classId < 0) { ModApi.Warn("Unknown entity class: " + (entityClassName ?? "(null)") + " (resolved " + want + ")"); return null; }
+                if (classId < 0) { string named = entityClassName; ModApi.WarnRateLimited(() => "Unknown entity class: " + (named ?? "(null)") + " (resolved " + want + ")"); return null; }
                 Entity e = null;
                 Exception createEx = null;
                 try
@@ -423,17 +423,21 @@ namespace BotMod.Core
                     // Both creation paths failed: surface why here. The caller
                     // only reports the position ("Spawn failed at ..."), so a
                     // broken entity class would otherwise fail invisibly.
-                    ModApi.Warn("CreateEntity failed class=" + want + " id=" + classId + ": "
+                    // Rate-limited with the rest of this spawn path: population
+                    // maintenance retries every second, so an unthrottled
+                    // warning is a line/s flood until the cause is fixed.
+                    string cls = want; int cid = classId;
+                    ModApi.WarnRateLimited(() => "CreateEntity failed class=" + cls + " id=" + cid + ": "
                         + (createEx != null ? createEx.Message : "returned null"));
                     return null;
                 }
                 TrySetEntityName(e, botName);
-                try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.Warn("SpawnEntityInWorld failed: " + ex.Message); return null; }
+                try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.WarnRateLimited(() => "SpawnEntityInWorld failed: " + ex.Message); return null; }
                 var ent = world.GetEntity(e.entityId);
                 if (ent != null) TrySetEntityName(ent, botName);
                 return ent ?? e;
             }
-            catch (Exception ex) { ModApi.Warn("SpawnBotEntity failed: " + ex); return null; }
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "SpawnBotEntity failed: " + ex); return null; }
         }
 
         /// <summary>Item value for an item id, or null when the id resolves to
@@ -486,7 +490,7 @@ namespace BotMod.Core
                             // mistyped BotWeapon repeats on every spawn.
                             else ModApi.WarnRateLimited(() => "weapon '" + gunId + "' not found; bot " + botName + " spawned without a gun");
                         }
-                        catch (Exception ex) { ModApi.Warn("Give weapon failed: " + ex.Message); }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "Give weapon failed: " + ex.Message); }
                     }
                     if (!string.IsNullOrEmpty(cfg.BotAmmo) && cfg.BotAmmoCount > 0)
                     {
@@ -506,7 +510,7 @@ namespace BotMod.Core
                             }
                             else ModApi.WarnRateLimited(() => "ammo '" + cfg.BotAmmo + "' not found; bot " + botName + " spawned with no ammo");
                         }
-                        catch (Exception ex) { ModApi.Warn("Give ammo failed: " + ex.Message); }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "Give ammo failed: " + ex.Message); }
                     }
                     // Pin the soldier body to vanilla player-like physics: no god/no-clip,
                     // and the weight/speed of a player rather than of a zombie.
@@ -526,7 +530,7 @@ namespace BotMod.Core
                     try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
                 }
             }
-            catch (Exception ex) { ModApi.Warn("ConfigureBotEntity failed: " + ex.Message); }
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "ConfigureBotEntity failed: " + ex.Message); }
         }
 
         static void TrySetEntityName(Entity e, string name)

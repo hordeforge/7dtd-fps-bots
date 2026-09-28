@@ -95,7 +95,7 @@ namespace BotMod.Web
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(BuildStatus, "status")));
+                writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(TimedStatus, "status")));
             }
             catch (Exception ex)
             {
@@ -530,6 +530,33 @@ namespace BotMod.Web
             if (key2 != null) payload[key2] = value2;
             if (key3 != null) payload[key3] = value3;
             return Newtonsoft.Json.JsonConvert.SerializeObject(payload);
+        }
+
+        /// <summary>A status build above this many milliseconds is worth a
+        /// line. The dashboard polls this every few seconds per admin session,
+        /// so the cost is proportional to how long the world makes the scan
+        /// (bots x players), not to the poll rate: a healthy build stays
+        /// silent however often it is read.</summary>
+        const long SlowStatusBuildMs = 2000;
+
+        /// <summary>Build the status body, warning when the build is slow.
+        /// The timer sits inside the dispatch, so the warning is raised on the
+        /// main thread and can go through the shared flood gate (which is
+        /// main-thread only). Without it a degraded read is invisible until it
+        /// trips the 15 s dispatch timeout and surfaces as a 500, so the window
+        /// where the dashboard is merely slow leaves nothing in the log.
+        /// Read-only: the body is the same BuildStatus output either way.</summary>
+        static string TimedStatus()
+        {
+            var build = System.Diagnostics.Stopwatch.StartNew();
+            string body = BuildStatus();
+            if (build.ElapsedMilliseconds > SlowStatusBuildMs)
+            {
+                int alive = BotManager.Instance.BotCount;
+                ModApi.WarnRateLimited(() => "web api status build took " + build.ElapsedMilliseconds
+                    + "ms with " + alive + " bots alive (dashboard polls this every few seconds)");
+            }
+            return body;
         }
 
         static string BuildStatus()

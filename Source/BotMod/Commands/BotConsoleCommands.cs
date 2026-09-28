@@ -79,7 +79,7 @@ namespace BotMod.Commands
                         break;
                     case "list": case "ls": DoList(); break;
                     case "players": case "who": DoPlayers(); break;
-                    case "spawn": case "add": DoSpawn(_params); break;
+                    case "spawn": case "add": DoSpawn(_params, _senderInfo); break;
                     case "remove": case "rm": case "kick": case "clear": DoRemove(_params); break;
                     case "count": case "set": DoCount(_params); break;
                     case "weapon": case "gun": DoWeapon(_params); break;
@@ -95,7 +95,10 @@ namespace BotMod.Commands
                     default: SdtdConsole.Instance.Output("Unknown bot subcommand: '" + sub + "'." + Suggest(sub) + " Try: bot help"); break;
                 }
             }
-            catch (Exception ex) { SdtdConsole.Instance.Output("bot command failed: " + ex.Message); ModApi.Error("bot cmd failed: " + ex); }
+            // The subcommand names the failing path: the exception alone can be
+            // the same one thrown from six different handlers, and the console
+            // echo the operator sees is not in this log.
+            catch (Exception ex) { SdtdConsole.Instance.Output("bot command failed: " + ex.Message); ModApi.Error("bot cmd '" + LogSanitizer.Clean(sub) + "' failed: " + ex); }
         }
         void DoStatus()
         {
@@ -124,7 +127,7 @@ namespace BotMod.Commands
                 ? "No players online."
                 : "Online (" + roster.Count + "): " + string.Join(", ", roster.ToArray()));
         }
-        void DoSpawn(List<string> p)
+        void DoSpawn(List<string> p, CommandSenderInfo sender)
         {
             if (!BotArgParser.TryParseSpawn(p, 1, out int count, out float x, out float z, out bool hasPos, out string weapon, out string error))
             { SdtdConsole.Instance.Output(error); return; }
@@ -141,6 +144,15 @@ namespace BotMod.Commands
             int spawned = 0;
             for (int i = 0; i < count; i++) if (BotManager.Instance.TrySpawnOne(pos, weaponOverride: weapon)) spawned++;
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots" + (weapon != null ? $" weapon={weapon}" : "") + "." + (spawned < count ? " (max or spawn failed)" : ""));
+            // Server log, not just the issuing session: the console echo goes
+            // to the telnet/console window and is lost with the connection, so
+            // without this line a spawn leaves no trace in the log that the web
+            // API, removals and config writes all record. The short-fall half
+            // ("max or spawn failed") is what makes a partial spawn visible.
+            ModApi.Log("bot cmd spawn: " + spawned + "/" + count + " bots"
+                + (weapon != null ? " weapon=" + weapon : "")
+                + (spawned < count ? " (max or spawn failed)" : "")
+                + " by " + SenderTag(sender));
         }
         void DoRemove(List<string> p)
         {
@@ -194,7 +206,32 @@ namespace BotMod.Commands
             if (target == null) target = BotManager.FindPlayerByNameOrId(world, ident);
             if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game), or run 'bot players' for the online list."); return; }
             int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
-            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident)} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
+            string nearName = LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident);
+            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {nearName} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
+            // Same audit line as DoSpawn: this surface's echo never reaches the
+            // server log, and a near-player spawn is the one an incident review
+            // most needs to place in time.
+            ModApi.Log("bot cmd player: " + spawned + "/" + count + " bots near " + nearName
+                + " (id " + target.entityId.ToString(CultureInfo.InvariantCulture) + ")"
+                + (weapon != null ? " weapon=" + weapon : "")
+                + " by " + SenderTag(sender));
+        }
+
+        /// <summary>Who issued a console mutation, for the audit line. The
+        /// console echo identifies the session only to the session itself, so
+        /// the server log needs the issuer recorded on the same line as the
+        /// effect. Remote telnet clients carry a connection; the server console
+        /// and RCON do not, and read as "local". A throwing sender lookup must
+        /// not fail the command, so it degrades to "unknown".</summary>
+        static string SenderTag(CommandSenderInfo sender)
+        {
+            try
+            {
+                var ci = sender.RemoteClientInfo;
+                if (ci == null) return "local";
+                return "entity " + ci.entityId.ToString(CultureInfo.InvariantCulture);
+            }
+            catch (Exception) { return "unknown"; }
         }
         static EntityPlayer FindPlayerBySender(World world, CommandSenderInfo sender)
         {

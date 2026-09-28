@@ -24,6 +24,10 @@ namespace BotMod.Core
         float _tickAccum;
         float _spawnRetryTimer;
         bool _started;
+        // How often the population heartbeat reports alive vs wanted. A slow
+        // cadence keeps the line readable; the heartbeat is the only recurring
+        // evidence that population maintenance is running at all.
+        const float PopulationReportIntervalSec = 30f;
         BotManager() { }
         public IReadOnlyList<Bot> Bots => _bots;
         public int BotCount => _bots.Count;
@@ -136,7 +140,18 @@ namespace BotMod.Core
                     ModApi.WarnRateLimited(() => "Bot tick failed id=" + b.EntityId + ": " + ex);
                 }
             }
-            if (_tickAccum > 30f) { _tickAccum = 0f; if (_bots.Count > 0) ModApi.Log($"Bots alive: {_bots.Count}/{ModApi.Config.TargetBotCount}"); }
+            if (_tickAccum > PopulationReportIntervalSec)
+            {
+                _tickAccum = 0f;
+                int wanted = ModApi.Config.TargetBotCount;
+                // Report the deficit, not just the healthy case: gating on
+                // "any alive" left the most alarming state (a target set and
+                // nothing spawning) with no recurring line at all, so an
+                // operator saw only the per-second spawn-failure warning, which
+                // names a cause but never the standing alive/wanted gap. With a
+                // target of 0 there is nothing to report and the line is skipped.
+                if (wanted > 0) ModApi.Log($"Bots alive: {_bots.Count}/{wanted}");
+            }
         }
         void MaintainPopulation()
         {
@@ -160,7 +175,16 @@ namespace BotMod.Core
             var wp = BotSpawner.PickWeapon(cfg, weaponOverride);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
             var character = BotCharacterDB.ForName(name);
-            if (e == null) { ModApi.Warn("Spawn failed at " + pos); return false; }
+            if (e == null)
+            {
+                // MaintainPopulation retries this every second, so an unthrottled
+                // warning becomes a line/s flood for as long as the cause lasts
+                // (unknown entity class, no valid spawn point). The first
+                // occurrence carries the full detail, repeats are counted.
+                Vector3 at = pos;
+                ModApi.WarnRateLimited(() => "Spawn failed at " + at);
+                return false;
+            }
             BotSpawner.ConfigureBotEntity(e, cfg, wp.GunId, name);
             var bot = new Bot(e.entityId, name, Time.time, wp, character);
             _bots.Add(bot); _botEntityIds.Add(e.entityId); _botById[e.entityId] = bot;
