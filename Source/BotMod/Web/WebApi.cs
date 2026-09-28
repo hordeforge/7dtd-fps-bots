@@ -135,7 +135,7 @@ namespace BotMod.Web
             // call can be tied back to the exact server log line, which for a
             // keyless request carries no other identifier. Sanitized value, so
             // a request-supplied key cannot inject header structure.
-            context.Response.Headers["X-BotMod-Request-Id"] = LogSanitizer.Clean(reqTag);
+            context.Response.Headers["X-BotMod-Request-Id"] = logTag;
             if (keyed && !IdempotencyLedger.IsValidKey(requestId))
             {
                 ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected INVALID_REQUEST_ID");
@@ -172,230 +172,12 @@ namespace BotMod.Web
                     return;
                 }
             }
-            string respBody = null;
-            string errorCode = null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            string respBody;
+            string errorCode;
             try
             {
-                // Every action body runs on the game's main thread, not just
-                // the world-touching ones: config mutations (skill/vs/team/
-                // teamCount also call Normalize(), which rewrites ~30 fields
-                // non-atomically) previously executed directly on this web
-                // thread pool thread, racing each other and the console's
-                // `bot reload` instance swap (a handler could mutate the
-                // config object ReloadConfig had just replaced and report
-                // success while the live config never changed). Dispatching
-                // serializes all mutations with console commands and ticks by
-                // construction; nested RunOnMain calls below short-circuit
-                // via ThreadManager.IsMainThread().
-                RunOnMain<object>(() =>
-                {
-                    switch (action)
-                    {
-                    case "enable":
-                        ModApi.Config.Enabled = true;
-                        ModApi.PersistConfigField("Enabled", true);
-                        respBody = RespondJson("enabled", true);
-                        break;
-                    case "disable":
-                        ModApi.Config.Enabled = false;
-                        ModApi.PersistConfigField("Enabled", false);
-                        respBody = RespondJson("enabled", false);
-                        break;
-                    case "spawn":
-                        {
-                            if (!OptCount(_jsonInput, out int count)) { errorCode = "INVALID_COUNT"; break; }
-                            // Bot spawning touches Unity/world state and must run
-                            // on the main thread (a direct call from the web
-                            // thread pool segfaulted the server).
-                            int spawned = RunOnMain(() =>
-                            {
-                                int n = 0;
-                                for (int i = 0; i < count; i++)
-                                    if (BotManager.Instance.TrySpawnOne()) n++;
-                                return n;
-                            }, "spawn");
-                            respBody = RespondJson("spawned", spawned);
-                        }
-                        break;
-                    case "spawnnear":
-                        {
-                            // {"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}
-                            // Same path as `bot player <name>`: bots spawn near the
-                            // target player, out-of-sight preferred (11-42m via DM
-                            // spawnpoints with a ~22m sweet spot, else a 14-30m ring).
-                            string ident = RequestFields.OptString(_jsonInput, "player");
-                            // Absent player is a client bug, not "player not found":
-                            // both used to answer 200 {"found":false}, which made a
-                            // malformed body indistinguishable from a left player.
-                            if (string.IsNullOrEmpty(ident)) { errorCode = "INVALID_PLAYER"; break; }
-                            if (!OptCount(_jsonInput, out int count)) { errorCode = "INVALID_COUNT"; break; }
-                            string weapon = null;
-                            {
-                                string wv = RequestFields.OptString(_jsonInput, "weapon");
-                                if (!string.IsNullOrEmpty(wv))
-                                {
-                                    // Same grammar as `bot player <name> [count]
-                                    // [weapon]` (BotArgParser.LooksLikeWeapon): an
-                                    // off-grammar id used to be dropped silently and
-                                    // the bots spawned with random loadouts instead
-                                    // of the requested one.
-                                    if (!BotMod.Commands.BotArgParser.LooksLikeWeapon(wv)) { errorCode = "INVALID_WEAPON"; break; }
-                                    weapon = wv;
-                                }
-                            }
-                            var r = RunOnMain(() =>
-                            {
-                                var world = GameManager.Instance?.World;
-                                if (world == null || string.IsNullOrEmpty(ident)) return new { spawned = 0, found = false, name = ident };
-                                EntityPlayer target = BotManager.FindPlayerByNameOrId(world, ident);
-                                if (target == null) return new { spawned = 0, found = false, name = ident };
-                                int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
-                                return new { spawned, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
-                            }, "spawnNear");
-                            respBody = RespondJson("spawned", r.spawned, "found", r.found, "player", r.name);
-                        }
-                        break;
-                    case "remove":
-                    case "clear":
-                        {
-                            int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), "removeAll");
-                            respBody = RespondJson("removed", removed);
-                        }
-                        break;
-                    case "neural":
-                        {
-                            // The toggles require an explicit on flag: absence or
-                            // garbage used to read as false and silently flip the
-                            // live setting (e.g. squad mode off) with a 200.
-                            if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
-                            ModApi.Config.UseNeuralBrain = on;
-                            ModApi.PersistConfigField("UseNeuralBrain", on);
-                            string why = "";
-                            if (on)
-                            {
-                                bool ok = RunOnMain(
-                                    () => BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why),
-                                    "neuralLoad");
-                                // Load failure stays visible in the response body
-                                // ("loaded":false,"reason":"...") and in this line.
-                                if (!ok) ModApi.Warn("web api neural on: weights load failed: " + why);
-                            }
-                            respBody = RespondJson("neural", on, "loaded", on ? BotMod.AI.BotNeuralBrain.Loaded : false, "reason", why);
-                        }
-                        break;
-                    case "removeone":
-                        {
-                            // {"action":"removeOne","entityId":N} - remove a single bot.
-                            // Absence ran a lookup for id 0 and answered 200
-                            // {"removed":false}; a malformed body is a 400 instead.
-                            if (RequestFields.OptInt(_jsonInput, "entityId", out int entityId) != FieldRead.Ok) { errorCode = "INVALID_ENTITY_ID"; break; }
-                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId, "web"), "removeOne");
-                            respBody = RespondJson("removed", removed, "entityId", entityId);
-                        }
-                        break;
-                    case "skill":
-                        {
-                            // {"action":"skill","level":0-4} - same as `bot skill`.
-                            // Clamp/Normalize live in BotConfig.SetDifficulty (shared
-                            // with the console command); the persisted value is the
-                            // post-clamp property. Absent level re-applies the
-                            // current difficulty (a no-op refresh); garbage rejects.
-                            int level = ModApi.Config.Difficulty;
-                            FieldRead read = RequestFields.OptInt(_jsonInput, "level", out int parsed);
-                            if (read == FieldRead.Invalid) { errorCode = "INVALID_LEVEL"; break; }
-                            if (read == FieldRead.Ok) level = parsed;
-                            string field = ModApi.Config.SetDifficulty(level);
-                            ModApi.PersistConfigField(field, ModApi.Config.Difficulty);
-                            respBody = RespondJson("difficulty", ModApi.Config.Difficulty);
-                        }
-                        break;
-                    case "team":
-                        {
-                            // {"action":"team","on":bool} - squad mode: all bots are
-                            // one team (never target/damage each other). Persisted.
-                            if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
-                            ModApi.Config.BotTeam = on;
-                            ModApi.PersistConfigField("BotTeam", on);
-                            respBody = RespondJson("team", on);
-                        }
-                        break;
-                    case "vs":
-                        {
-                            // {"action":"vs","target":"bot|zombie|player","on":bool} -
-                            // bots shoot that target class (same as `bot vs`). Persisted.
-                            // The target names the field being set, so it is
-                            // checked before the flag, as spawnNear checks
-                            // `player` before `count`: a body missing both
-                            // reports the missing target, not a missing flag.
-                            string target = RequestFields.OptString(_jsonInput, "target")?.ToLowerInvariant() ?? "";
-                            if (string.IsNullOrEmpty(target)) { errorCode = "INVALID_TARGET"; break; }
-                            if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
-                            if (ModApi.Config.SetVsTarget(target, on, out string field))
-                            {
-                                ModApi.PersistConfigField(field, on);
-                                respBody = RespondJson("vs", target, "on", on);
-                            }
-                            else errorCode = "INVALID_TARGET";
-                        }
-                        break;
-                    case "setteam":
-                        {
-                            // {"action":"setTeam","name":"<botName>","team":N} - assign
-                            // a bot to a team (0 = free-for-all). Keyed by base name,
-                            // persists to config, applies to live bots immediately.
-                            // `name` identifies the bot, so it is validated first
-                            // (same order as spawnNear's player and removeOne's
-                            // entityId): a body missing both reports INVALID_NAME.
-                            string name = RequestFields.OptString(_jsonInput, "name") ?? "";
-                            if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
-                            int team = 0;
-                            FieldRead teamRead = RequestFields.OptInt(_jsonInput, "team", out int teamParsed);
-                            if (teamRead == FieldRead.Invalid) { errorCode = "INVALID_TEAM"; break; }
-                            if (teamRead == FieldRead.Ok) team = teamParsed;
-                            string baseName = BotText.BaseName(name);
-                            var cfg = ModApi.Config;
-                            team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
-                            // Locked helper + snapshot: TeamAssignments is also
-                            // read per damage event; the lock keeps lookups and
-                            // this write from ever touching the dictionary
-                            // concurrently (this body now runs on the main
-                            // thread, but console/web surfaces share it).
-                            cfg.SetTeamAssignment(baseName, team);
-                            ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
-                            respBody = RespondJson("name", baseName, "team", team);
-                        }
-                        break;
-                    case "teamcount":
-                        {
-                            // {"action":"teamCount","count":N} - number of team
-                            // buckets (0 = free-for-all only). Persisted. Clamp +
-                            // assignment pruning live in BotConfig.SetTeamCount
-                            // (shared with the console command). Absent count
-                            // re-applies the current value; garbage rejects.
-                            int count = ModApi.Config.BotTeamCount;
-                            FieldRead countRead = RequestFields.OptInt(_jsonInput, "count", out int countParsed);
-                            if (countRead == FieldRead.Invalid) { errorCode = "INVALID_COUNT"; break; }
-                            if (countRead == FieldRead.Ok) count = countParsed;
-                            string field = ModApi.Config.SetTeamCount(count);
-                            ModApi.PersistConfigField(field, ModApi.Config.BotTeamCount);
-                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
-                            respBody = RespondJson("teamCount", ModApi.Config.BotTeamCount);
-                        }
-                        break;
-                    case "clearteams":
-                        {
-                            ModApi.Config.ClearTeamAssignments();
-                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
-                            respBody = RespondJson("cleared", true);
-                        }
-                        break;
-                    default:
-                        errorCode = "INVALID_ACTION";
-                        break;
-                    }
-                    return null;
-                }, "action:" + logAction);
+                respBody = RunAction(action, logAction, _jsonInput, out errorCode);
             }
             catch (Exception ex)
             {
@@ -431,6 +213,229 @@ namespace BotMod.Web
             ModApi.Log("web api action=" + logAction + " req=" + logTag + " ok in " + sw.ElapsedMilliseconds + "ms " + LogSanitizer.Clean(respBody));
             writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
+        }
+
+        /// <summary>Execute one admin action and return its success body, or
+        /// set <paramref name="errorCode"/> to the INVALID_* code the caller
+        /// answers with a 400. <paramref name="logAction"/> is the sanitized
+        /// action name, also used as the dispatch's operation tag.</summary>
+        static string RunAction(string action, string logAction, IDictionary<string, object> body, out string errorCode)
+        {
+            string respBody = null;
+            string failure = null;
+            // Every action body runs on the game's main thread, not just
+            // the world-touching ones: config mutations (skill/vs/team/
+            // teamCount also call Normalize(), which rewrites ~30 fields
+            // non-atomically) previously executed directly on this web
+            // thread pool thread, racing each other and the console's
+            // `bot reload` instance swap (a handler could mutate the
+            // config object ReloadConfig had just replaced and report
+            // success while the live config never changed). Dispatching
+            // serializes all mutations with console commands and ticks by
+            // construction; nested RunOnMain calls below short-circuit
+            // via ThreadManager.IsMainThread().
+            RunOnMain<object>(() =>
+            {
+                switch (action)
+                {
+                    case "enable":
+                        ModApi.Config.Enabled = true;
+                        ModApi.PersistConfigField("Enabled", true);
+                        respBody = RespondJson("enabled", true);
+                        break;
+                    case "disable":
+                        ModApi.Config.Enabled = false;
+                        ModApi.PersistConfigField("Enabled", false);
+                        respBody = RespondJson("enabled", false);
+                        break;
+                    case "spawn":
+                        {
+                            if (!OptCount(body, out int count)) { failure = "INVALID_COUNT"; break; }
+                            // Bot spawning touches Unity/world state and must run
+                            // on the main thread (a direct call from the web
+                            // thread pool segfaulted the server).
+                            int spawned = RunOnMain(() =>
+                            {
+                                int n = 0;
+                                for (int i = 0; i < count; i++)
+                                    if (BotManager.Instance.TrySpawnOne()) n++;
+                                return n;
+                            }, "spawn");
+                            respBody = RespondJson("spawned", spawned);
+                        }
+                        break;
+                    case "spawnnear":
+                        {
+                            // {"action":"spawnNear","player":"<name|id>","count":N,"weapon":"<gunId|mixed>"}
+                            // Same path as `bot player <name>`: bots spawn near the
+                            // target player, out-of-sight preferred (11-42m via DM
+                            // spawnpoints with a ~22m sweet spot, else a 14-30m ring).
+                            string ident = RequestFields.OptString(body, "player");
+                            // Absent player is a client bug, not "player not found":
+                            // both used to answer 200 {"found":false}, which made a
+                            // malformed body indistinguishable from a left player.
+                            if (string.IsNullOrEmpty(ident)) { failure = "INVALID_PLAYER"; break; }
+                            if (!OptCount(body, out int count)) { failure = "INVALID_COUNT"; break; }
+                            string weapon = null;
+                            {
+                                string wv = RequestFields.OptString(body, "weapon");
+                                if (!string.IsNullOrEmpty(wv))
+                                {
+                                    // Same grammar as `bot player <name> [count]
+                                    // [weapon]` (BotArgParser.LooksLikeWeapon): an
+                                    // off-grammar id used to be dropped silently and
+                                    // the bots spawned with random loadouts instead
+                                    // of the requested one.
+                                    if (!BotMod.Commands.BotArgParser.LooksLikeWeapon(wv)) { failure = "INVALID_WEAPON"; break; }
+                                    weapon = wv;
+                                }
+                            }
+                            var r = RunOnMain(() =>
+                            {
+                                var world = GameManager.Instance?.World;
+                                if (world == null || string.IsNullOrEmpty(ident)) return new { spawned = 0, found = false, name = ident };
+                                EntityPlayer target = BotManager.FindPlayerByNameOrId(world, ident);
+                                if (target == null) return new { spawned = 0, found = false, name = ident };
+                                int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
+                                return new { spawned, found = true, name = target.EntityName ?? target.PlayerDisplayName ?? ident };
+                            }, "spawnNear");
+                            respBody = RespondJson("spawned", r.spawned, "found", r.found, "player", r.name);
+                        }
+                        break;
+                    case "remove":
+                    case "clear":
+                        {
+                            int removed = RunOnMain(() => BotManager.Instance.RemoveAllBots("web"), "removeAll");
+                            respBody = RespondJson("removed", removed);
+                        }
+                        break;
+                    case "neural":
+                        {
+                            // The toggles require an explicit on flag: absence or
+                            // garbage used to read as false and silently flip the
+                            // live setting (e.g. squad mode off) with a 200.
+                            if (RequestFields.RequireBool(body, "on", out bool on) != FieldRead.Ok) { failure = "INVALID_ON"; break; }
+                            ModApi.Config.UseNeuralBrain = on;
+                            ModApi.PersistConfigField("UseNeuralBrain", on);
+                            string why = "";
+                            if (on)
+                            {
+                                bool ok = RunOnMain(
+                                    () => BotMod.AI.BotNeuralBrain.TryLoad(ModApi.Config.BotNeuralWeightPath, out why),
+                                    "neuralLoad");
+                                // Load failure stays visible in the response body
+                                // ("loaded":false,"reason":"...") and in this line.
+                                if (!ok) ModApi.Warn("web api neural on: weights load failed: " + why);
+                            }
+                            respBody = RespondJson("neural", on, "loaded", on ? BotMod.AI.BotNeuralBrain.Loaded : false, "reason", why);
+                        }
+                        break;
+                    case "removeone":
+                        {
+                            // {"action":"removeOne","entityId":N} - remove a single bot.
+                            // Absence ran a lookup for id 0 and answered 200
+                            // {"removed":false}; a malformed body is a 400 instead.
+                            if (RequestFields.OptInt(body, "entityId", out int entityId) != FieldRead.Ok) { failure = "INVALID_ENTITY_ID"; break; }
+                            bool removed = RunOnMain(() => BotManager.Instance.RemoveBot(entityId, "web"), "removeOne");
+                            respBody = RespondJson("removed", removed, "entityId", entityId);
+                        }
+                        break;
+                    case "skill":
+                        {
+                            // {"action":"skill","level":0-4} - same as `bot skill`.
+                            // Clamp/Normalize live in BotConfig.SetDifficulty (shared
+                            // with the console command); the persisted value is the
+                            // post-clamp property. Absent level re-applies the
+                            // current difficulty (a no-op refresh); garbage rejects.
+                            int level = ModApi.Config.Difficulty;
+                            FieldRead read = RequestFields.OptInt(body, "level", out int parsed);
+                            if (read == FieldRead.Invalid) { failure = "INVALID_LEVEL"; break; }
+                            if (read == FieldRead.Ok) level = parsed;
+                            string field = ModApi.Config.SetDifficulty(level);
+                            ModApi.PersistConfigField(field, ModApi.Config.Difficulty);
+                            respBody = RespondJson("difficulty", ModApi.Config.Difficulty);
+                        }
+                        break;
+                    case "team":
+                        {
+                            // {"action":"team","on":bool} - squad mode: all bots are
+                            // one team (never target/damage each other). Persisted.
+                            if (RequestFields.RequireBool(body, "on", out bool on) != FieldRead.Ok) { failure = "INVALID_ON"; break; }
+                            ModApi.Config.BotTeam = on;
+                            ModApi.PersistConfigField("BotTeam", on);
+                            respBody = RespondJson("team", on);
+                        }
+                        break;
+                    case "vs":
+                        {
+                            // {"action":"vs","target":"bot|zombie|player","on":bool} -
+                            // bots shoot that target class (same as `bot vs`). Persisted.
+                            string target = RequestFields.OptString(body, "target")?.ToLowerInvariant() ?? "";
+                            if (RequestFields.RequireBool(body, "on", out bool on) != FieldRead.Ok) { failure = "INVALID_ON"; break; }
+                            if (ModApi.Config.SetVsTarget(target, on, out string field))
+                            {
+                                ModApi.PersistConfigField(field, on);
+                                respBody = RespondJson("vs", target, "on", on);
+                            }
+                            else failure = "INVALID_TARGET";
+                        }
+                        break;
+                    case "setteam":
+                        {
+                            // {"action":"setTeam","name":"<botName>","team":N} - assign
+                            // a bot to a team (0 = free-for-all). Keyed by base name,
+                            // persists to config, applies to live bots immediately.
+                            string name = RequestFields.OptString(body, "name") ?? "";
+                            int team = 0;
+                            FieldRead teamRead = RequestFields.OptInt(body, "team", out int teamParsed);
+                            if (teamRead == FieldRead.Invalid) { failure = "INVALID_TEAM"; break; }
+                            if (teamRead == FieldRead.Ok) team = teamParsed;
+                            if (string.IsNullOrEmpty(name)) { failure = "INVALID_NAME"; break; }
+                            string baseName = BotText.BaseName(name);
+                            var cfg = ModApi.Config;
+                            team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
+                            // Locked helper + snapshot: TeamAssignments is also
+                            // read per damage event; the lock keeps lookups and
+                            // this write from ever touching the dictionary
+                            // concurrently (this body now runs on the main
+                            // thread, but console/web surfaces share it).
+                            cfg.SetTeamAssignment(baseName, team);
+                            ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
+                            respBody = RespondJson("name", baseName, "team", team);
+                        }
+                        break;
+                    case "teamcount":
+                        {
+                            // {"action":"teamCount","count":N} - number of team
+                            // buckets (0 = free-for-all only). Persisted. Clamp +
+                            // assignment pruning live in BotConfig.SetTeamCount
+                            // (shared with the console command). Absent count
+                            // re-applies the current value; garbage rejects.
+                            int count = ModApi.Config.BotTeamCount;
+                            FieldRead countRead = RequestFields.OptInt(body, "count", out int countParsed);
+                            if (countRead == FieldRead.Invalid) { failure = "INVALID_COUNT"; break; }
+                            if (countRead == FieldRead.Ok) count = countParsed;
+                            string field = ModApi.Config.SetTeamCount(count);
+                            ModApi.PersistConfigField(field, ModApi.Config.BotTeamCount);
+                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
+                            respBody = RespondJson("teamCount", ModApi.Config.BotTeamCount);
+                        }
+                        break;
+                    case "clearteams":
+                        {
+                            ModApi.Config.ClearTeamAssignments();
+                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
+                            respBody = RespondJson("cleared", true);
+                        }
+                        break;
+                    default:
+                        failure = "INVALID_ACTION";
+                        break;
+                    }
+                    return null;
+                }, "action:" + logAction);
+            errorCode = failure;
+            return respBody;
         }
 
         public override int[] DefaultMethodPermissionLevels() => new[] { 0, 0, 0, 0, 0 };

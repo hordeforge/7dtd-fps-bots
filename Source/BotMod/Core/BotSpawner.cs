@@ -408,7 +408,27 @@ namespace BotMod.Core
             catch (Exception ex) { ModApi.Warn("SpawnBotEntity failed: " + ex); return null; }
         }
 
-        public static void ConfigureBotEntity(Entity e, BotConfig cfg, WeaponProfile wp, string botName)
+        /// <summary>Item value for an item id, or null when the id resolves to
+        /// nothing. GetItem is the cheap lookup; the GetItemClass round trip is
+        /// the fallback for ids it rejects. Both lookups can throw on an
+        /// unknown id, so each is swallowed and the caller reports the miss.</summary>
+        static ItemValue ResolveItem(string itemId)
+        {
+            try { var iv = ItemClass.GetItem(itemId, false); if (iv != null && iv.type != 0) return iv; } catch { }
+            try
+            {
+                var ic = ItemClass.GetItemClass(itemId, false);
+                if (ic != null) { var v = new ItemValue(ic.Id, false); if (v.type != 0) return v; }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>Body setup: health, the weapon (resolved to an item
+        /// value), the ammo stack, and the player-like physics the soldier
+        /// class needs. <paramref name="gun"/> is null when the weapon id
+        /// resolved to nothing, which is reported by the weapon branch.</summary>
+        public static void ConfigureBotEntity(Entity e, BotConfig cfg, string gunId, string botName)
         {
             try
             {
@@ -417,14 +437,12 @@ namespace BotMod.Core
                     try { alive.Health = Mathf.RoundToInt(cfg.BotHealth); } catch { }
                     // Give the gun and actually equip it so the Avatar renders it. Without the holding-item write
                     // the inventory has the gun but the model walks empty-handed.
-                    if (!string.IsNullOrEmpty(wp.GunId))
+                    if (!string.IsNullOrEmpty(gunId))
                     {
                         try
                         {
-                            ItemValue iv = null;
-                            try { iv = ItemClass.GetItem(wp.GunId, false); } catch { }
-                            if (iv == null || iv.type == 0) { var ic = ItemClass.GetItemClass(wp.GunId, false); if (ic != null) iv = new ItemValue(ic.Id, false); }
-                            if (iv != null && iv.type != 0)
+                            ItemValue iv = ResolveItem(gunId);
+                            if (iv != null)
                             {
                                 var stack = new ItemStack(iv, 1);
                                 try { alive.inventory.AddItem(stack); } catch { }
@@ -438,7 +456,7 @@ namespace BotMod.Core
                             // bad gun id stays invisible until someone wonders
                             // why the bots are unarmed. Rate-limited because a
                             // mistyped BotWeapon repeats on every spawn.
-                            else ModApi.WarnRateLimited(() => "weapon '" + wp.GunId + "' not found; bot " + botName + " spawned without a gun");
+                            else ModApi.WarnRateLimited(() => "weapon '" + gunId + "' not found; bot " + botName + " spawned without a gun");
                         }
                         catch (Exception ex) { ModApi.Warn("Give weapon failed: " + ex.Message); }
                     }
@@ -446,10 +464,8 @@ namespace BotMod.Core
                     {
                         try
                         {
-                            ItemValue iv = null;
-                            try { iv = ItemClass.GetItem(cfg.BotAmmo, false); } catch { }
-                            if (iv == null || iv.type == 0) { var ic = ItemClass.GetItemClass(cfg.BotAmmo, false); if (ic != null) iv = new ItemValue(ic.Id, false); }
-                            if (iv != null && iv.type != 0)
+                            ItemValue iv = ResolveItem(cfg.BotAmmo);
+                            if (iv != null)
                             {
                                 var stack = new ItemStack(iv, cfg.BotAmmoCount);
                                 bool added = false;

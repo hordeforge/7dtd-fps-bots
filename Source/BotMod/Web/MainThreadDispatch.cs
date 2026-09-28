@@ -99,7 +99,11 @@ namespace BotMod.Web
                 }
             }
             finally { done.Dispose(); }
-            if (error != null) throw error;
+            // ExceptionDispatchInfo, not a bare `throw error`: rethrowing a
+            // caught exception restamps its stack at this line, so the work's
+            // own frames (where it actually failed) would be gone from every
+            // log line above that prints the exception.
+            if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
             return result;
         }
     }

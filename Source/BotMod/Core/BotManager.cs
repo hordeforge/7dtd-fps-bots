@@ -161,7 +161,7 @@ namespace BotMod.Core
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
             var character = BotCharacterDB.ForName(name);
             if (e == null) { ModApi.Warn("Spawn failed at " + pos); return false; }
-            BotSpawner.ConfigureBotEntity(e, cfg, wp, name);
+            BotSpawner.ConfigureBotEntity(e, cfg, wp.GunId, name);
             var bot = new Bot(e.entityId, name, Time.time, wp, character);
             _bots.Add(bot); _botEntityIds.Add(e.entityId); _botById[e.entityId] = bot;
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
