@@ -98,7 +98,7 @@ def load_csv(path: Path):
     """
     gens, best, mean, median, q25, q75 = [], [], [], [], [], []
     skipped = 0
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         for row in csv.DictReader(f):
             try:
                 g = int(row["gen"])
@@ -136,7 +136,7 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
 def _last_best(run_dir: Path):
     """(best genome, last ckpt json) of the newest gen_*.json, or (None, None)."""
     import ga
-    cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
+    cand = sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key)
     if not cand:
         return None, None
     last = json.loads(cand[-1].read_text(encoding="utf-8"))
@@ -175,7 +175,7 @@ def best_net(run_dir: Path) -> bytes | None:
     axes[0].set_xticks(range(IN)); axes[0].set_xticklabels(range(IN), fontsize=7)
     axes[0].set_yticks(range(H))
     fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04, label="weight")
-    # second: W2
+    # second panel: the output layer W2
     off = H * IN + H
     W2 = w[off: off + OUT * H].reshape(OUT, H)
     im1 = axes[1].imshow(W2, aspect="auto", cmap="RdBu", vmin=-0.7, vmax=0.7)

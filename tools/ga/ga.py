@@ -47,8 +47,7 @@ def init_population(rng: np.random.Generator, P: int = 32, sigma: float = 0.02):
     behavioural-clone warm-start stub was planned)."""
     base = he_init(rng)
     pop = [base]
-    for _ in range(P - 1):
-        pop.append(base + rng.normal(0, sigma, W).astype(np.float32))
+    pop.extend(base + rng.normal(0, sigma, W).astype(np.float32) for _ in range(P - 1))
     return pop
 
 
@@ -172,18 +171,18 @@ def load_best(path: Path) -> tuple[np.ndarray, dict]:
 
 
 def atomic_write_text(path: Path, text: str) -> None:
-    """Replace `path` with `text` via temp file + os.replace so a crash
+    """Replace `path` with `text` via temp file + Path.replace so a crash
     mid-write can never tear the file: readers see either the old or the new
     complete content (same contract as the C# mod's AtomicTextFile). Consumers
     of these files (--resume, the promotion gate, eval/report/viz/replay, and
     BotNeuralBrain.TryLoad on the live server) would otherwise read a
     truncated JSON and silently discard the training state it holds."""
     tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
+    with tmp.open("w", encoding="utf-8") as f:
         f.write(text)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, path)
+    tmp.replace(path)
 
 
 def rng_state(rng: np.random.Generator) -> dict:

@@ -90,7 +90,7 @@ def pinned_knobs(**overrides):
     """pinned_stick for a partial override: the named knobs take the given
     values, the rest keep whatever the caller had set."""
     index = {name: i for i, name in enumerate(KNOB_NAMES)}
-    values = list(globals()[name] for name in KNOB_NAMES)
+    values = [globals()[name] for name in KNOB_NAMES]
     for name, value in overrides.items():
         if name not in index:
             raise KeyError(f"unknown harness knob {name!r}; known: {', '.join(KNOB_NAMES)}")

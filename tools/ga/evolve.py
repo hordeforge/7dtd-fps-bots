@@ -163,7 +163,7 @@ def _seed_resume_csv(resume: str, csv_path: Path, start_gen: int) -> int:
     old_csv = src / "fitness.csv"
     if not old_csv.is_file():
         return 0
-    with open(old_csv, newline="", encoding="utf-8") as f:
+    with old_csv.open(newline="", encoding="utf-8") as f:
         rows = list(csv.reader(f))
     if not rows:
         return 0
@@ -309,7 +309,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     if carried:
         print(f"resume: carried {carried} generation(s) of fitness history into the new run's csv")
     # A seeded file already holds the header the append path must not repeat.
-    with open(csv_path, "a" if carried else "w", newline="", encoding="utf-8") as cf:
+    with csv_path.open("a" if carried else "w", newline="", encoding="utf-8") as cf:
         writer = csv.writer(cf)
         if not carried:
             writer.writerow(["gen", "best", "mean", "median", "q25", "q75", "held"])

@@ -79,7 +79,7 @@ def load_run_csv(run: Path):
     # Unparseable rows are skipped with one stderr note (same contract as
     # report.load_csv): a torn row in one old run's fitness.csv must not kill
     # the whole dashboard build; every section degrades independently.
-    with open(run / "fitness.csv", encoding="utf-8") as f:
+    with (run / "fitness.csv").open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     if not rows:
         return [], [], [], [], [], []

@@ -220,8 +220,8 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
     """
     # Per-bot state arrays below are fixed at 16 slots; a caller passing more
     # bodies must fail loudly here instead of corrupting memory in njit.
-    assert n_bots <= 16
-    assert n_zombies <= 16
+    assert n_bots <= 16  # noqa: S101 -- fail-loud guard for an njit kernel, not a test assertion
+    assert n_zombies <= 16  # noqa: S101 -- same
     # state arrays (stack allocated)
     bx = np.empty(16, dtype=numba.float32)
     by = np.empty(16, dtype=numba.float32)

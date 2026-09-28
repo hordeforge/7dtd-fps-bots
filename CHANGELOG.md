@@ -149,6 +149,16 @@ of them removes a config key or a console command.
   calls over parallel-length sequences pass `strict=True`, so a length
   mismatch raises instead of silently truncating, and the two loop counters
   that were never read are retired.
+- `ruff` selects six more whole categories in `ruff.toml`, all proven clean
+  over `tools/ga` and `scripts` in the same change: `S` (flake8-bandit, the
+  security group, previously never switched on), `PTH` (`open()` and
+  `os.replace()` go through `Path`), `PERF`, `C4`, `ERA` (no commented-out
+  code) and the five groups that had no findings at all (`ASYNC`, `DTZ`,
+  `SLF`, `T10`, `G`). The three `S` findings are rule-scoped `noqa`s with
+  their reason: two asserts that are numba kernel guards, and one
+  `ElementTree.parse` of this repo's own Cobertura output. `line-length` is
+  now written down as the 100-column cap the debt count in `ruff.toml` is
+  measured against.
 
 ### Performance
 
