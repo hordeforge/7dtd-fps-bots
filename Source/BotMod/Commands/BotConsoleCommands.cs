@@ -175,7 +175,12 @@ namespace BotMod.Commands
                     var e = world.GetEntity(ci.entityId) as EntityPlayer;
                     if (e != null) return e;
                 }
-            } catch {}
+            }
+            // Reported, not silent: the caller treats null as "resolve me by
+            // name", and the "me" name match can land on an unrelated online
+            // player, so a broken sender lookup would spawn bots beside the
+            // wrong person with no trace of why "me" did not mean the sender.
+            catch (Exception ex) { ModApi.Warn("`bot player me` sender lookup failed, falling back to a name match: " + ex); }
             return null;
         }
         static string ListPlayerNames(World world)
@@ -184,7 +189,10 @@ namespace BotMod.Commands
                 var names = new List<string>();
                 if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{BotMod.Config.LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
                 return names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none online)";
-            } catch { return "(unknown)"; }
+            }
+            // The "(unknown)" the console prints is not diagnosable on its own;
+            // say what failed so the empty-looking roster is traceable.
+            catch (Exception ex) { ModApi.Warn("player list for the 'player not found' hint failed: " + ex); return "(unknown)"; }
         }
         void DoWeapon(List<string> p)
         {

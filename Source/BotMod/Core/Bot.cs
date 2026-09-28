@@ -723,7 +723,14 @@ namespace BotMod.Core
                         target.Health = Mathf.Max(0, target.Health - dmg);
                         try { target.Stats?.Health?.SetChangedFlag(target.Health, target.Health + dmg); } catch { }
                         dmgResult = dmg;
-                        if (target.Health <= 0) { try { target.SetDead(); } catch { } }
+                        // A SetDead that throws leaves a 0-health bot tracked
+                        // and alive-looking, with no death side effect and no
+                        // kill credit: report it instead of losing the bot.
+                        if (target.Health <= 0)
+                        {
+                            try { target.SetDead(); }
+                            catch (Exception ex) { ModApi.WarnRateLimited(() => "bot target " + target.entityId + " reached 0 health but SetDead failed: " + ex); }
+                        }
                     }
                     else
                     {
@@ -818,7 +825,16 @@ namespace BotMod.Core
                     ModApi.WarnRateLimited(() => "neural eval failed (" + BotNeuralBrain.LastReason + "), bots fall back to heuristic");
                 return _neuralOk;
             }
-            catch { _neuralOk = false; return false; }
+            catch (Exception ex)
+            {
+                // Same degradation as the failed-eval branch above, so it gets
+                // the same report: an exception here (or in building the input
+                // vector) otherwise left every bot on heuristics with no log at
+                // all. Rate-limited: this runs per bot per tick.
+                _neuralOk = false;
+                ModApi.WarnRateLimited(() => "neural eval threw, bots fall back to heuristic: " + ex);
+                return false;
+            }
         }
 
         BotNeuralBrain.NeuralInputs BuildNeuralInputs(EntityAlive me, World world, BotConfig cfg)

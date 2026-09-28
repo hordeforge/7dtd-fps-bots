@@ -24,8 +24,12 @@ namespace BotMod.Patches
                 if (!ModApi.Config.AllowSyntheticAuthBypass) return true;
                 var pid = _cInfo.PlatformId as Platform.Steam.UserIdentifierSteam;
                 if (pid == null) return true;
-                ulong sid = 0;
-                try { sid = pid.SteamId; } catch { return true; }
+                // No inner catch: a SteamId read that throws is a bypass check
+                // failure like any other, and the outer handler below reports it
+                // before falling through to vanilla auth. A local catch here
+                // returned true with no trace, so the client was rejected with
+                // the bypass silently stopped applying.
+                ulong sid = pid.SteamId;
                 // Our synthetic range
                 if (sid < SyntheticIdMin || sid > SyntheticIdMax) return true;
                 __result = Platform.EBeginUserAuthenticationResult.Ok;
@@ -59,28 +63,28 @@ namespace BotMod.Patches
     {
         static void Postfix(ConsoleCmdListPlayers __instance, List<string> _params, CommandSenderInfo _senderInfo)
         {
-            try
+            var mgr = BotMod.Core.BotManager.Instance;
+            if (mgr == null || mgr.BotCount == 0) return;
+            var world = GameManager.Instance?.World;
+            if (world == null) return;
+            // A per-bot failure is reported instead of skipped: this is the
+            // operator's roster, so a bot that throws here vanishes from `lp`
+            // with no trace and reads as despawned. lp is operator-run, not
+            // per-frame, so an unguarded Warn cannot flood.
+            foreach (var bot in mgr.Bots)
             {
-                var mgr = BotMod.Core.BotManager.Instance;
-                if (mgr == null || mgr.BotCount == 0) return;
-                var world = GameManager.Instance?.World;
-                if (world == null) return;
-                foreach (var bot in mgr.Bots)
+                try
                 {
-                    try
-                    {
-                        var ent = world.GetEntity(bot.EntityId) as EntityAlive;
-                        if (ent == null) continue;
-                        string pos = ent.GetPosition().ToString();
-                        // bot.Name already carries the "[Bot] " tag (BotSpawner.PickName
-                        // guarantees it); prefixing again printed "[Bot] [Bot] Grunt_42".
-                        string line = $"{bot.Name} id={bot.EntityId} pos={pos} health={ent.Health} deaths={ent.Died} zombies={ent.KilledZombies} players={ent.KilledPlayers} score={ent.Score} level={(ent.Progression!=null?ent.Progression.GetLevel():1)}";
-                        SdtdConsole.Instance.Output(line);
-                    }
-                    catch { }
+                    var ent = world.GetEntity(bot.EntityId) as EntityAlive;
+                    if (ent == null) continue;
+                    string pos = ent.GetPosition().ToString();
+                    // bot.Name already carries the "[Bot] " tag (BotSpawner.PickName
+                    // guarantees it); prefixing again printed "[Bot] [Bot] Grunt_42".
+                    string line = $"{bot.Name} id={bot.EntityId} pos={pos} health={ent.Health} deaths={ent.Died} zombies={ent.KilledZombies} players={ent.KilledPlayers} score={ent.Score} level={(ent.Progression!=null?ent.Progression.GetLevel():1)}";
+                    SdtdConsole.Instance.Output(line);
                 }
+                catch (Exception ex) { BotMod.ModApi.Warn("listplayers: bot id=" + bot.EntityId + " omitted from the roster: " + ex); }
             }
-            catch { }
         }
     }
 
@@ -101,9 +105,14 @@ namespace BotMod.Patches
                 if (!BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId)) return;
                 // Bot victims were already counted via Died prior to death; just nudge replication
                 // (bump the stat's Changed flag so the 0.5s TickWait push ships it to clients).
-                try { __instance.Stats?.Health?.SetChangedFlag(__instance.Health, __instance.Health - 1); } catch { }
+                try { __instance.Stats?.Health?.SetChangedFlag(__instance.Health, __instance.Health - 1); }
+                catch (Exception ex) { BotMod.ModApi.Warn("bot death stat refresh failed for entity " + __instance.entityId + " (clients keep a stale health/score column): " + ex); }
                 BotMod.Core.BotManager.Instance.NotifyBotDeath(__instance.entityId);
-                if (!ModApi.Config.DropLootOnDeath) try { __instance.lootList = null; } catch { }
+                if (!ModApi.Config.DropLootOnDeath)
+                {
+                    try { __instance.lootList = null; }
+                    catch (Exception ex) { BotMod.ModApi.Warn("loot drop for dead bot " + __instance.entityId + " failed (DropLootOnDeath=false): " + ex); }
+                }
             }
             catch (Exception ex)
             {

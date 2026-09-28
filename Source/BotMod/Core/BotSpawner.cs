@@ -403,6 +403,12 @@ namespace BotMod.Core
                                 try { alive.inventory.updateHoldingItem(); } catch { }
                                 try { alive.inventory.ForceHoldingItemUpdate(); } catch { }
                             }
+                            // Both lookups missed: the bot spawns holding nothing
+                            // and the caller logs it as a normal spawn, so the
+                            // bad gun id stays invisible until someone wonders
+                            // why the bots are unarmed. Rate-limited because a
+                            // mistyped BotWeapon repeats on every spawn.
+                            else ModApi.WarnRateLimited(() => "weapon '" + wp.GunId + "' not found; bot " + botName + " spawned without a gun");
                         }
                         catch (Exception ex) { ModApi.Warn("Give weapon failed: " + ex.Message); }
                     }
@@ -413,9 +419,20 @@ namespace BotMod.Core
                             ItemValue iv = null;
                             try { iv = ItemClass.GetItem(cfg.BotAmmo, false); } catch { }
                             if (iv == null || iv.type == 0) { var ic = ItemClass.GetItemClass(cfg.BotAmmo, false); if (ic != null) iv = new ItemValue(ic.Id, false); }
-                            if (iv != null && iv.type != 0) { var stack = new ItemStack(iv, cfg.BotAmmoCount); try { alive.bag.AddItem(stack); } catch { } try { alive.inventory.AddItem(stack); } catch { } }
+                            if (iv != null && iv.type != 0)
+                            {
+                                var stack = new ItemStack(iv, cfg.BotAmmoCount);
+                                bool added = false;
+                                // Both slots are tried (bag is the fallback when
+                                // a full inventory rejects the stack); only when
+                                // neither accepted it is the bot really unarmed.
+                                try { alive.bag.AddItem(stack); added = true; } catch { }
+                                if (!added) try { alive.inventory.AddItem(stack); } catch { }
+                                if (!added) ModApi.WarnRateLimited(() => "ammo '" + cfg.BotAmmo + "' x" + cfg.BotAmmoCount + " added to neither bag nor inventory; bot " + botName + " cannot fire");
+                            }
+                            else ModApi.WarnRateLimited(() => "ammo '" + cfg.BotAmmo + "' not found; bot " + botName + " spawned with no ammo");
                         }
-                        catch { }
+                        catch (Exception ex) { ModApi.Warn("Give ammo failed: " + ex.Message); }
                     }
                     // Enforce player-like physics so bots aren't faster/slower or heavier than you.
                     // Match moveSpeed etc to vanilla playerMale defaults; no god/no-clip.
