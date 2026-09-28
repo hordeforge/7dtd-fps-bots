@@ -58,6 +58,7 @@ static class LogSanitizerFuzzTests
     {
         '\u0000', '\u0007', '\u001b', '\t', '\n', '\r', '\x7f', '\u0085', '\u009b',
         '\u200b', '\u200c', '\u200e', '\u202a', '\u202e', '\u2060', '\ufeff', '\ufe0f',
+        '\u061c', '\u2066', '\u2067', '\u2068', '\u2069',
         'a', 'Z', '?', ' ', '\u00e9', '\u2014', '\u4e2d', '\ud83d', '\ude00'
     };
 
@@ -70,7 +71,10 @@ static class LogSanitizerFuzzTests
         {
             if (roll < 0.45) sb.Append(HotChars[rng.Next(HotChars.Length)]);
             else if (roll < 0.70) sb.Append((char)rng.Next(0x10000));
-            else sb.Append((char)(rng.Next(2) == 0 ? rng.Next(0x20) : rng.Next(0x2028, 0x2066)));
+            // The U+2028..U+206A block: separators, bidi controls, the word
+            // joiner run and the isolates, which is where every scrubbable
+            // non-C0/C1 character in the BMP lives.
+            else sb.Append((char)(rng.Next(2) == 0 ? rng.Next(0x20) : rng.Next(0x2028, 0x206A)));
         }
         return sb.ToString();
     }

@@ -52,8 +52,11 @@ namespace BotMod.Web
     /// is full, rather than reporting a team that was never stored. A requestId
     /// that is present but
     /// unusable (empty or over the ledger key limit) is INVALID_REQUEST_ID:
-    /// the caller must learn its retry protection is not active. Range
-    /// clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
+    /// the caller must learn its retry protection is not active. The key is
+    /// canonicalized through BotText.IdentityKey before any of its uses (ledger
+    /// claim, audit tag, response header), so an NFD spelling or a pasted
+    /// zero-width character cannot split one logical key into two.
+    /// Range clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
     /// console command's setters in BotConfig.
     ///
     /// Correlation: every POST audit line names the request (the client
@@ -121,7 +124,19 @@ namespace BotMod.Web
             // retries (see class doc + IdempotencyLedger). Present but unusable
             // is a 400: silently degrading to keyless execution would leave the
             // caller believing retries replay when they would re-execute.
-            string requestId = RequestFields.OptString(_jsonInput, "requestId");
+            //
+            // Canonicalized once, here, before any of its uses (validity check,
+            // ledger claim, audit tag, response header) so they cannot disagree.
+            // The ledger compares keys ordinally, and a client that re-serialized
+            // its key from an NFD name, or that pasted one carrying a
+            // zero-width character, sent a different string for the same logical
+            // key: the retry missed the entry entirely and the action ran a
+            // second time (two spawns, two persisted writes) instead of
+            // replaying, which is the exact failure the ledger exists to
+            // prevent. Same policy as every other name-keyed surface
+            // (BotText.IdentityKey: no control/invisible characters, then NFC).
+            string requestIdRaw = RequestFields.OptString(_jsonInput, "requestId");
+            string requestId = requestIdRaw == null ? null : BotText.IdentityKey(requestIdRaw);
             bool keyed = requestId != null;
             // One audit line per executed/replayed/rejected mutation; GET stays
             // unlogged because the dashboard polls it continuously.

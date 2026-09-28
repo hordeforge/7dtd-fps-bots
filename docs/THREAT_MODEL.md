@@ -26,7 +26,7 @@ not reviewed here), the host OS, and the dev-side GA training tools
 |---|------|----------|-------|
 | G1 | Single control carries all `/api/bot` authority: authentication and authorization are delegated entirely to the stock webserver (permission level 0 declared, never re-checked in mod code). A stolen/replayed admin webtoken or a webpermissions misconfiguration yields full bot control with no second gate. | TB2 | Named gap |
 | G2 | Opt-in auth bypass (`AllowSyntheticAuthBypass=true`) lets anyone who can reach the server port join with a predictable synthetic Steam id, without owning the game. Controls: default off (`Source/BotMod/Config/BotConfig.cs:18`), a per-join log line (`Source/BotMod/Patches/BotPatches.cs:47`), and the `AuthBypass=` startup line (`Source/BotMod/ModApi.cs:48`). The log line names the in-world entity id only, not the id or the peer IP (`BotPatches.cs:42-47`), so attribution after the fact rests on entity id, which the client picks in part. | TB1 | Documented residual (README Install) |
-| G3 | ~~Response bodies echoed into the audit line unsanitized.~~ Closed in code: the `ok in <ms> <body>` audit line runs the response through `LogSanitizer.Clean` (`Source/BotMod/Web/WebApi.cs:421`), so request-supplied player names and idents no longer carry C0/DEL/C1, bidi, or zero-width characters into the log. Re-verify before trusting it: the fix is one call site. | TB6 | Closed (verified 2026-09-28) |
+| G3 | ~~Response bodies echoed into the audit line unsanitized.~~ Closed in code: the `ok in <ms> <body>` audit line runs the response through `LogSanitizer.Clean` (`Source/BotMod/Web/WebApi.cs:233`), so request-supplied player names and idents no longer carry C0/DEL/C1, bidi, or zero-width characters into the log. Re-verify before trusting it: the fix is one call site. | TB6 | Closed (verified 2026-09-28) |
 | G4 | No mod-layer rate limit or quota on `/api/bot`: each call is clamped, but aggregate calls (mutations, and the dashboard's status poll on its own timer) are unbounded, and every mutation is serialized onto the game main thread (`Source/BotMod/Web/WebApi.cs:189`). | TB2/TB5 | Named gap |
 | G5 | Operator-trusted files (`botmod.json`, neural weights, `characters.json`) are parsed without integrity verification; weights get structural validation only (`Source/BotMod/AI/BotNeuralBrain.cs:215-267`). | TB3/TB4 | Accepted risk (operator boundary) |
 | G6 | Idempotency ledger eviction (oldest-first, capacity 256) can drop an active claim under key churn, allowing a late duplicate to execute twice. Admin-only trigger. Eviction warns on the server log (`Source/BotMod/Web/WebApi.cs:79-80`, `Source/BotMod/Web/IdempotencyLedger.cs:174-193`), so the churn is attributable. | TB2 | Named gap, low |
@@ -118,9 +118,11 @@ not reviewed here), the host OS, and the dev-side GA training tools
 - **TB6 Mod <-> server log.** Request-derived strings are scrubbed before
   logging (`LogSanitizer.Clean`, `Source/BotMod/Foundation/LogSanitizer.cs:25-47`,
   which covers `char.IsControl` (C0, DEL, C1) plus `BotText.IsInvisible` for
-  bidi/zero-width; applied at `WebApi.cs:129-130` for the routing fields, at
-  `:136` for the response header, and at `:421` for the response body); see G3
-  for the history of the last of those.
+  the whole Unicode `Bidi_Control` set (U+061C, U+200E, U+200F, U+202A-U+202E,
+  U+2066-U+2069), zero-width characters, line and paragraph separators, the
+  word-joiner run, BOM and variation selectors; applied at `WebApi.cs:151-152`
+  for the routing fields, at `:158` for the response header, and at `:233` for
+  the response body); see G3 for the history of the last of those.
 - **TB7 Server data <-> admin browser.** Status JSON renders player/bot names as
   React text nodes only, with no raw-HTML sink available (asset A6).
 

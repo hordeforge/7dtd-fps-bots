@@ -151,9 +151,12 @@ run_suite logsanitizerfuzz \
 
 # POST /api/bot body-field readers: absent vs present-but-garbage triage for
 # untrusted JSON values (named 400s instead of silent defaults), plus a
-# shape fuzzer over adversarial value types.
+# shape fuzzer over adversarial value types. Fingerprint canonicalizes
+# through BotText (same NFC policy every name comparison in the mod uses), so
+# that source compiles here too.
 run_suite requestfields \
   "$root/Source/BotMod/Web/RequestFields.cs" \
+  "$root/Source/BotMod/Foundation/BotText.cs" \
   "$root/tests/BotMod.Tests/RequestFieldsTests.cs"
 
 # vs-class combat gate: bot identity overrides body class (zombieSoldier

@@ -62,6 +62,15 @@ static class BotTextTests
         Check("bidi override stripped from key", BotText.BaseName("[Bot] Do\u202ezer") == "Dozer");
         Check("variation selector stripped from key", BotText.BaseName("[Bot] Visor\ufe0f") == "Visor");
         Check("BOM stripped from key", BotText.BaseName("\ufeffGrunt") == "Grunt");
+        // The whole Unicode Bidi_Control set, not just the embeddings and
+        // overrides: U+061C (ARABIC LETTER MARK) and the isolates
+        // U+2066..U+2069 reorder or hide text in a terminal like U+202E does,
+        // so "Gr\u2066unt" must not be a second key next to "Grunt".
+        Check("bidi isolate U+2066 stripped from key", BotText.BaseName("[Bot] Gr\u2066unt_3") == "Grunt");
+        Check("bidi isolate U+2069 stripped from key", BotText.IdentityKey("Grunt\u2069") == "Grunt");
+        Check("ARABIC LETTER MARK stripped from key", BotText.IdentityKey("Gr\u061cunt") == "Grunt");
+        Check("every Bidi_Control character is scrubbed",
+            BotText.WithoutInvisible("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069") == "");
         Check("control characters stripped from key", BotText.IdentityKey("Gru\r\n\tnt") == "Grunt");
         Check("C1 control stripped from key", BotText.IdentityKey("G\u009frunt") == "Grunt");
         Check("line/paragraph separators stripped from key",

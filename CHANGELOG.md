@@ -164,6 +164,26 @@ of them removes a config key or a console command.
 
 ### Fixed
 
+- Three Unicode characters that reorder or hide text in a terminal reached the
+  audit trail and split identity keys, because the invisible-character table
+  listed Unicode's bidi embeddings and overrides but not the rest of its
+  `Bidi_Control` set: U+061C (ARABIC LETTER MARK) and the isolates U+2066
+  to U+2069. `Gr\u2066unt` was a second team assignment next to `Grunt`, and a
+  `requestId` carrying an isolate was logged verbatim. All of them are scrubbed
+  now, next to the ones that already were.
+- A `requestId` retry that differed from the original only in normalization
+  re-executed the request instead of replaying it. The ledger compares keys
+  ordinally, and the key was stored raw, so a client that re-serialized the
+  key from an NFD name, or pasted one carrying a zero-width character, missed
+  the entry and ran the action a second time (two spawns, two persisted
+  writes). Keys now go through `BotText.IdentityKey` at ingestion, the same
+  policy as team assignments and character names.
+- The same retry pair, with the key spelled identically but the body field
+  decomposed, was answered `409 REQUEST_ID_REUSED` and the client re-ran a
+  spawn the server had already performed. The request fingerprint
+  canonicalizes field names and values to NFC before the ledger compares
+  them, so `"Kíra"` (U+00ED) and `"Kíra"` (U+004B U+0069 U+0301) are one
+  request rather than two.
 - The web panel reported `done` for any 200, including the ones the API
   answers when nothing happened: `spawn` and `spawnNear` return
   `{"spawned":0}` at the bot cap (and `{"found":false}` when the named player

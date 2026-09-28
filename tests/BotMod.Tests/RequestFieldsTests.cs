@@ -179,6 +179,29 @@ static class RequestFieldsTests
             Check("fingerprint is case-sensitive in key names",
                 RequestFields.Fingerprint(Body("On", true), "requestId")
                 != RequestFields.Fingerprint(Body("on", true), "requestId"));
+            // One logical request whose name arrives in two normalization forms
+            // is one request. The ledger compares fingerprints ordinally, so
+            // without Canon the retry below was answered 409
+            // REQUEST_ID_REUSED and the client re-ran a spawn the server had
+            // already performed. Same contract as BotText.NameMatches, which
+            // has matched the NFD spelling against the NFC name since forever.
+            string nfcKira = "K\u00edra", nfdKira = "Ki\u0301ra";
+            Check("fingerprint ignores the normalization form of a value",
+                RequestFields.Fingerprint(Body("action", "spawnNear", "player", nfcKira), "requestId")
+                == RequestFields.Fingerprint(Body("action", "spawnNear", "player", nfdKira), "requestId"));
+            Check("fingerprint ignores the normalization form of a key",
+                RequestFields.Fingerprint(Body("pl\u00e4yer", nfcKira), "requestId")
+                == RequestFields.Fingerprint(Body("pla\u0308yer", nfdKira), "requestId"));
+            // Canon is normalization, not case folding: distinct bodies must
+            // stay distinct.
+            Check("fingerprint still separates names differing in more than form",
+                RequestFields.Fingerprint(Body("player", "Kira"), "requestId")
+                != RequestFields.Fingerprint(Body("player", "K\u00e1ra"), "requestId"));
+            // An invalid lone surrogate cannot come out of a JSON body, but a
+            // Canon that threw on one would take the whole request down; the
+            // fingerprint must stay total.
+            Check("fingerprint survives a lone surrogate value",
+                RequestFields.Fingerprint(Body("player", "a\ud800b"), "requestId") != null);
         }
 
         // Fuzz: arbitrary bodies never throw, only produce the three triage

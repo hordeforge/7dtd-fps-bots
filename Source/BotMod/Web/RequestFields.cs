@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using BotMod.Foundation;
 
 namespace BotMod.Web
 {
@@ -98,7 +99,19 @@ namespace BotMod.Web
         /// the ledger reports as a key reuse instead of replaying the previous
         /// response. Never throws; nested values render as their invariant
         /// text, which no current action accepts, so a nested body is rejected
-        /// as INVALID_* by the action itself before it can matter.</summary>
+        /// as INVALID_* by the action itself before it can matter.
+        ///
+        /// Field names and text values are NFC-canonicalized (BotText.Canon)
+        /// before they go into the text, because the ledger compares
+        /// fingerprints ordinally and the rest of the mod compares names in NFC
+        /// (BotText.NameMatches, BotCharacterDB, team assignments). Without it
+        /// one retry pair could disagree with itself: the same spawnNear for
+        /// "Kíra" re-sent by a client whose editor stored the name decomposed
+        /// ("K" + U+0301) produced a different fingerprint, so the ledger
+        /// answered 409 REQUEST_ID_REUSED and the client retried a spawn the
+        /// server had already run. Case still separates: Canon is
+        /// normalization, not folding, so "on" and "On" remain different
+        /// bodies.</summary>
         public static string Fingerprint(IDictionary<string, object> body, string excludeKey)
         {
             if (body == null) return "";
@@ -113,7 +126,7 @@ namespace BotMod.Web
             for (int i = 0; i < keys.Count; i++)
             {
                 if (i > 0) sb.Append('\n');
-                sb.Append(keys[i]).Append('=').Append(Raw(body, keys[i]) ?? "null");
+                sb.Append(BotText.Canon(keys[i])).Append('=').Append(BotText.Canon(Raw(body, keys[i]) ?? "null"));
             }
             return sb.ToString();
         }

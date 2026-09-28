@@ -55,14 +55,14 @@ static class BotTextFuzzTests
     // ---- input generation ----
 
     // The character classes the policy claims to strip: C0, DEL, C1, NBSP,
-    // soft hyphen, ZWSP, ZWJ, LRM, RLO, word joiner, invisible operator, BOM,
-    // variation selectors.
+    // soft hyphen, ZWSP, ZWJ, LRM, RLO, ARABIC LETTER MARK, the bidi
+    // isolates, word joiner, invisible operator, BOM, variation selectors.
     static readonly char[] Noise =
     {
         '\t', '\n', '\r', '\0', '\x1b', ' ', '\x7f', '\x85', '\x9f',
         '\u00A0', '\u00AD', '\u200C', '\u200D', '\u200E', '\u200F',
         '\u202A', '\u202E', '\u2060', '\u206F', '\uFEFF',
-        '\uFE00', '\uFE0F',
+        '\uFE00', '\uFE0F', '\u061C', '\u2066', '\u2068', '\u2069',
     };
 
     // Combining marks, so a generated name can be NFD where a real one is NFC.

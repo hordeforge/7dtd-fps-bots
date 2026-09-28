@@ -90,6 +90,13 @@ static class LogSanitizerTests
         // though char.IsControl does not cover them, so a requestId carrying
         // one could still split an audit entry.
         Check("U+2028/U+2029 replaced", LogSanitizer.Clean("a\u2028b\u2029c") == "a?b?c");
+        // The rest of Unicode's Bidi_Control set. U+061C and the isolates
+        // U+2066..U+2069 reorder or hide text in a terminal exactly like the
+        // embeddings and overrides above, so a request-supplied value must not
+        // be able to carry them into the audit trail either.
+        Check("U+061C replaced", LogSanitizer.Clean("a\u061cb") == "a?b");
+        Check("bidi isolates U+2066..U+2069 replaced",
+            LogSanitizer.Clean("a\u2066b\u2067c\u2068d\u2069e") == "a?b?c?d?e");
 
         // Legit non-ASCII spacing/printables adjacent to that range survive.
         Check("em dash and nbsp survive", LogSanitizer.Clean("a\u2014b\u00a0c") == "a\u2014b\u00a0c");

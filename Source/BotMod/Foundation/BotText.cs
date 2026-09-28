@@ -49,7 +49,7 @@ namespace BotMod.Foundation
         }
 
         // Control characters (C0, DEL, C1) and invisible formatting characters
-        // (zero-width + LRM/RLM, bidi embedding/override controls, line and
+        // (zero-width + LRM/RLM, the full Unicode Bidi_Control set, line and
         // paragraph separators, word joiner + invisible operators, BOM,
         // variation selectors): none of them carry meaning in a stored
         // identifier, but a value pasted from a web page can carry them
@@ -60,13 +60,24 @@ namespace BotMod.Foundation
         // requestId carrying one would still be able to forge a second log
         // line. Single source of truth: LogSanitizer.Clean delegates here for
         // its log-line scrub of the same ranges.
+        //
+        // The bidi entries are exactly the characters Unicode marks
+        // Bidi_Control (U+061C, U+200E..U+200F, U+202A..U+202E,
+        // U+2066..U+2069). U+2066..U+2069 (the isolates: LRI, RLI, FSI, PDI)
+        // and U+061C reorder or hide text exactly like the embeddings and
+        // overrides next to them, so listing only 200E/200F/202A-202E left
+        // three of the eleven in: "Gr\u2066unt" and "Grunt" were two team
+        // assignments, and a requestId carrying an isolate reached the audit
+        // trail verbatim.
         internal static bool IsInvisible(char c)
         {
             return c < ' ' || (c >= '\x7f' && c <= '\x9f')
+                || c == '\u061c'                      // ARABIC LETTER MARK (bidi)
                 || (c >= '\u200b' && c <= '\u200f')   // zero-width + LRM/RLM (+U+200D ZWJ)
                 || (c >= '\u202a' && c <= '\u202e')   // bidi embedding/override controls
                 || c == '\u2028' || c == '\u2029'     // line/paragraph separators
                 || (c >= '\u2060' && c <= '\u2064')   // word joiner + invisible operators
+                || (c >= '\u2066' && c <= '\u2069')   // LRI/RLI/FSI/PDI (bidi isolates)
                 || c == '\ufeff'                      // BOM / zero-width no-break space
                 || (c >= '\ufe00' && c <= '\ufe0f');  // variation selectors
         }
