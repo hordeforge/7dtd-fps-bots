@@ -38,6 +38,47 @@ static class AtomicTextFileTests
     // shared prefix from reaching these directories while their writers are
     // mid-flight.
 
+    // Wall-clock budget for the concurrency storms below, measured rather than
+    // hardcoded. Every Write is two fsync'd file writes (the staging .tmp and
+    // the .bak snapshot) under one process-wide lock, so the 320 writes of
+    // block 7 cost 17-25 s on an idle developer box and ran straight through
+    // the old flat 30 s timeout once the rest of the suite and CI's other
+    // jobs were competing for the same disk: the run failed with "concurrent
+    // writers finished within timeout" while every correctness assertion in
+    // the block passed. Calibrating on this machine, this filesystem and this
+    // process keeps a real hang (the WriteGate regression these storms exist
+    // to catch) failing the run, without a loaded runner reading as a
+    // durability bug. Slack absorbs the load variance the calibration itself
+    // does not see; the floor keeps a fast disk from budgeting too little, the
+    // ceiling keeps a slow one from parking the suite in a wait.
+    const double TimeoutSlack = 3.0;
+    const int TimeoutFloorMs = 30000;
+    const int TimeoutCeilingMs = 180000;
+    const int CalibrationWrites = 8;
+
+    static int _perWriteMs = -1;
+
+    // Milliseconds that <paramref name="writes"/> serialized writes are
+    // allowed to take on this host, from the cost of one measured here.
+    static int BudgetMs(int writes)
+    {
+        if (_perWriteMs < 0)
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "calibration.json");
+            for (int i = 0; i < 4; i++) AtomicTextFile.Write(path, "{\"warm\":" + i + "}");
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < CalibrationWrites; i++) AtomicTextFile.Write(path, "{\"cal\":" + i + "}");
+            sw.Stop();
+            // A cost of zero means the clock or the filesystem is not
+            // reporting; one millisecond per write keeps the budget finite.
+            _perWriteMs = Math.Max(1, (int)Math.Round(sw.Elapsed.TotalMilliseconds / CalibrationWrites));
+        }
+        long ms = (long)(writes * (double)_perWriteMs * TimeoutSlack);
+        if (ms < TimeoutFloorMs) ms = TimeoutFloorMs;
+        if (ms > TimeoutCeilingMs) ms = TimeoutCeilingMs;
+        return (int)ms;
+    }
+
     static void Check(string name, bool ok)
     {
         Console.WriteLine((ok ? "ok   " : "FAIL ") + name);
@@ -192,8 +233,9 @@ static class AtomicTextFileTests
             // A hang here means the WriteGate serialization broke (the exact
             // regression this suite pins), so a timeout must fail the run,
             // not sail through to assertions on whatever reached the disk.
-            bool finished = done.WaitOne(30000);
-            Check("concurrent writers finished within timeout", finished);
+            int budget = BudgetMs(writers * perWriter);
+            bool finished = done.WaitOne(budget);
+            Check("concurrent writers finished within timeout (" + budget + " ms, " + _perWriteMs + " ms/write)", finished);
             Check("concurrent writes complete without errors", errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);
             string s, src;
@@ -292,13 +334,17 @@ static class AtomicTextFileTests
                     finally { if (System.Threading.Interlocked.Decrement(ref readersLeft) == 0) doneReaders.Set(); }
                 });
             }
-            bool finished = doneWriters.WaitOne(30000);
+            // Readers drain behind whatever writes are still queued on
+            // WriteGate when the stop signal lands, so they get the storm's
+            // budget too rather than a second flat constant.
+            int budget = BudgetMs(rewrites);
+            bool finished = doneWriters.WaitOne(budget);
             stopReaders.Set();
             Check("writer finished within timeout", finished);
             // Join the readers before inspecting their findings: they keep
             // appending to errors and reads after the stop signal, so reading
             // either collection early reports a partial, order-dependent result.
-            Check("readers stopped within timeout", doneReaders.WaitOne(30000));
+            Check("readers stopped within timeout", doneReaders.WaitOne(budget));
             string final, readFrom;
             bool ok = AtomicTextFile.TryRead(path, out final, out readFrom);
             Check("final primary is the last written payload",
