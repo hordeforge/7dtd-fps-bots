@@ -6,6 +6,13 @@ what stands in the way. Derived from code and deployment artifacts at release
 split; every line reference in this file was re-anchored against that tree).
 Every claim carries a file reference so the next review can re-verify it.
 
+Line references are anchors into an earlier tree, not a promise of exact
+current lines: a change that shifts a file invalidates the numbers in it
+without changing any claim here. Where a claim names a load-bearing construct
+the reference was re-verified against the current source on 2026-09-28 (the
+permission-level declaration, `BuildStatus`, the clamps and the request tag);
+the rest need the same pass.
+
 Owner and review cadence are organizational decisions; none is defined in this
 repository yet. Individual vulnerabilities and their fixes belong to sec-review;
 this document records them as threats with locations.
@@ -31,7 +38,7 @@ not reviewed here), the host OS, and the dev-side GA training tools
 | G5 | Operator-trusted files (`botmod.json`, neural weights, `characters.json`) are parsed without integrity verification; weights get structural validation only (`Source/BotMod/AI/BotNeuralBrain.cs:215-267`). | TB3/TB4 | Accepted risk (operator boundary) |
 | G6 | Idempotency ledger eviction (oldest-first, capacity 256) can drop an active claim under key churn, allowing a late duplicate to execute twice. Admin-only trigger. Eviction warns on the server log (`Source/BotMod/Web/WebApi.cs:79-80`, `Source/BotMod/Web/IdempotencyLedger.cs:174-193`), so the churn is attributable. | TB2 | Named gap, low |
 | G7 | The `BOTMOD_CONFIG` environment variable redirects the config path, and the same path is the persist target (`Source/BotMod/Config/BotConfig.cs:396-420`, `Source/BotMod/ModApi.cs:252-254`). Anyone who can set the server process's environment can choose which file the admin's toggles persist into and which file the next boot reads. The override is named in the `bot config` output and the config summary log, so the redirection is visible after the fact but not prevented. | TB3 | Named gap (host/config boundary) |
-| G8 | The `bot` console command has no mod-side authorization or audit: `Execute` ignores `CommandSenderInfo` (`Source/BotMod/Commands/BotConsoleCommands.cs:60`), so its only gate is the game's default console permission level, and no mod log line records who ran a mutation from the console. | TB2 | Named gap |
+| G8 | The `bot` console command has no mod-side authorization: `Execute` gates on nothing of its own, so its only gate is the game's default console permission level (`ConsoleCmdAbstract.DefaultPermissionLevel`, 0, pinned by `tests/BotMod.Tests/WebApiAuthzTests.cs`), the same delegation as G1. Its audit half is closed: `Execute` emits one issuer-attributed line for every subcommand not declared read-only (`Source/BotMod/Commands/BotConsoleCommands.cs`, `IsAuditedSubcommand`), naming the sender through `SenderTag` (remote client entity id, `local` for the server console and RCON, `unknown` if the lookup throws). | TB2 | Named gap (authz), audit closed |
 
 ## Assets and impact
 
@@ -55,10 +62,10 @@ not reviewed here), the host OS, and the dev-side GA training tools
   `AllowSyntheticAuthBypass` is in it by name (`ModApi.cs:48`).
 - **A4 Audit trail integrity** - one log line per executed/replayed/rejected
   mutation is the investigation record (`Source/BotMod/Web/WebApi.cs:150,157,168,412,421`).
-  Loss: repudiation, hidden actions. Console mutations produce no such line (G8).
+  Loss: repudiation, hidden actions. Console mutations name their issuer (G8).
 - **A5 Player identity data** - online player names + entity ids served by
-  `GET /api/bot` (`BuildStatus`, `Source/BotMod/Web/WebApi.cs:512-...`) and
-  echoed back by a `spawnNear` response (`WebApi.cs:252-254`). Exposure limited
+  `GET /api/bot` (`BuildStatus`, `Source/BotMod/Web/WebApi.cs:648`) and
+  echoed back by a `spawnNear` response (`WebApi.cs:330`). Exposure limited
   to permission-0 holders; the idempotency ledger also holds such a body in
   memory for up to 10 minutes (A7).
 - **A6 Admin browser session** - the dashboard runs in the admin's browser
@@ -85,13 +92,14 @@ not reviewed here), the host OS, and the dev-side GA training tools
   (`BotPatches.cs:55-58`). Deployments running code mods have EAC disabled
   anyway (README, Install).
 - **TB2 Admin browser <-> stock webserver <-> BotMod REST API.**
-  `GET/POST /api/bot` (`Source/BotMod/Web/WebApi.cs:85,108`) is discovered by the
+  `GET/POST /api/bot` (`Source/BotMod/Web/WebApi.cs:95,118`) is discovered by the
   game's webserver as an `AbsRestApi` subclass; the mod declares permission
   level 0 for every method slot and inherits a level-0 global fallback
-  (`WebApi.cs:426`) and performs **no** authentication, authorization, or rate
+  (`WebApi.cs:482`) and performs **no** authentication, authorization, or rate
   limiting of its own. Enforcement point is entirely in game-owned code/config.
-  The console command surface (`Source/BotMod/Commands/BotConsoleCommands.cs:60`)
-  is the second admin surface and is equally un-gated in mod code (G8).
+  The console command surface (`Source/BotMod/Commands/BotConsoleCommands.cs`)
+  is the second admin surface and is equally un-gated in mod code (G8); it
+  does log the issuer of every non-read invocation.
 - **TB3 Operator filesystem / process environment <-> mod.** Config
   (`BotConfig.Load`, `Source/BotMod/Config/BotConfig.cs:197`), characters
   (`BotCharacterDB.Load`, `Source/BotMod/ModApi.cs:47`) and world
@@ -145,7 +153,8 @@ not reviewed here), the host OS, and the dev-side GA training tools
 
 Nothing listed here lacks a named validation point except where noted (G4: no
 aggregate quota; G7: the env override is trusted, not validated; G8: the console
-surface has no mod-side gate). Inputs treated as trusted from outside a
+surface has no mod-side gate, only the game's default console permission
+level). Inputs treated as trusted from outside a
 boundary: config, character, spawnpoint and weight files and the
 `BOTMOD_CONFIG` value (operator boundary, TB3/TB4) and world player names
 echoed into responses (G3, now sanitized on the way to the log).
@@ -169,7 +178,7 @@ echoed into responses (G3, now sanitized on the way to the log).
 
 **TB2 (admin -> API)**
 - *Spoofing/EoP (SPOF, G1):* one control - webserver token authn + level-0
-  declaration (`WebApi.cs:426`). No second gate in mod code.
+  declaration (`WebApi.cs:482`). No second gate in mod code.
 - *Tampering:* concurrent persists interleaving - mitigated: every mutation body
   runs on the main thread and the file write is serialized by `PersistGate`
   (`WebApi.cs:189`, `Source/BotMod/ModApi.cs:216,252-254`); torn writes
@@ -180,16 +189,18 @@ echoed into responses (G3, now sanitized on the way to the log).
 - *Repudiation:* every executed/replayed/rejected mutation logs one sanitized
   line carrying the request tag (`WebApi.cs:150,157,168,412,421`) and echoes
   that tag in `X-BotMod-Request-Id` on every outcome (`WebApi.cs:136`), so a
-  failed call ties back to one log line. GET polling deliberately unlogged
-  (`WebApi.cs:119-120`) - acceptable volume tradeoff, noted for investigators.
-  Console mutations are unlogged entirely (G8).
+  failed call ties back to one log line. Every web line also names the caller
+  (`CallerTag`: `user@ip` for a browser session, `api-token <name>` for a
+  token-authenticated call, which has no connection at all). GET polling
+  deliberately unlogged (`WebApi.cs:119-120`) - acceptable volume tradeoff,
+  noted for investigators. Console mutations log their issuer too (G8).
 - *Information disclosure:* exception type/message/stack suppressed from
   responses; generic 500 envelope only (`WebApi.cs:402-406`), detail to log.
   Responses are `Cache-Control: no-store` on every path
   (`WebApi.cs:462-465`), so a shared cache or an admin's bfcache cannot retain a
   bot roster or config.
 - *DoS:* body-size limits are game-owned; per-call clamps everywhere
-  (spawn count 1..16 `WebApi.cs:498`; team 0..BotTeamCount, itself 0..8 `:348`,
+  (spawn count 1..16 `WebApi.cs:602`; team 0..BotTeamCount, itself 0..8 `WebApi.cs:424`,
   `BotConfig.cs:185-187`; skill 0..4 `:302-307`, `BotConfig.cs:170-174`;
   global bot ceiling via `Normalize` `BotConfig.cs:269`); ledger capped at
   256 keys, 128-char keys, 10 min retention
@@ -256,10 +267,12 @@ echoed into responses (G3, now sanitized on the way to the log).
   player name, using cheap actions. Memory impact is capped by design
   (`IdempotencyLedger.cs:34,41`); the cache is not readable by any other
   principal because replay is keyed on the same secret-free request id.
-- **Console-side abuse with no trail.** Anyone with console permission can run
-  `bot spawn`, `bot player <name>`, or `bot reload` with no mod audit line and
-  no check of `CommandSenderInfo` (`BotConsoleCommands.cs:60`). Same capability
-  as the API, materially worse forensics (G8).
+- **Console-side abuse with a thin trail.** Anyone with console permission can run
+  `bot spawn`, `bot player <name>`, or `bot reload`; the mod applies no gate of
+  its own (`BotConsoleCommands.cs`), and the issuer it logs is a telnet client's
+  entity id or `local` for the server console and RCON, which names no person
+  where several can reach the same console. Same capability as the API, weaker
+  attribution (G8).
 - **Client-side enforcement:** none relied upon. Every dashboard-controllable
   value is re-clamped or re-validated server-side (clamps cited above); the
   bundle is display + submit only.
@@ -268,13 +281,13 @@ echoed into responses (G3, now sanitized on the way to the log).
 
 | Control | Covers | Reference |
 |---|---|---|
-| Webserver authn + permission level 0 declaration (all slots, plus level-0 global fallback) | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:426` |
+| Webserver authn + permission level 0 declaration (all slots, plus level-0 global fallback) | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:482` |
 | Deny-side matrix tests: web API method levels and console default level pinned to 0 | TB2 gate regression (a widened declaration fails `make test`) | `tests/BotMod.Tests/WebApiAuthzTests.cs:43-61` |
 | Bypass flag default-off + startup visibility | TB1 spoofing blast radius (G2) | `BotConfig.cs:18`, `ModApi.cs:48` |
 | Per-join bypass logging (in-world entity id; id and peer IP deliberately omitted) | TB1 session correlation, not address attribution (G2) | `BotPatches.cs:42-47` |
 | Synthetic-bypass check failure warns and falls through to vanilla auth | silent loss of the bypass mid-session | `BotPatches.cs:55-58` |
 | Sanitized audit fields, correlation header, and response body | TB6 log forging, response-header injection (closes G3) | `WebApi.cs:129-130,136,421`, `LogSanitizer.cs:25-47`; fuzz: `tests/BotMod.Tests/LogSanitizerFuzzTests.cs` |
-| Request tag echoed in `X-BotMod-Request-Id` on every outcome | TB2 repudiation / correlation | `WebApi.cs:136`, `NextRequestTag` at `:435-439` |
+| Request tag echoed in `X-BotMod-Request-Id` on every outcome | TB2 repudiation / correlation | `WebApi.cs:166`, `NextRequestTag` at `:491` |
 | `Cache-Control: no-store` on every response path | roster/config retention in shared caches, bfcache | `WebApi.cs:462-465` |
 | Generic 500 envelope, exception detail to log only | TB2 information disclosure | `WebApi.cs:402-406` |
 | Serialized atomic persists + `.bak` recovery under one gate (readers included) | A3 tampering/durability | `ModApi.cs:216,252-254`, `AtomicTextFile.cs:46,52-77`, `BotConfig.cs:197-260` |
@@ -282,14 +295,17 @@ echoed into responses (G3, now sanitized on the way to the log).
 | Input clamps and tri-state field reads (all POST fields, config `Normalize`) | TB2 DoS/value abuse | `WebApi.cs:189-386,498`, `RequestFields.cs:38-110`, `BotConfig.cs:266-336` |
 | Bounded idempotency ledger + key validation + eviction warning | retry storms, unbounded memory, silent dedup loss (G6) | `IdempotencyLedger.cs:34,38,41,103-105,174-193`, `WebApi.cs:79-80,137-142` |
 | Main-thread dispatch + 15 s timeout + claim-on-timeout + abandoned-dispatch warning | TB5 crash/double-exec/lost response | `WebApi.cs:76-78,390-401,472-478`, `MainThreadDispatch.cs:47-98` |
+| Every web mutation line names the caller; every non-read console subcommand logs its issuer before dispatching | TB2 repudiation of a privileged action | `WebApi.cs` (`CallerTag`), `BotConsoleCommands.cs` (`IsAuditedSubcommand`, `SenderTag`); pinned by `tests/BotMod.Tests/WebApiAuthzTests.cs` |
 | Weight structural validation (version, shape, length, NaN/Inf) + fuzz suites | TB4 malformed artifacts | `BotNeuralBrain.cs:184-289`, `tests/BotMod.Tests/BotNeuralBrainFuzzTests.cs` |
 | `spawnpoints.xml` parsed with DTD processing off and a null resolver | TB3 XXE / entity-expansion DoS from a crafted world file | `Source/BotMod/Core/BotSpawner.cs:303-308` |
 | Text-node rendering (React children), no raw HTML sink in the bundle | TB7 XSS into the admin session | `Source/BotMod/WebMod/bundle.ts:692,424,521,593` |
 
 Threats with no mitigation, ranked by exploitability x impact: G1 and G4
 (authenticated, but a single credential away from unauthenticated remote control
-and of a server-wide stall), then G2 (unauthenticated but opt-in), then G8
-(authenticated, forensic-only impact), then G6 and G7 (narrow triggers).
+and of a server-wide stall), then G2 (unauthenticated but opt-in), then G8's
+remaining half, the console gate the mod delegates to the game (authenticated,
+forensic-only impact once the issuer is logged), then G6 and G7 (narrow
+triggers).
 G5 is an accepted operator-boundary risk, not an open finding.
 
 Single points of failure: the stock webserver credential is the one control
@@ -298,7 +314,7 @@ mutation and every tick shares; `PersistGate` is the one lock that keeps the
 config file coherent across the web, console, and reload surfaces.
 
 Documentation claims checked against code this pass: README's "authenticated
-GET/POST /api/bot ... permission level 0" matches `WebApi.cs:426`; the
+GET/POST /api/bot ... permission level 0" matches `WebApi.cs:482`; the
 auth-bypass description matches `BotPatches.cs:21-38`, and README's statement
 that the bypass log carries the entity id only, not the Steam id or client IP,
 matches `BotPatches.cs:42-47`. Two claims this document itself had wrong were
@@ -307,18 +323,21 @@ the peer IP (it records the in-world entity id, by deliberate design, per
 `BotPatches.cs:42-46`), and an earlier pass claimed `SECURITY.md` named 0.4.0
 as the supported release and cited `WebApi.cs:298` for the permission-level
 declaration; `SECURITY.md` now names 0.7.1 (`Source/BotMod/Core/BotModVersion.cs:10`,
-mirrored by `Source/BotMod/ModInfo.xml:7`) and cites `WebApi.cs:426`. No
+mirrored by `Source/BotMod/ModInfo.xml:7`) and cites `WebApi.cs:482`. No
 remaining contradicted claim found.
 
 ## Response readiness (note only)
 
 Mutation audit lines cover success, replay, rejection, and failure outcomes
-with durations and a request tag, giving investigators a per-action trail;
-status polling is unlogged by design. Two silent failure modes of the web
-plumbing are also surfaced to the server log: a main-thread dispatch that ran
-after its caller timed out (`WebApi.cs:76-78`) and idempotency-ledger capacity
-evictions (`WebApi.cs:79-80`). What is still untraced: the game's own auth
-decisions for non-synthetic joins; and `bot` console/telnet commands, which
-produce no mod audit line and no sender identity (G8). There is no documented
+with durations, a request tag and the caller, giving investigators a per-action
+trail; status polling is unlogged by design. Console subcommands outside the
+read-only set log their issuer on the way in, so a mutation made from telnet
+or RCON is attributable to an entity id (or to `local`, when the console does
+not name one). Two silent failure modes of the web plumbing are also surfaced to
+the server log: a main-thread dispatch that ran after its caller timed out
+(`WebApi.cs:76-78`) and idempotency-ledger capacity evictions
+(`WebApi.cs:79-80`). What is still untraced: the game's own auth decisions for
+non-synthetic joins; and which person reached a `local` console session (G8).
+There is no documented
 vulnerability-report-to-fix path: `SECURITY.md` states that absence explicitly;
 defining the process is an organizational decision.

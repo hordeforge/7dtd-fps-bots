@@ -130,6 +130,20 @@ of them removes a config key or a console command.
 
 ### Added
 
+- Every `POST /api/bot` audit line names the caller: `user@ip` for a browser
+  session, `api-token <name>` for a token-authenticated call (which has no
+  connection at all), and the line survives every outcome, so 200, 400, 409
+  and 500 all say who. Before: the lines carried the request tag and the
+  response, never the principal, so a stolen webtoken's use was
+  unattributable and a shared admin account left no trace.
+- Every `bot` console subcommand outside the read-only set logs its issuer
+  (`bot cmd remove by entity 42`) before dispatch, including every alias
+  (`rm`, `kick`, `clear`). Before: only `bot spawn` and `bot player` logged,
+  so removals, team and config changes, `bot reload` and the enable/disable
+  toggles left a mutation with no record of who made it. The audit line is
+  emitted above the dispatch switch, so a subcommand added later is logged by
+  default; only naming one read-only silences it. An operator watching the
+  server log now sees one extra line per console mutation.
 - `make coverage` runs `scripts/coverage-cs.sh` (line coverage of the
   pure-BCL suites into `coverage.cobertura.xml`). The script and its badge
   renderer were committed with no entry point and no documentation; it needs

@@ -100,6 +100,11 @@ def check_loadout_draw() -> None:
     # sim uses, and require the picks to spread over the weapon table. The
     # stream is threaded across bots exactly as the kernel threads it: a fresh
     # seed per bot would pass this check even if the roll never advanced.
+    # The kernel draws its LCG and its loadout roll through module-private
+    # helpers, and this check exists to pin the exact sequence of those draws,
+    # so a narrow SLF001 suppression is the point rather than a workaround:
+    # copying the draw into this file would re-assert a copy that can drift
+    # from the kernel and pass while the kernel regresses.
     for gap in (0.0, 50.0):
         picks = []
         rng = SEED & 0xFFFFFFFF

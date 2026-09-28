@@ -62,7 +62,11 @@ namespace BotMod.Web
     /// Correlation: every POST audit line names the request (the client
     /// idempotency key, or a server-side "auto-N" tag when none was sent), and
     /// the same tag is returned in the X-BotMod-Request-Id response header on
-    /// every outcome, so a failed call is traceable to one log line.
+    /// every outcome, so a failed call is traceable to one log line. The line
+    /// also names the caller (see CallerTag): permission level 0 says an admin
+    /// acted, not which one, and a stolen webtoken has to be attributable to
+    /// the token row an operator can revoke. The `bot` console command logs
+    /// its issuer the same way, so both admin surfaces reconstruct alike.
     ///
     /// Caching: every response (200, 400, 409, 500, on both verbs) carries
     /// Cache-Control: no-store plus X-Content-Type-Options: nosniff; see
@@ -150,6 +154,14 @@ namespace BotMod.Web
             // LogSanitizer). The raw values still drive routing and the ledger.
             string logAction = LogSanitizer.Clean(action);
             string logTag = LogSanitizer.Clean(reqTag);
+            // Who ran it. The request tag identifies a retry, not an issuer:
+            // without the principal on the line, a stolen webtoken or a shared
+            // admin account is unattributable after the fact, which is the one
+            // thing an escalation audit cannot be reconstructed without. The
+            // console surface already names its issuer (SenderTag); this is the
+            // same identity on the web surface, so both admin paths reconstruct
+            // the same way. Resolved once, before any exit.
+            string caller = CallerTag(context);
             // Correlation, not decoration: the tag reaches the client in a
             // response header on every outcome (200/400/409/500) so a failed
             // call can be tied back to the exact server log line, which for a
@@ -158,7 +170,7 @@ namespace BotMod.Web
             context.Response.Headers["X-BotMod-Request-Id"] = logTag;
             if (keyed && !IdempotencyLedger.IsValidKey(requestId))
             {
-                ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected INVALID_REQUEST_ID");
+                ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " rejected INVALID_REQUEST_ID");
                 SendEmptyResponse(context, HttpStatusCode.BadRequest, null, "INVALID_REQUEST_ID", null);
                 return;
             }
@@ -169,14 +181,14 @@ namespace BotMod.Web
                     requestId, RequestFields.Fingerprint(_jsonInput, "requestId"), out cached);
                 if (begin == IdempotencyLedger.BeginResult.Replay)
                 {
-                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " replay (cached response resent)");
+                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " replay (cached response resent)");
                     writer.WriteRaw(Encoding.UTF8.GetBytes(cached));
                     SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
                     return;
                 }
                 if (begin == IdempotencyLedger.BeginResult.InProgress)
                 {
-                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected REQUEST_IN_PROGRESS");
+                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " rejected REQUEST_IN_PROGRESS");
                     SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_IN_PROGRESS", null);
                     return;
                 }
@@ -187,7 +199,7 @@ namespace BotMod.Web
                 // original request still replays.
                 if (begin == IdempotencyLedger.BeginResult.Mismatched)
                 {
-                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected REQUEST_ID_REUSED (key already used for a different request)");
+                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " rejected REQUEST_ID_REUSED (key already used for a different request)");
                     SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_ID_REUSED", null);
                     return;
                 }
@@ -211,7 +223,7 @@ namespace BotMod.Web
                 // threw before producing a response: release the claim so a
                 // retry can resubmit.
                 if (keyed && !(ex is TimeoutException)) IdempotencyLedger.Fail(requestId);
-                ModApi.Error("web api action=" + logAction + " req=" + logTag + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
+                ModApi.Error("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
                 // Full exception detail goes to the server log above only; the
                 // webserver envelope would otherwise embed the exception type,
                 // message and stack trace in the response body.
@@ -221,7 +233,7 @@ namespace BotMod.Web
             if (errorCode != null)
             {
                 if (keyed) IdempotencyLedger.Fail(requestId); // client error: retry may resubmit
-                ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected " + errorCode);
+                ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " rejected " + errorCode);
                 SendEmptyResponse(context, HttpStatusCode.BadRequest, null, errorCode, null);
                 return;
             }
@@ -230,7 +242,7 @@ namespace BotMod.Web
             // ident). Json.NET escapes C0 controls but passes DEL/C1, bidi
             // controls and zero-width characters through verbatim, so the same
             // LogSanitizer contract that guards action/requestId guards it too.
-            ModApi.Log("web api action=" + logAction + " req=" + logTag + " ok in " + sw.ElapsedMilliseconds + "ms " + LogSanitizer.Clean(respBody));
+            ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " ok in " + sw.ElapsedMilliseconds + "ms " + LogSanitizer.Clean(respBody));
             writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
@@ -526,6 +538,52 @@ namespace BotMod.Web
         {
             for (int i = 0; i < ResponseHeaders.Length; i++)
                 context.Response.Headers[ResponseHeaders[i][0]] = ResponseHeaders[i][1];
+        }
+
+        /// <summary>The principal behind a request, for the audit line.
+        /// Every /api/bot call is already gated to permission level 0 by the
+        /// stock webserver (see DefaultMethodPermissionLevels), but "an admin
+        /// did this" is not an audit answer: the audit trail has to name who.
+        /// Two caller shapes reach this handler, because the stock
+        /// DoAuthentication resolves a level from either one:
+        ///
+        /// - a browser session: context.Connection is set, and its Username and
+        ///   remote Endpoint are the identity. Reported as "name@ip", so a
+        ///   shared account still leaves the source address behind.
+        /// - an API token (X-SDTD-API-TOKENNAME / X-SDTD-API-SECRET, no sid
+        ///   cookie): no connection exists at all, so the token name from the
+        ///   request header is the only identifier. It is request-supplied and
+        ///   sanitized like every other untrusted field, and it is labeled
+        ///   "api-token" so the line never reads as a verified identity: the
+        ///   stock authenticator checks the secret, not the name, and a
+        ///   mismatched pair still authorizes. What the line proves is which
+        ///   token name was presented, which is what makes a stolen token's
+        ///   use attributable to the token row an operator can revoke.
+        ///
+        /// A null connection and no token header means a level came from
+        /// somewhere the mod cannot see; that reads "api-token (unnamed)"
+        /// rather than a blank, so the gap is visible instead of looking like
+        /// an unattributed local call. Every access is guarded: an audit
+        /// lookup that throws must not fail the request it describes.</summary>
+        static string CallerTag(RequestContext context)
+        {
+            try
+            {
+                var con = context.Connection;
+                if (con != null)
+                {
+                    string who = LogSanitizer.Clean(con.Username);
+                    if (string.IsNullOrEmpty(who)) who = "(unnamed)";
+                    string host = con.Endpoint != null ? con.Endpoint.ToString() : "?";
+                    return who + "@" + host;
+                }
+                string token = null;
+                var headers = context.Request != null ? context.Request.Headers : null;
+                if (headers != null) token = headers["X-SDTD-API-TOKENNAME"];
+                token = LogSanitizer.Clean(token);
+                return "api-token " + (string.IsNullOrEmpty(token) ? "(unnamed)" : token);
+            }
+            catch (Exception) { return "unknown"; }
         }
 
         /// <summary>Run a world-touching action on the game's main thread and

@@ -145,7 +145,9 @@ action's own table row says, not as one shared field.
 Every `POST` response, on every status, carries `X-BotMod-Request-Id`: the
 client's `requestId` when one was sent, else a server-side `auto-N` tag. The
 same tag is on the server's audit line for that request, so a rejected call is
-traceable to the log entry that recorded it.
+traceable to the log entry that recorded it. The line also names the caller:
+`user@ip` for a browser session, `api-token <name>` for a token-authenticated
+call. `GET` is not logged (the panel polls it every few seconds).
 
 `GET` returns the config summary (`enabled`, `alive`, `difficulty`, `neural`,
 range/chance settings, the three `botVs*` toggles, `botTeam`, `teamCount`,

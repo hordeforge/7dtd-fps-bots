@@ -1,4 +1,5 @@
-// WebApiAuthzTests - pins the deny side of the mod's authorization matrix.
+// WebApiAuthzTests - pins the deny side of the mod's authorization matrix,
+// and the record that backs it up.
 //
 // Every /api/bot operation (status read included) must stay behind permission
 // level 0, enforced by the stock webserver from the levels declared in
@@ -9,6 +10,12 @@
 // slot order) would silently hand bot control to lower-privileged callers,
 // so this suite asserts the hostile-path side: non-admins are denied for
 // every method slot, not just that admins succeed.
+//
+// Authorization is only half the matrix: an action nobody can be attributed
+// for is a privileged action with no escalation trail. CheckConsoleAudit-
+// Classification therefore pins the console surface's audit rule (every
+// subcommand not declared read-only leaves an issuer-attributed line), which
+// is what keeps a mutation added later from shipping unlogged.
 //
 // Slot semantics (verified against the game binary): AdminWebModules'
 // WebModule ctor normalizes a declared array shorter than ERequestMethod.Count
@@ -82,7 +89,81 @@ static class WebApiAuthzTests
         for (int i = 0; i < headers.Length; i++)
             Check("response header " + headers[i][0] + " carries a value", headers[i].Length == 2 && headers[i][1] != "");
 
+        CheckConsoleAuditClassification();
+
         Console.WriteLine(_failures == 0 ? "all web api authz matrix tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>Second half of the matrix: who may act is only half of it,
+    /// the record of who did is the other half. The console command audits
+    /// every invocation it does not classify as read-only, so the question a
+    /// subcommand added later has to answer is "is this really a read?". These
+    /// checks fail when a subcommand is classified by neither list (added to the
+    /// dispatch switch, never judged) or by both, and pin the read-only set to
+    /// the commands that genuinely only read, so the default cannot be widened
+    /// to silence a mutation. Aliases are included: `bot rm` and `bot remove`
+    /// are the same mutation, and an audit that only covers the canonical name
+    /// leaves the shorter spelling unrecorded.</summary>
+    static void CheckConsoleAuditClassification()
+    {
+        string[] known = BotMod.Commands.ConsoleCmdBot.KnownSubcommands();
+        Check("the console dispatches at least one subcommand", known.Length > 0);
+
+        // Read-only, as documented in `bot help`. Anything reading live world
+        // state is a read; anything writing config, spawning or despawning is
+        // not, however cheap the command looks.
+        string[] readOnly =
+        {
+            "help", "?", "h", "status", "config", "cfg", "list", "ls", "players", "who"
+        };
+        for (int i = 0; i < readOnly.Length; i++)
+        {
+            string sub = readOnly[i];
+            bool listed = false;
+            for (int k = 0; k < known.Length; k++)
+                if (string.Equals(known[k], sub, StringComparison.OrdinalIgnoreCase)) { listed = true; break; }
+            Check("read-only subcommand '" + sub + "' is in the dispatch list", listed);
+            Check("read-only subcommand '" + sub + "' is not audited", !BotMod.Commands.ConsoleCmdBot.IsAuditedSubcommand(sub));
+        }
+
+        // Every mutating subcommand and alias, from the switch in
+        // ConsoleCmdBot.Execute, must be audited. A name here that Execute
+        // stopped dispatching is dead weight in the table, not a failure, so
+        // this asserts the direction that costs security: audited, not silent.
+        string[] mutating =
+        {
+            "spawn", "add", "player", "near", "at", "remove", "rm", "kick", "clear",
+            "count", "set", "weapon", "gun", "skill", "difficulty", "neural", "vs", "shoot",
+            "team", "squad", "teams", "reload", "enable", "disable"
+        };
+        for (int i = 0; i < mutating.Length; i++)
+            Check("mutating subcommand '" + mutating[i] + "' is audited",
+                BotMod.Commands.ConsoleCmdBot.IsAuditedSubcommand(mutating[i]));
+
+        // Classification is total over the dispatch list: an unclassified name
+        // is one whose audit behavior nobody decided, which is the state this
+        // check exists to make loud. (It currently audits by default, so the
+        // assertion below holds for a known name either way; the value is that
+        // a new subcommand cannot be added to one list and quietly dropped
+        // from the other without this failing first.)
+        for (int k = 0; k < known.Length; k++)
+        {
+            string sub = known[k];
+            bool inReadOnly = false;
+            for (int i = 0; i < readOnly.Length; i++)
+                if (string.Equals(readOnly[i], sub, StringComparison.OrdinalIgnoreCase)) { inReadOnly = true; break; }
+            bool inMutating = false;
+            for (int i = 0; i < mutating.Length; i++)
+                if (string.Equals(mutating[i], sub, StringComparison.OrdinalIgnoreCase)) { inMutating = true; break; }
+            Check("subcommand '" + sub + "' is classified exactly once",
+                inReadOnly ^ inMutating);
+        }
+
+        // An unknown name audits rather than staying silent: the failure worth
+        // avoiding is a mutation nobody logged, so the default has to err that
+        // way.
+        Check("an unclassified subcommand name is still audited",
+            BotMod.Commands.ConsoleCmdBot.IsAuditedSubcommand("nosuchsubcommand"));
     }
 }

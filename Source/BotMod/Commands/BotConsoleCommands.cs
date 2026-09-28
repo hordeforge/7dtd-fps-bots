@@ -8,6 +8,12 @@ using UnityEngine;
 
 namespace BotMod.Commands
 {
+    /// <summary>The `bot` admin console command. Authorization is the game's:
+    /// ConsoleCmdAbstract's default permission level 0, which Execute does not
+    /// relax. Attribution is the mod's: every invocation outside the read-only
+    /// set logs its issuer to the server log before dispatching, because the
+    /// console echo reaches only the issuing telnet/RCON window and dies with
+    /// it. See ReadOnlySubcommands and SenderTag.</summary>
     public class ConsoleCmdBot : ConsoleCmdAbstract
     {
         public override string[] getCommands() => new[] { "bot" };
@@ -43,11 +49,55 @@ namespace BotMod.Commands
             "  bot player Kira 3 gunMGT1AK47    - 3 AK bots near Kira (out-of-sight preferred, ~22m ideal)\n" +
             "  bot vs bot off                   - bots stop shooting each other";
 
+        /// <summary>Every token Execute's dispatch switch accepts, aliases
+        /// included. Feeds Suggest (so `bot rm` no longer falls through to "did
+        /// you mean" for a subcommand that exists) and the audit-classification
+        /// suite, which fails when a token is in neither classification.</summary>
         static readonly string[] Subcommands =
         {
-            "help", "status", "config", "list", "players", "spawn", "player", "remove", "count", "weapon",
-            "skill", "neural", "vs", "team", "teams", "reload", "enable", "disable"
+            "help", "?", "h", "status", "config", "cfg", "list", "ls", "players", "who",
+            "spawn", "add", "player", "near", "at", "remove", "rm", "kick", "clear",
+            "count", "set", "weapon", "gun", "skill", "difficulty", "neural", "vs", "shoot",
+            "team", "squad", "teams", "reload", "enable", "disable"
         };
+
+        /// <summary>The tokens that only read state. Everything else in
+        /// <see cref="Subcommands"/> is audited, so a subcommand added to the
+        /// dispatch switch leaves an issuer-attributed log line by default; the
+        /// only way to lose that record is to name it here on purpose, and the
+        /// classification suite fails when a token is listed in both.
+        ///
+        /// Read-only is the right default to withhold: the console echo goes to
+        /// the telnet/RCON window and dies with it, so a mutation reachable only
+        /// from the console would otherwise be the one kind of privileged
+        /// action with no record of who made it. The web surface already logs
+        /// every mutation with the caller named. The dashboard polls the web
+        /// status on a timer, which is why a read must stay silent here.</summary>
+        static readonly string[] ReadOnlySubcommands =
+        {
+            "help", "?", "h", "status", "config", "cfg", "list", "ls", "players", "who"
+        };
+
+        /// <summary>Whether an invocation of <paramref name="sub"/> must leave
+        /// an audit line. True for every subcommand not declared read-only,
+        /// including one this build does not know (a typo, or a newer
+        /// subcommand whose classification is missing): an unaudited mutation
+        /// is the failure worth avoiding, so the unknown name is logged rather
+        /// than dropped. Public so the suite can pin the classification without
+        /// a live console.</summary>
+        public static bool IsAuditedSubcommand(string sub)
+        {
+            for (int i = 0; i < ReadOnlySubcommands.Length; i++)
+                if (string.Equals(ReadOnlySubcommands[i], sub, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            return true;
+        }
+
+        /// <summary>Every token Execute accepts. Public for the same suite.</summary>
+        public static string[] KnownSubcommands()
+        {
+            return (string[])Subcommands.Clone();
+        }
 
         static string Suggest(string sub)
         {
@@ -61,6 +111,16 @@ namespace BotMod.Commands
         public override void Execute(List<string> _params, CommandSenderInfo _senderInfo)
         {
             string sub = _params.Count > 0 ? _params[0].ToLowerInvariant() : "help";
+            // One audit line per non-read invocation, emitted before the
+            // dispatch switch rather than inside each mutating case: a new
+            // subcommand cannot reach a mutation without passing through here,
+            // so it is attributed by construction instead of by remembering to
+            // log. spawn and player add their own effect line (counts, weapon,
+            // target) on top of this one; the rest of a mutation's detail comes
+            // from ModApi.PersistConfigFields' "config persist" line, which
+            // carries the same change and the same server log.
+            if (IsAuditedSubcommand(sub))
+                ModApi.Log("bot cmd " + LogSanitizer.Clean(sub) + " by " + SenderTag(_senderInfo));
             try
             {
                 switch (sub)
