@@ -63,15 +63,27 @@ namespace BotMod.Config
             return sb.ToString();
         }
 
-        /// <summary>Stored-key form of arbitrary input text: NFC, control and
-        /// invisible-format characters removed. Every surface that writes or
-        /// queries a name-keyed map (team assignments, character table) goes
-        /// through this so one spelling cannot fork into near-miss variants.
+        /// <summary>Stored-key form of arbitrary input text: control and
+        /// invisible-format characters removed, then NFC. Every surface that
+        /// writes or queries a name-keyed map (team assignments, character
+        /// table) goes through this so one spelling cannot fork into near-miss
+        /// variants.
+        ///
+        /// Strip first, normalize second, and the result is a fixed point:
+        /// NFC never introduces a character this method strips, so a second
+        /// pass has nothing left to do. Canon first and strip second does not
+        /// have that property, and the difference is observable: an invisible
+        /// character sitting between two combining marks (a pasted name
+        /// carrying a soft hyphen, a ZWNJ between an accented vowel and a
+        /// macron) blocks their composition, so canon-then-strip left two
+        /// uncombined marks in the key while a second call over the same name
+        /// composed them into one. The key a team assignment was stored under
+        /// then never matched the key derived from that name at lookup time.
         /// Deliberately NOT used by NameMatches: player names may legitimately
         /// contain U+200D inside emoji sequences, and matching must see them.</summary>
         public static string IdentityKey(string s)
         {
-            return WithoutInvisible(Canon(s));
+            return Canon(WithoutInvisible(s));
         }
 
         /// <summary>Base bot name: strip the "[Bot] " tag and the _NN suffix,

@@ -32,6 +32,17 @@ fails on drift between them.
   the `run_suite` calls.
 - `make ci` runs the full local gate (`make check` plus `make test`), and
   `make preflight` names the tools `make check` needs.
+- `tests/BotMod.Web.Tests/BotTextFuzzTests.cs` fuzzes the identity-text layer
+  (`Canon`, `WithoutInvisible`, `IdentityKey`, `BaseName`, `NameMatches`) with
+  lone surrogates, hostile UTF-8, invisible and combining characters, seeded
+  with the string literals of the shipped config files, and asserts the
+  contract (totality, fixed points, NFC output, NFC/NFD key equality) rather
+  than only the absence of a throw.
+- `tests/BotMod.Web.Tests/BotAdminSettersFuzzTests.cs` fuzzes the admin setters
+  the web API and console share: every `setTeam` write must be readable back
+  under each spelling of that name, an unknown `vs` target must change no
+  flag, and the difficulty and team-count setters must clamp at both ends of
+  their ranges.
 - `make lint-yaml` runs `yamllint --strict` over `.github/workflows` and joins
   `make check`, so the CI definitions are held to the same blocking bar as the
   shell, Python, TypeScript and HTML sources. Config: `.yamllint.yml`; the
@@ -61,6 +72,18 @@ fails on drift between them.
   wrong-size `best.json` fails verification there instead of failing inside
   the sim, being caught as an evaluation error, and being scored `-inf` so any
   candidate promoted over it.
+- `BotText.IdentityKey` normalized before stripping invisible characters, so
+  it was not a fixed point: an invisible character between two combining marks
+  (a soft hyphen or ZWNJ inside a pasted name) blocks their composition, and
+  the second pass over the same name composed what the first had left apart.
+  A team assignment stored under the first key was then unreachable through
+  `GetTeamAssignment`, which derived a different one. It strips first and
+  normalizes second, which is a fixed point because NFC never introduces a
+  character the strip removes.
+- `BotConfig.GetTeamAssignment` derived its lookup key with
+  `BotText.IdentityKey` while `SetTeamAssignment` stored under
+  `BotText.BaseName`, so a full spawned name (`[Bot] Grunt_42`) missed the
+  entry the write had created. Both sides now derive the key the same way.
 - `tools/ga/determinism_check.py`'s determinism check zipped its two run
   records without `strict=True`, the one `zip()` the B905 entry under Added
   claimed was covered. A truncated run compared unequal lengths silently

@@ -27,12 +27,12 @@ done
 all_suites=(
   idempotency atomictextfile idempotencyfuzz mainthreaddispatch logsanitize
   logsanitizerfuzz requestfields combatgates bottext lcg botargparser
-  botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz botchararith
-  teamshammer botconfig webapiauthz botarith
+  botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz
+  botchararith teamshammer botconfig webapiauthz botarith
 )
 # The suites compiled against the game DLLs (Newtonsoft and/or the full mod
 # source), which self-skip without a game install.
-game_suites=(neuralfuzz neuraleval configfuzz charfuzz botchararith teamshammer botconfig webapiauthz botarith)
+game_suites=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith teamshammer botconfig webapiauthz botarith)
 
 filter=()
 while (($#)); do
@@ -163,6 +163,17 @@ run_suite bottext \
   "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/BotTextTests.cs"
 
+# Randomized fuzzing of the identity-text layer: arbitrary names (lone
+# surrogates, hostile UTF-8, invisible and combining characters) through
+# Canon/WithoutInvisible/IdentityKey/BaseName/NameMatches must stay total,
+# idempotent and canonical. Seeded with the string literals of the shipped
+# config/characters.json and config/botmod.json.
+mcs -warnaserror -out:"$work/bottextfuzz.exe" \
+  "$root/Source/BotMod/Config/BotText.cs" \
+  "$root/tests/BotMod.Web.Tests/BotTextFuzzTests.cs" > /dev/null
+# Repo root as argv[1] so the fuzzer can seed from the shipped config files.
+mono "$work/bottextfuzz.exe" "$root"
+
 # Deterministic LCG parity pins: the tap constants are mirrored by hand in
 # tools/ga (combat_sim.py, replay.py), so a changed multiplier/shift/mask
 # would silently desync the GA simulation from in-game rolls. Exact
@@ -259,6 +270,16 @@ else
       "${character_src[@]}" \
       "$root/tests/BotMod.Web.Tests/BotCharacterFuzzTests.cs"
 
+    # Admin-setter fuzzer: the web API and console hand caller-supplied target
+    # names, team numbers and difficulty/team-count levels straight to these
+    # setters, so they are the untrusted-input path the loader fuzzer does not
+    # cover. A write must be readable back under every spelling of the name, an
+    # unknown "vs" target must change nothing, and the config must stay inside
+    # the Normalize contract whatever the sequence.
+    run_game_suite adminsettersfuzz \
+      "${config_src[@]}" \
+      "$root/tests/BotMod.Web.Tests/BotAdminSettersFuzzTests.cs"
+
     # Character-file ingestion pins: NaN/Infinity literals and out-of-range
     # traits in hand-edited characters.json must land finite and in range
     # (BotCharacter.Normalize) instead of reaching the neural obs vector and
@@ -267,8 +288,8 @@ else
       "${character_src[@]}" \
       "$root/tests/BotMod.Web.Tests/BotCharacterArithTests.cs"
   else
-    declared_suites+=(neuralfuzz neuraleval configfuzz charfuzz botchararith)
-    echo "skip neuralfuzz, neuraleval, configfuzz, charfuzz, botchararith (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
+    declared_suites+=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith)
+    echo "skip neuralfuzz, neuraleval, configfuzz, charfuzz, adminsettersfuzz, botchararith (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
   fi
 
   need_refs=(netstandard.dll System.Runtime.dll UnityEngine.CoreModule.dll UnityEngine.PhysicsModule.dll Assembly-CSharp.dll Newtonsoft.Json.dll Utf8Json.dll System.Xml.dll LogLibrary.dll SpaceWizards_HttpListener.dll)

@@ -87,16 +87,19 @@ namespace BotMod.Config
         }
 
         /// <summary>Locked lookup for hot paths (per-damage-event ally checks).
-        /// IdentityKey on the lookup side mirrors SetTeamAssignment, so an NFD
-        /// or invisible-noise caller spelling cannot miss an entry stored under
-        /// its canonical form.</summary>
+        /// The key is derived exactly as SetTeamAssignment derives it, so the
+        /// two sides cannot disagree: a full spawned name ("[Bot] Grunt_42")
+        /// and an NFD or invisible-noise spelling both resolve to the entry
+        /// stored under the canonical base name.</summary>
         public int GetTeamAssignment(string baseName)
         {
             if (string.IsNullOrEmpty(baseName)) return 0;
+            string key = BotText.BaseName(baseName);
+            if (key.Length == 0) return 0;
             lock (TeamGate)
             {
                 int t;
-                return TeamAssignments.TryGetValue(BotText.IdentityKey(baseName), out t) ? Math.Max(0, t) : 0;
+                return TeamAssignments.TryGetValue(key, out t) ? Math.Max(0, t) : 0;
             }
         }
 
