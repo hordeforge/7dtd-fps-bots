@@ -116,8 +116,12 @@ recorded response instead of executing twice; a concurrent duplicate gets
 gets `409 REQUEST_ID_REUSED` (a key identifies one request, so the new one
 must carry a new key); and a requestId that is present but empty or over
 128 chars is rejected `400 INVALID_REQUEST_ID` (your retry protection would
-not be active). Failures return a generic `500 ERROR` envelope; detail goes
-to the server log only.
+not be active). A retry must reuse the key of the attempt it repeats: the
+key is what identifies the request, and a new one is a new request. The
+bundled dashboard holds the key of a command that timed out without an
+answer and sends it again if the same command is repeated before any other
+command runs, so one click cannot spawn twice. Failures return a generic
+`500 ERROR` envelope; detail goes to the server log only.
 
 Success bodies are per-action and carried in the stock webserver envelope's
 `data`; the rejection code above arrives as `meta.errorCode` with the status

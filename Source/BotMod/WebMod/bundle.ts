@@ -238,10 +238,15 @@ function toCount(v: string): number {
 // response.
 function newRequestId(): string {
   const c: Crypto | undefined = typeof crypto === "undefined" ? undefined : crypto;
-  if (c !== undefined && typeof c.randomUUID === "function") {
+  // Feature presence through the optional chain, not
+  // `c !== undefined && typeof c.x === "function"`: the bundle has a hard wire
+  // budget and the same answer spelled out is bytes the panel pays on every
+  // load. The call itself stays unguarded so it keeps the getRandomValues
+  // overload that types the result as the Uint8Array it always returns.
+  if (c?.randomUUID !== undefined) {
     return c.randomUUID();
   }
-  if (c !== undefined && typeof c.getRandomValues === "function") {
+  if (c?.getRandomValues !== undefined) {
     const bytes = c.getRandomValues(new Uint8Array(16));
     let hex = "";
     for (const b of bytes) {
@@ -249,7 +254,7 @@ function newRequestId(): string {
     }
     return `botmod-${hex}`;
   }
-  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4_294_967_296).toString(36)}`;
+  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 2 ** 32).toString(36)}`;
 }
 
 function botCount(count: number | undefined): string {
@@ -343,6 +348,26 @@ function outcome(body: BotAction, label: string, response: unknown): { text: str
     : { text: `${label}: done, ${formatCount(n)} spawned.`, bad: false };
 }
 
+// A command whose response never arrived is not a command that did not run:
+// the server handed it to the main thread and may still act on it, which is
+// why the watchdog below reports an unknown outcome rather than a failure. A
+// click after that is a retry, and a retry is only deduped when it carries the
+// requestId the first attempt used. The server's ledger
+// (Source/BotMod/Web/IdempotencyLedger.cs) binds a key to the request it was
+// first used for; a fresh key looks like a second, unrelated request, so the
+// action runs again and one click spawns twice.
+//
+// One string, NUL-separated, because the bundle has a hard wire budget
+// (scripts/lint-webui.sh) and a second variable with two property names is
+// bytes the panel pays on every load.
+let unknownRequest = "";
+
+// The entry is consumed by the next send, whatever it is, so a key is only
+// ever reused by the immediately following click. That bounds how long a stale
+// key can sit here without a second copy of the server's retention window to
+// keep in step, and a deliberate command in between is itself reason enough to
+// stop replaying the earlier one.
+
 // Fire a bot command. The 5s poll shows the real state after the call, so the
 // result line carries the outcome: a rejected POST is reported instead of the
 // button silently springing back, and a 200 that reports nothing done is too
@@ -366,7 +391,18 @@ function postAction(opts: {
   // The result line appears at once, so a slow or stuck request leaves a
   // "sending" note instead of only dimmed controls.
   opts.setStatus({ text: `${label}: sending...`, bad: false });
-  const body: BotAction = { ...opts.body, requestId: newRequestId() };
+  // Same command as the one whose outcome is still unknown: reuse its key, so
+  // the server replays the recorded answer (or answers 409 while the first
+  // attempt is still in flight) instead of executing the action a second time.
+  // The body decides identity: every control builds its body the same way from
+  // the same state, so a repeat of one click stringifies identically while a
+  // different count, player, target or team does not and gets a new key. The
+  // requestId is not in the body yet, so this is the string the server
+  // fingerprints (it drops requestId from the same body).
+  const sent = `${JSON.stringify(opts.body)}\0`;
+  const requestId = unknownRequest.startsWith(sent) ? unknownRequest.slice(sent.length) : newRequestId();
+  unknownRequest = ""; // this send consumes the entry, whatever it is
+  const body: BotAction = { ...opts.body, requestId };
   // The watchdog and the response race the same `busy` flag, so the loser must
   // stay silent: an answer that lands after the timeout must not clear the busy
   // flag of whatever command the user started meanwhile. The refetch it would
@@ -374,8 +410,11 @@ function postAction(opts: {
   let abandoned = false;
   const giveUp = setTimeout((): void => {
     abandoned = true;
+    // The outcome is unknown, not failed, so a repeat of this same command has
+    // to carry the same key (see unknownRequest).
+    unknownRequest = sent + requestId;
     opts.setBusy(false);
-    opts.setStatus({ text: `${label}: no answer after ${formatSeconds(COMMAND_TIMEOUT_MS / 1000)}. Read the scoreboard below before repeating it.`, bad: true });
+    opts.setStatus({ text: `${label}: no answer after ${formatSeconds(COMMAND_TIMEOUT_MS / 1000)}. It may still run; a repeat will not run it twice.`, bad: true });
     void opts.refetch();
   }, COMMAND_TIMEOUT_MS);
   const settle = (report: CommandStatus): void => {
@@ -859,7 +898,7 @@ function renderQueryError(h: CreateElement, errStatus: number, onRetry: () => vo
     h("span", { className: `botmod-pill ${auth ? "botmod-bad" : "botmod-off"}`, role: "status" }, auth ? "AUTH REQUIRED" : "API ERROR"),
     h("p", { role: "alert" }, auth
       ? "Authentication required: log in to the dashboard as an admin to control bots."
-      : `The bot API is not responding (HTTP ${errStatus === 0 ? "error" : String(errStatus)}). The panel keeps retrying every ${formatSeconds(POLL_INTERVAL_MS / 1000)}.`),
+      : `Bot API not responding (HTTP ${errStatus === 0 ? "error" : errStatus}); retrying every ${formatSeconds(POLL_INTERVAL_MS / 1000)}.`),
     auth
       ? h("button", { className: BTN, onClick: (): void => { location.href = "/"; } }, "Log in")
       : h("button", { className: BTN, onClick: onRetry }, "Retry now"));
