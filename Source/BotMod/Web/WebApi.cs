@@ -517,12 +517,19 @@ namespace BotMod.Web
                 // clients, and bots are NPC bodies (zombieSoldier by default),
                 // so bots never appear here. A spawned test client counts as a
                 // player.
+                // Filtered once, not per bot: the nearest-player scan below
+                // re-reads this list for every bot, and re-running the
+                // IsDead/IsSpawned test on every connected player inside that
+                // loop made the status build bots x players instead of
+                // bots + players.
+                var live = new List<EntityPlayer>();
                 var plist = world.Players != null ? world.Players.list : null;
                 if (plist != null)
                 {
                     foreach (var p in plist)
                     {
                         if (p == null || p.IsDead() || !p.IsSpawned()) continue;
+                        live.Add(p);
                         players.Add(new
                         {
                             name = p.EntityName ?? p.PlayerDisplayName ?? ("#" + p.entityId),
@@ -536,12 +543,11 @@ namespace BotMod.Web
                     // Nearest live player + distance in metres (blocks).
                     string nearName = null;
                     float nearDist = -1f;
-                    if (ent != null && plist != null)
+                    if (ent != null && live.Count > 0)
                     {
                         float best = float.MaxValue;
-                        foreach (var p in plist)
+                        foreach (var p in live)
                         {
-                            if (p == null || p.IsDead() || !p.IsSpawned()) continue;
                             float d = Vector3.Distance(ent.position, p.position);
                             if (d < best) { best = d; nearName = p.EntityName ?? p.PlayerDisplayName ?? ("#" + p.entityId); }
                         }
@@ -553,7 +559,7 @@ namespace BotMod.Web
                         entityId = b.EntityId,
                         team = BotManager.Instance.GetTeamId(b.EntityId),
                         weapon = b.Weapon.GunId ?? "?",
-                        status = b.Status(world),
+                        status = b.Status(ent),
                         health = ent != null ? ToScoreInt(ent.Health) : 0,
                         deaths = ent != null ? ent.Died : 0,
                         zombies = ent != null ? ent.KilledZombies : 0,

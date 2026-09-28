@@ -13,12 +13,51 @@ namespace BotMod.AI
         // FindTarget out-scores the attacker by this factor (0.6x).
         const float GrudgeBias = 0.6f;
 
+        // Smallest multiplier any score below can carry, so a candidate can be
+        // rejected on distance alone before its LOS raycast runs. The scoring
+        // is `distance * classMult(s) + hpFrac * 6` (health term never
+        // negative), times GrudgeBias for the preferred id, so `distance *
+        // minMult` is a lower bound on the final score for every candidate.
+        // 0.82 (player) * 0.9 (registered bot) is the floor: both conditions
+        // apply to a body that is somehow both, and the exact multiplier for
+        // any one candidate is at least this. The full-world EntityAlives
+        // fallback pass applies no class multiplier at all, so it passes 1f.
+        const float MinScoreMult = 0.82f * 0.9f;
+
+        /// <summary>Relative slack on the pruning test. The bound is computed
+        /// as `dist * mult * GrudgeBias` while the score it bounds is computed
+        /// as `(dist * mult + hpFrac * 6) * GrudgeBias`: different
+        /// association, so the bound can land one rounding step ABOVE the score
+        /// it is meant to understate, and a candidate sitting a rounding step
+        /// below the incumbent would then be pruned when it should have won.
+        /// The slack is six orders of magnitude above float epsilon at these
+        /// magnitudes, so the bound stays a true lower bound; a candidate that
+        /// close to the incumbent simply pays its one raycast.</summary>
+        const float ScoreBoundSlack = 1e-6f;
+
+        /// <summary>True when a candidate at <paramref name="dist"/> cannot
+        /// out-score the incumbent, so its line-of-sight raycast (a
+        /// Physics.Raycast plus up to 64 voxel GetBlock calls) can be skipped.
+        /// <paramref name="minMult"/> is the scoring pass's smallest class
+        /// multiplier. Pure arithmetic, no engine types, so the "the bound is
+        /// a true lower bound" contract is pinned headless by
+        /// BotBrainArithTests rather than by a comment.</summary>
+        internal static bool CannotBeat(int entityId, int preferredId, float dist, float bestScore, float minMult)
+        {
+            float bound = dist * (entityId == preferredId ? minMult * GrudgeBias : minMult);
+            return bound > bestScore * (1f + ScoreBoundSlack);
+        }
+
         public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg, int preferredId)
         {
             if (world == null || me == null) return null;
             EntityAlive best = null;
             float bestScore = float.MaxValue;
             Vector3 myPos = me.position;
+            // Hoisted out of the candidate loops: the hpFrac divisor is
+            // config-constant for the whole scan, and the loops run it once per
+            // entity in the vision box (or once per EntityAlive in the world).
+            float botHealth = System.Math.Max(1f, cfg.BotHealth);
 
             try
             {
@@ -34,9 +73,17 @@ namespace BotMod.AI
                         if (e == null || e == me) continue;
                         if (!(e is EntityAlive alive)) continue;
                         if (alive.IsDead() || !alive.IsAlive()) continue;
-                        if (IsFriendly(me, alive, cfg)) continue;
                         float dist = Vector3.Distance(myPos, alive.position);
                         if (dist > cfg.VisionRange) continue;
+                        // Range, then the distance-only score bound, then the
+                        // ally check, cheapest first. IsFriendly costs a
+                        // registry lookup and, for a bot body, two TeamGate
+                        // lock acquisitions; the bound rejects a candidate
+                        // that cannot out-score the incumbent, so it also
+                        // skips the FOV math and the LOS raycast. Every gate
+                        // here only skips, so the order changes no pick.
+                        if (CannotBeat(alive.entityId, preferredId, dist, bestScore, MinScoreMult)) continue;
+                        if (IsFriendly(me, alive, cfg)) continue;
                         Vector3 dir = (alive.position - myPos); dir.y = 0;
                         if (dir == Vector3.zero) continue;
                         dir.Normalize();
@@ -52,7 +99,7 @@ namespace BotMod.AI
                         // score -> chosen). A ~10% HP foe beats a full-HP one by ~5.4 on the
                         // distance scale, matching finish-the-kill. Fraction of cfg.BotHealth,
                         // same divisor as every other hpFrac in the mod.
-                        score += (alive.Health / System.Math.Max(1f, cfg.BotHealth)) * 6f;
+                        score += (alive.Health / botHealth) * 6f;
                         // Retaliation bias (zdtd_bot grudge parity): the bot keeps
                         // re-acquiring whoever shot it while the grudge is fresh,
                         // instead of forgetting the instant they leave LOS.
@@ -74,9 +121,10 @@ namespace BotMod.AI
                         foreach (var p in world.Players.list)
                         {
                             if (p == null || p == me || p.IsDead()) continue;
-                            if (IsFriendly(me, p, cfg)) continue;
                             float dist = Vector3.Distance(myPos, p.position);
                             if (dist > cfg.VisionRange) continue;
+                            if (CannotBeat(p.entityId, preferredId, dist, bestScore, MinScoreMult)) continue;
+                            if (IsFriendly(me, p, cfg)) continue;
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, p.position + Vector3.up * 1.05f, world)) continue;
                             float score = dist * 0.82f;
                             if (preferredId >= 0 && p.entityId == preferredId) score *= GrudgeBias;
@@ -97,12 +145,20 @@ namespace BotMod.AI
                             // Scan every EntityAlive, not just zombies: bot bodies follow
                             // BotEntityClass (and its negative-id fallbacks), so they are
                             // not guaranteed to be zombie-typed.
-                            if (IsFriendly(me, a, cfg)) continue;
                             float dist = Vector3.Distance(myPos, a.position);
                             if (dist > cfg.VisionRange) continue;
+                            // Same gates, cheapest first (see the bounds pass).
+                            // The bound is the sharpest of the three: this pass
+                            // applies no class multiplier, so an ordinary
+                            // candidate cannot score below its distance at
+                            // all. On a world with hundreds of EntityAlives
+                            // this is what keeps the sweep from raycasting
+                            // every body in vision range.
+                            if (CannotBeat(a.entityId, preferredId, dist, bestScore, 1f)) continue;
+                            if (IsFriendly(me, a, cfg)) continue;
                             if (!HasLineOfSight(myPos + Vector3.up * 1.45f, a.position + Vector3.up * 1.05f, world)) continue;
                             float score = dist;
-                            score += (a.Health / System.Math.Max(1f, cfg.BotHealth)) * 6f; // finish wounded targets
+                            score += (a.Health / botHealth) * 6f; // finish wounded targets
                             if (preferredId >= 0 && a.entityId == preferredId) score *= GrudgeBias;
                             if (score < bestScore) { bestScore = score; best = a; }
                         }

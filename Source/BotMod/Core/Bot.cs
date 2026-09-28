@@ -776,7 +776,15 @@ namespace BotMod.Core
 
         public string Status(World world)
         {
-            var me = world?.GetEntity(EntityId) as EntityAlive;
+            return Status(world?.GetEntity(EntityId) as EntityAlive);
+        }
+        /// <summary>Same line as <see cref="Status(World)"/> for a caller that
+        /// already resolved this bot's entity. The dashboard holds the live
+        /// EntityAlive for every bot it renders; without this overload
+        /// Status re-ran the entity-dictionary lookup per bot per poll, so
+        /// every body in the roster was resolved twice.</summary>
+        public string Status(EntityAlive me)
+        {
             string pos = me != null ? me.position.ToString() : "?";
             string tgt = _target != null ? $"{_target.entityId}" : "none";
             return $"Bot {Name} [{Weapon.GunId}] id={EntityId} state={_state} pos={pos} tgt={tgt} hp={(me!=null?me.Health.ToString():"?")} burst={_burstLeft}";
