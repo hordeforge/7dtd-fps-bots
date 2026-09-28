@@ -16,11 +16,24 @@ const modId = "BotMod";
 
 const POLL_INTERVAL_MS = 5000;
 const ARM_TIMEOUT_MS = 4000;
+// A POST that never settles (a proxy holding the connection open) would leave
+// `busy` set, and every control in the panel stays disabled until a full page
+// reload. Give up on the callback after this long and let the user act again.
+const COMMAND_TIMEOUT_MS = 10_000;
 // The spawn count range the two number inputs declare (min/max) and the server
 // clamps to (WebApi.OptCount). Kept in one place so the input, the posted
 // value, and the "Spawn N bots: done" result line cannot disagree.
 const SPAWN_COUNT_MIN = 1;
 const SPAWN_COUNT_MAX = 16;
+// The class names the control rows repeat, declared once so the minified
+// bundle emits a one-letter reference instead of the string. The webserver
+// serves bundle.js uncompressed under a 14 KiB budget, and each of these
+// appears in five or more places.
+const BTN = "botmod-btn";
+const PRIMARY = "botmod-primary";
+const DANGER = "botmod-danger";
+const WINDOW = "botmod-window";
+const ROW = "botmod-row";
 
 // Dashboard-injected props (kl wrapper passes the stock React, an axios-ish
 // HTTP client, and the react-query useQuery hook). The payload is untyped
@@ -120,20 +133,18 @@ function unwrapData(o: unknown): Record<string, unknown> {
   if (typeof o !== "object" || o === null) {
     return {};
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped JSON payload boundary; SAFETY: typeof above proves the runtime value is an object
-  const outer = o as Record<string, unknown>;
-  const data1 = outer.data;
-  if (typeof data1 !== "object" || data1 === null) {
-    return outer;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped JSON payload boundary; SAFETY: the typeof guard above proves the runtime value is a non-null object
+  let cur = o as Record<string, unknown>;
+  // Two unwraps: the axios response, then the {data: ...} envelope inside it.
+  for (let depth = 0; depth < 2; depth++) {
+    const next = cur.data;
+    if (typeof next !== "object" || next === null) {
+      break;
+    }
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped JSON payload boundary; SAFETY: the typeof guard in the loop head proves next is a non-null object
+    cur = next as Record<string, unknown>;
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped JSON payload boundary; SAFETY: typeof above proves the runtime value is an object
-  const inner = data1 as Record<string, unknown>;
-  const data2 = inner.data;
-  if (typeof data2 !== "object" || data2 === null) {
-    return inner;
-  }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped JSON payload boundary; SAFETY: typeof above proves the runtime value is an object
-  return data2 as Record<string, unknown>;
+  return cur;
 }
 
 function numOr(v: unknown, fallback: number): number {
@@ -190,13 +201,6 @@ function listOrEmpty<T>(candidate: unknown): Array<T> {
     return candidate as Array<T>;
   }
   return [];
-}
-
-function optNum(v: number | undefined): string {
-  if (v === undefined || v === 0) {
-    return "";
-  }
-  return String(v);
 }
 
 // Clamp into SPAWN_COUNT_MIN..SPAWN_COUNT_MAX rather than only guarding the
@@ -331,35 +335,51 @@ function outcome(body: BotAction, label: string, response: unknown): { text: str
 // reaches assistive tech as well as sighted users.
 function postAction(opts: {
   HTTP: PanelProps["HTTP"];
-  busy: string;
-  setBusy: (v: string) => void;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
   setArmed: (v: string) => void;
   setStatus: (v: CommandStatus) => void;
   refetch: () => Promise<unknown>;
   body: BotAction;
 }): void {
-  if (opts.busy !== "") {
+  if (opts.busy) {
     return;
   }
   const label = actionLabel(opts.body);
-  opts.setBusy(`${opts.body.action}${optNum(opts.body.count)}${optNum(opts.body.entityId)}`);
+  opts.setBusy(true);
   opts.setArmed("");
   // The result line appears at once, so a slow or stuck request leaves a
   // "sending" note instead of only dimmed controls.
   opts.setStatus({ text: `${label}: sending...`, bad: false });
   const body: BotAction = { ...opts.body, requestId: newRequestId() };
+  // The watchdog and the response race the same `busy` flag, so the loser must
+  // stay silent: an answer that lands after the timeout must not clear the busy
+  // flag of whatever command the user started meanwhile. The refetch it would
+  // trigger is still wanted, so only the state writes are dropped.
+  let abandoned = false;
+  const giveUp = setTimeout((): void => {
+    abandoned = true;
+    opts.setBusy(false);
+    opts.setStatus({ text: `${label}: no answer after ${COMMAND_TIMEOUT_MS / 1000}s. Read the scoreboard below before repeating it.`, bad: true });
+    void opts.refetch();
+  }, COMMAND_TIMEOUT_MS);
+  const settle = (report: CommandStatus): void => {
+    clearTimeout(giveUp);
+    if (abandoned) {
+      return;
+    }
+    opts.setStatus(report);
+    opts.setBusy(false);
+  };
   void opts.HTTP.post("/api/bot", body)
     .then((response: unknown): void => {
       const done = outcome(opts.body, label, response);
-      opts.setStatus(done ?? { text: `${label}: done`, bad: false });
+      settle(done ?? { text: `${label}: done`, bad: false });
       void opts.refetch();
     })
     .catch((error: unknown): void => {
       const code = rejectionCode(error);
-      opts.setStatus({ text: code === "" ? `${label}: failed, the server rejected the command.` : `${label}: rejected, ${code}.`, bad: true });
-    })
-    .then((): void => {
-      opts.setBusy("");
+      settle({ text: code === "" ? `${label}: failed, the server rejected the command.` : `${label}: rejected, ${code}.`, bad: true });
     });
 }
 
@@ -372,12 +392,12 @@ function postAction(opts: {
 // repeats the action it confirms (a bare "Confirm?" left the user reading a
 // question, with the destructive verb off screen, right above buttons that
 // also disarm on a second click).
-function makeBtn(h: CreateElement, busy: string, post: (body: BotAction) => void, arm?: { armed: string; setArmed: (v: string | ((prev: string) => string)) => void; say: (v: string) => void }): (label: string, body: BotAction, cls?: string, off?: boolean) => unknown {
+function makeBtn(h: CreateElement, busy: boolean, post: (body: BotAction) => void, arm?: { armed: string; setArmed: (v: string | ((prev: string) => string)) => void; say: (v: string) => void }): (label: string, body: BotAction, cls?: string, off?: boolean) => unknown {
   return (label: string, body: BotAction, cls?: string, off?: boolean): unknown => {
     const isArmed = arm?.armed === label;
     return h("button", {
-      className: `botmod-btn${cls === undefined ? "" : ` ${cls}`}${isArmed ? " botmod-armed" : ""}`,
-      disabled: busy !== "" || off === true,
+      className: `${BTN}${cls === undefined ? "" : ` ${cls}`}${isArmed ? " botmod-armed" : ""}`,
+      disabled: busy || off === true,
       onClick: (): void => {
         if (arm === undefined || arm.armed === label) {
           post(body);
@@ -496,26 +516,26 @@ function renderCommandStatus(h: CreateElement, status: CommandStatus | null, onD
   }
   return h("div", { className: `botmod-status${status.bad ? " botmod-status-bad" : ""}`, role: status.bad ? "alert" : "status" },
     h("span", { className: "botmod-status-text" }, status.text),
-    h("button", { className: "botmod-btn", onClick: onDismiss }, "Dismiss"));
+    h("button", { className: BTN, onClick: onDismiss }, "Dismiss"));
 }
 
 // Enable/Disable is a toggle, not a destructive action, and every other
 // toggle in the panel (Skill, Brain, Squad, Shoot at) acts on a single click.
 // Only the actions that remove bots ask for a confirmation.
-function renderSpawnRow(h: CreateElement, enabled: boolean, busy: string, spawnCount: string, setSpawnCount: (v: string) => void, post: (body: BotAction) => void, btn: (label: string, body: BotAction, cls?: string, off?: boolean) => unknown, armedBtn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
-  return h("div", { className: "botmod-row" },
+function renderSpawnRow(h: CreateElement, enabled: boolean, busy: boolean, spawnCount: string, setSpawnCount: (v: string) => void, post: (body: BotAction) => void, btn: (label: string, body: BotAction, cls?: string, off?: boolean) => unknown, armedBtn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
+  return h("div", { className: ROW },
     btn(enabled ? "Disable" : "Enable", { action: enabled ? "disable" : "enable" },
-      enabled ? "botmod-danger" : "botmod-primary"),
-    armedBtn("Remove all", { action: "remove" }, "botmod-danger"),
+      enabled ? DANGER : PRIMARY),
+    armedBtn("Remove all", { action: "remove" }, DANGER),
     h("input", {
       className: "botmod-num", type: "number", min: SPAWN_COUNT_MIN, max: SPAWN_COUNT_MAX, value: spawnCount,
       "aria-label": "Bots to spawn",
       onChange: (e: { target: { value: string } }): void => setSpawnCount(e.target.value)
     }),
-    btn("Spawn", { action: "spawn", count: toCount(spawnCount) }, "botmod-primary"),
+    btn("Spawn", { action: "spawn", count: toCount(spawnCount) }, PRIMARY),
     [1, 4, 8].map((n): unknown =>
       h("button", {
-        key: n, className: "botmod-btn", disabled: busy !== "",
+        key: n, className: BTN, disabled: busy,
         title: `Spawn ${n} bots at the default spot`,
         onClick: (): void => post({ action: "spawn", count: n })
       }, `+${n}`)));
@@ -523,14 +543,14 @@ function renderSpawnRow(h: CreateElement, enabled: boolean, busy: string, spawnC
 
 // The row class every brain-family row shares (skill, brain, squad, vs, teams).
 // One constant so the rows cannot drift apart on padding or spacing.
-const BRAIN_ROW_CLASS = "botmod-row botmod-brain";
+const BRAIN_ROW_CLASS = `${ROW} botmod-brain`;
 
-function renderSkillRow(h: CreateElement, s: BotStatus, busy: string, post: (body: BotAction) => void): unknown {
+function renderSkillRow(h: CreateElement, s: BotStatus, busy: boolean, post: (body: BotAction) => void): unknown {
   return h("div", { className: BRAIN_ROW_CLASS },
     rowLabel(h, "Skill"),
     [0, 1, 2, 3, 4].map((d): unknown =>
       h("button", {
-        key: d, className: `botmod-btn${s.difficulty === d ? " botmod-primary" : ""}`, disabled: busy !== "",
+        key: d, className: s.difficulty === d ? `${BTN} ${PRIMARY}` : BTN, disabled: busy,
         onClick: (): void => post({ action: "skill", level: d })
       }, String(d))),
     note(h, "0 bot · 1 easy · 2 normal · 3 hard · 4 nightmare"));
@@ -540,7 +560,7 @@ function renderSkillRow(h: CreateElement, s: BotStatus, busy: string, post: (bod
 // Spawn near controls go dead rather than posting a command the server drops.
 function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPlayer: string, setNearPlayer: (v: string) => void, nearCount: string, setNearCount: (v: string) => void, nearWeapon: string, setNearWeapon: (v: string) => void, btn: (label: string, body: BotAction, cls?: string, off?: boolean) => unknown): unknown {
   const noPlayers = onlinePlayers.length === 0;
-  return h("div", { className: "botmod-row" },
+  return h("div", { className: ROW },
     rowLabel(h, "Near player"),
     noPlayers
       ? note(h, "no players online")
@@ -563,7 +583,7 @@ function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPl
       action: "spawnNear", player: nearPlayer,
       count: toCount(nearCount),
       weapon: nearWeapon === "" ? undefined : nearWeapon
-    }, "botmod-primary", noPlayers));
+    }, PRIMARY, noPlayers));
 }
 
 function renderBrainRow(h: CreateElement, s: BotStatus, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
@@ -577,11 +597,11 @@ function renderTeamRow(h: CreateElement, s: BotStatus, btn: (label: string, body
   const team = s.botTeam === true;
   return h("div", { className: BRAIN_ROW_CLASS },
     rowLabel(h, "Squad"),
-    btn(team ? "Free-for-all" : "Squad mode", { action: "team", on: !team }, team ? "botmod-primary" : ""),
+    btn(team ? "Free-for-all" : "Squad mode", { action: "team", on: !team }, team ? PRIMARY : ""),
     note(h, team ? "all bots are allies" : "bots fight each other"));
 }
 
-function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: BotAction) => void): unknown {
+function renderVsRow(h: CreateElement, s: BotStatus, busy: boolean, post: (body: BotAction) => void): unknown {
   const toggles: Array<{ label: string; target: string; on: boolean }> = [
     { label: "Bots", target: "bot", on: s.botVsBot === true },
     { label: "Zombies", target: "zombie", on: s.botVsZombie === true },
@@ -591,13 +611,13 @@ function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: 
     rowLabel(h, "Shoot at"),
     toggles.map((t): unknown =>
       h("button", {
-        key: t.target, className: `botmod-btn${t.on ? " botmod-primary" : ""}`, disabled: busy !== "",
+        key: t.target, className: t.on ? `${BTN} ${PRIMARY}` : BTN, disabled: busy,
         onClick: (): void => post({ action: "vs", target: t.target, on: !t.on })
       }, `${t.label}${t.on ? "" : " OFF"}`)),
     note(h, "squad mode overrides vs Bots"));
 }
 
-function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: string, post: (body: BotAction) => void, armedBtn: (label: string, body: BotAction, cls?: string) => unknown, dragName: string | null, setDragName: (v: string | null) => void, dropOver: number | null, setDropOver: (v: number | null) => void): unknown {
+function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: boolean, post: (body: BotAction) => void, armedBtn: (label: string, body: BotAction, cls?: string) => unknown, dragName: string | null, setDragName: (v: string | null) => void, dropOver: number | null, setDropOver: (v: number | null) => void): unknown {
   const teamCount = teamCountOf(s);
   const buckets: Array<{ team: number; label: string; color: string; members: Array<BotStat> }> = [];
   for (let t = 0; t <= teamCount; t++) {
@@ -608,7 +628,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
       members: bots.filter((b): boolean => numOr(b.team, 0) === t)
     });
   }
-  return h("div", { className: "botmod-row botmod-brain botmod-teams" },
+  return h("div", { className: `${ROW} botmod-brain botmod-teams` },
     rowLabel(h, "Teams"),
     buckets.map((bkt): unknown =>
       h("div", {
@@ -647,18 +667,18 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
               onDragEnd: (): void => setDragName(null)
             }, b.name)))),
     h("button", {
-      className: "botmod-btn", disabled: busy !== "" || teamCount <= 0,
+      className: BTN, title: "Fewer teams", disabled: busy || teamCount <= 0,
       onClick: (): void => post({ action: "teamCount", count: teamCount - 1 })
     }, "− teams"),
     h("button", {
-      className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= TEAM_LIMIT,
+      className: BTN, title: "More teams", disabled: busy || teamCount >= TEAM_LIMIT,
       onClick: (): void => post({ action: "teamCount", count: teamCount + 1 })
     }, "+ teams"),
-    armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"));
+    armedBtn("Clear teams", { action: "clearTeams" }, DANGER));
 }
 
 function renderConfigRow(h: CreateElement, s: BotStatus): unknown {
-  return h("div", { className: "botmod-row botmod-cfg" },
+  return h("div", { className: `${ROW} botmod-cfg` },
     note(h,
       `vision ${formatMeters(num(s.visionRange))} · attack ${formatMeters(num(s.attackRange))} · spawn r ${formatMeters(num(s.spawnRadius))}` +
       ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
@@ -690,7 +710,7 @@ function rowLabel(h: CreateElement, text: string): unknown {
 // element and its class live in one place: the bundle is served uncompressed
 // and every row would otherwise carry its own copy of the class name.
 function note(h: CreateElement, ...text: Array<unknown>): unknown {
-  return h("span", { className: "botmod-window" }, text);
+  return h("span", { className: WINDOW }, text);
 }
 
 // One scoreboard row: draggable for pointer users; the Team select is the
@@ -701,7 +721,7 @@ function note(h: CreateElement, ...text: Array<unknown>): unknown {
 // id: a key that changed with the signature remounted the row on every poll
 // that moved a live field, which took the focus away from a Team select the
 // user was editing.
-function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotAction) => void, teamOptions: Array<unknown>, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void, changedSig: string | null): unknown {
+function botRow(h: CreateElement, b: BotStat, busy: boolean, post: (body: BotAction) => void, teamOptions: Array<unknown>, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void, changedSig: string | null): unknown {
   let rowClass = "";
   if (changedSig !== null) {
     rowClass = "botmod-flash";
@@ -739,7 +759,7 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     h("td", null, fmtCell(b.level)),
     h("td", { dir: "auto" }, nearLabel(b)),
     h("td", { dir: "auto" }, h("select", {
-      className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
+      className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy,
       "aria-label": `Team for ${b.name}`,
       onChange: (e: { target: { value: string } }): void => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
     }, teamOptions)),
@@ -747,7 +767,7 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     h("td", { dir: "auto" }, h("button", {
       className: "botmod-btn botmod-danger botmod-remove", title: "Remove bot",
       "aria-label": `Remove bot ${b.name}`,
-      disabled: busy !== "", onClick: (): void => post({ action: "removeOne", entityId: b.entityId })
+      disabled: busy, onClick: (): void => post({ action: "removeOne", entityId: b.entityId })
     }, "✕")));
 }
 
@@ -762,7 +782,7 @@ function rowSig(b: BotStat): string {
 
 let prevRowSigs: Map<number, string> = new Map();
 
-function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: string, post: (body: BotAction) => void, sort: SortState, setSort: (v: SortState | ((prev: SortState) => SortState)) => void, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void): unknown {
+function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: boolean, post: (body: BotAction) => void, sort: SortState, setSort: (v: SortState | ((prev: SortState) => SortState)) => void, dragName: string | null, setDragName: (v: string | null) => void, setDropOver: (v: number | null) => void): unknown {
   // `hint` spells out the abbreviations the header has to stay narrow for
   // ("Kills P"); it rides on the button, which is the visible header label.
   const th = (label: string, key: string, hint?: string): unknown =>
@@ -823,8 +843,8 @@ function renderQueryError(h: CreateElement, errStatus: number, onRetry: () => vo
       ? "Authentication required: log in to the dashboard as an admin to control bots."
       : `The bot API is not responding (HTTP ${errStatus === 0 ? "error" : String(errStatus)}). The panel keeps retrying every ${POLL_INTERVAL_MS / 1000} seconds.`),
     auth
-      ? h("button", { className: "botmod-btn", onClick: (): void => { location.href = "/"; } }, "Log in")
-      : h("button", { className: "botmod-btn", onClick: onRetry }, "Retry now"));
+      ? h("button", { className: BTN, onClick: (): void => { location.href = "/"; } }, "Log in")
+      : h("button", { className: BTN, onClick: onRetry }, "Retry now"));
 }
 
 // First paint, before the first /api/bot response lands. The panel used to
@@ -858,7 +878,7 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
       setBlocked(true);
     }
   }, [query.isError, query.error]);
-  const [busy, setBusy] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
   const [spawnCount, setSpawnCount] = React.useState("2");
   const [nearPlayer, setNearPlayer] = React.useState("");
   const [nearCount, setNearCount] = React.useState("1");
@@ -894,7 +914,7 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
   const pill = (on: boolean, onLabel: string, offLabel: string): unknown =>
     h("span", { className: `botmod-pill ${on ? "botmod-ok" : "botmod-off"}` }, on ? onLabel : offLabel);
 
-  return h("div", { className: "botmod-panel", "aria-busy": busy !== "" },
+  return h("div", { className: "botmod-panel", "aria-busy": busy },
     renderBotHeader(h, s, onlinePlayers, pill),
     // Screen-reader channel for arm/confirm and command-sent state changes;
     // role=status implies a polite live region.
