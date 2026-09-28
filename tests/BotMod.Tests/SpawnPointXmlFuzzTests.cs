@@ -333,20 +333,27 @@ static class SpawnPointXmlFuzzTests
         Check(CountOrZero(DtdWithPlainPoint) == 1,
             "a DOCTYPE document stopped reading its plain spawnpoint");
         Check(CountOrZero(BillionLaughs) == 0, "the entity-expansion document answered points");
+        // Stopwatch, not DateTime.UtcNow: a budget is an elapsed duration, and
+        // a wall-clock step (NTP correction, an operator setting the host clock)
+        // mid-measurement prints a negative or absurd elapsed and fails the run
+        // for a parse that finished in microseconds, while a backward step hides
+        // a real blowup. Same reason IdempotencyLedger times its retention window.
         {
-            var started = DateTime.UtcNow;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             CountOrZero(BillionLaughs);
-            double ms = (DateTime.UtcNow - started).TotalMilliseconds;
-            Check(ms < 2000, "the entity-expansion document took " + ms + "ms");
+            sw.Stop();
+            Check(sw.ElapsedMilliseconds < 2000,
+                "the entity-expansion document took " + sw.ElapsedMilliseconds + "ms");
         }
         {
-            var started = DateTime.UtcNow;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             int n;
             try { n = SpawnPointXml.Parse(BillionLaughs).Count; }
             catch (XmlException) { n = 0; }
-            double ms = (DateTime.UtcNow - started).TotalMilliseconds;
+            sw.Stop();
             Check(n == 0, "entity-expansion document answered " + n + " points");
-            Check(ms < 2000, "entity-expansion document took " + ms + "ms");
+            Check(sw.ElapsedMilliseconds < 2000,
+                "entity-expansion document took " + sw.ElapsedMilliseconds + "ms");
         }
 
         // Every fixed document, twice, plus the whole random corpus.
