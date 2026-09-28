@@ -49,9 +49,13 @@ Compatibility distance `δ = c1·E/N + c2·D/N + c3·W̄` with `c = (1.0, 1.0, 0
 
 Evolution collapses fast on small arenas. Countermeasures (cheap, deterministic):
 
-- **Hall-of-Fame opponents.** Re-encountering old champs prevents cycling.
-- **Map/weapon rotation.** See `02` sampling, a genome that memorized one map dies on the next draw.
-- **Weight-space distance diagnostic.** Track mean pairwise Euclidean distance of top quartile; if it drops below 0.08 for 5 consecutive generations, boost `σ` by 1.5× for one generation (noise burst).
+- **Hall-of-Fame injection.** Old champs re-enter the population, not the
+  opponent pool: every 12 generations one random Hall-of-Famer is copied into
+  a random slot (`evolve.py`, freshness-gated so a genome identical to the
+  current best is not re-injected). This is the §1 archive, not an opponent
+  re-encounter.
+- **Map/weapon rotation.** See `02` sampling, a genome that memorized one map dies on the next draw. Shipped only in the mixed arenas: the duels pin env and weapon, so their memory pressure comes from skill cycling (`02` §2 status note).
+- **Weight-space distance diagnostic.** Track mean pairwise Euclidean distance of top quartile; if it drops below 0.08 for 5 consecutive generations, boost `σ` by 1.5× for one generation (noise burst). **Not implemented**: no diversity metric is computed or logged (`02` §7 status, `06` §3), so the only σ boost that fires is the stagnation burst in §2.3. Kept as design intent.
 - **Novelty bonus (optional).** `+0.01 * novelty(genome)` where novelty is k-NN distance in behavior space `(kills, timeAlive, damageEff)` archive of last 200 evaluations (Lehman & Stanley 2011). Disabled by default; enable if plateau persists.
 
 ## 4. Hyperparameters (single table to tune)
@@ -65,6 +69,7 @@ Evolution collapses fast on small arenas. Countermeasures (cheap, deterministic)
 | Gaussian σ (base) | σ | 0.05 | 0.02..0.10 |
 | Sparse reset prob | ps | 0.14 (0.22 stagnant, per `ga.py::mutate`) | 0.05..0.22 |
 | Hall-of-Fame size | H | 8 | 4..16 |
+| Islands | I | 1 (`evolve.py --islands`, range 1..8) | 1..8; split `max(8, pop // I)` per island, ring-migrate 2 migrants every 10 gens when `I > 1` (`ga.island_mix`) |
 | Matches per genome | F | 36 train = dual-seed x2 draws over the 9-arena config mix (R9 draw regularization); eval gate pins F=18 | cost tradeoff |
 | Generations (run) | G | 40 (`evolve.py --gens`) | 40..400 in practice |
 | Stagnation burst trigger | plateau | 8 gens with no best improvement > 1e-6 (`evolve.py`: `stagnant = plateau >= 8`); fires the explorer burst, not NEAT | 5..15 |

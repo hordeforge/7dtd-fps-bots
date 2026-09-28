@@ -40,6 +40,12 @@ The fitness landscape is meaningless without a fixed test suite. Three arena typ
 
 ### 2.4 Map / weapon sampling
 
+> Status (2026-09-28): partly shipped, in different terms. Match variation
+> comes from the seed chain in §4, not an LCG, and the "map patch" is the env
+> variant index `seed % 5` in `combat_sim`. Mixed arenas draw a `LoadoutPool`
+> entry per match; the fixed-opponent duels pin env and weapon
+> (`DUEL_ENV`, `DUEL_WEAPON`, see the §2 status note). Kept as design intent.
+
 - Each evaluation runs F matches per genome, each match samples a `spawnpoints.xml` patch and a `LoadoutPool` entry. Average over samples so the net cannot overfit one gun (sniper-only cheese) or one map seam.
 - Deterministic sampler: `LCG(generation, genomeIdx, matchIdx)`, same samples every generation.
 

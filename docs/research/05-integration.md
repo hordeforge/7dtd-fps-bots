@@ -79,7 +79,7 @@ JSON is the only format `TryLoad` accepts today (it parses the file as JSON text
 
 | Config flag | Location | Effect |
 |---|---|---|
-| `UseNeuralBrain` (bool, default `false` in `BotConfig.cs`) | `BotConfig` → `botmod.json` | When false, `BotNeuralBrain` is never called, heuristic only. The deployed `config/botmod.json` ships it **true** since R13: the validation gates were met (R12/R13 GOAL MET) and the champion held 13.04 avg after the magazine alignment. |
+| `UseNeuralBrain` (bool, default `false` in `BotConfig.cs`) | `BotConfig` → `botmod.json` | When false, `BotNeuralBrain` is never called, heuristic only. The deployed `config/botmod.json` ships it **true** since R13: the validation gates were met (R12/R13 GOAL MET) and the champion beat the static baseline on every gate seed after the magazine alignment (`INDEX.md` holds the current number; R13 measured 13.04 avg). |
 | `BotNeuralWeightPath` (string, default `evolved/best.json`) | `BotConfig` | Where to load the model from |
 | `bot neural reload` | console command | Re-reads `best.json` without restarting the server |
 | `bot neural off/on` | admin | Toggles flag live; useful for blind tests |
@@ -114,6 +114,11 @@ No exception propagates to `Bot.Tick`.
 - Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay traces: they must differ only via net decisions, not physics.
 
 ## 8. Migration path
+
+> Status (2026-08-21, R13): steps 1-3 ran and step 4 landed. The heuristic is
+> still the shipped fallback path, `config/botmod.json` ships
+> `UseNeuralBrain: true`, and the revert is still one command
+> (`bot neural off`). The list below is the record, not the current state.
 
 1. Ship heuristic as always. `UseNeuralBrain=false` in `config/botmod.json`.
 2. Train offline (`04-training-pipeline.md`), promote `evolved/best.json`.

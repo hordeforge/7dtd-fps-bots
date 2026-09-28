@@ -66,6 +66,14 @@ If cloning regresses (net worse than heuristic), retry with fewer steps or skip 
 
 ## 5. Evaluation loop (determinism first)
 
+> Status (2026-09-28): the loop below is the `zdtd` headless path of §1, not
+> what ships. The shipped evaluation is `harness.evaluate` over
+> `combat_sim.simulate_match`: seeds come from the sha256 chain in
+> `harness._seed_for` (not the LCG written here), map variation is the env
+> variant index `seed % 5` in `combat_sim` (not a `spawnpoints.xml` patch),
+> and weapon draw is per-match in mixed arenas while the fixed-opponent duels
+> pin one loadout (see `02` §2). Kept as the design target.
+
 For each genome `i` in generation `g`:
 
 - Derive `seeds = LCG(runSeed, g, i, arena, match)`.
