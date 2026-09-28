@@ -41,7 +41,9 @@ fi
 # Version drift guard: BotModVersion.Number is canonical. ModInfo.xml is what
 # the engine's mod listing shows and cannot reference the C# constant, so the
 # build fails when they disagree instead of shipping mismatched versions.
-CS_VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)".*/\1/p' "$SRC/Core/BotModVersion.cs" || true)"
+# shellcheck source=scripts/mod-version.sh
+source "$ROOT/scripts/mod-version.sh"
+CS_VERSION="$MOD_VERSION"
 XML_VERSION="$(sed -n 's/.*<Version value="\([^"]*\)".*/\1/p' "$SRC/ModInfo.xml" || true)"
 if [[ -z "$CS_VERSION" || "$CS_VERSION" != "$XML_VERSION" ]]; then
   echo "ERROR: version drift: Source/BotMod/Core/BotModVersion.cs=$CS_VERSION vs Source/BotMod/ModInfo.xml=$XML_VERSION" >&2

@@ -9,6 +9,7 @@
 # Reproducibility contract (verify by running twice and comparing sha256):
 #   - entry order is sorted (LC_ALL=C), never readdir order
 #   - every timestamp is SOURCE_DATE_EPOCH, defaulting to the HEAD commit time
+#     and rounded down to the two-second tick zip's DOS timestamp can store
 #   - permissions are normalized (dirs 755, files 644); uid/gid and extended
 #     attributes are stripped via zip -X
 #   - compression level fixed (-9) so deflate output is stable
@@ -25,18 +26,11 @@ SRC="$ROOT/dist/BotMod"
 
 # A build that dies after the C# compile (the bunx tsc emit, a missing config
 # file) leaves a BotMod.dll behind in a half-populated dist/BotMod, and this
-# script would happily archive that as a release. The payload is installed
-# server-side, so every file the runtime reads is required here, not optional.
-required=(
-  BotMod.dll
-  ModInfo.xml
-  Config/botmod.json
-  Config/entityclasses.xml
-  WebMod/bundle.js
-  WebMod/styling.css
-)
+# script would happily archive that as a release.
+# shellcheck source=scripts/required-payload.sh
+source "$ROOT/scripts/required-payload.sh"
 missing=()
-for f in "${required[@]}"; do
+for f in "${REQUIRED_PAYLOAD[@]}"; do
   [[ -f "$SRC/$f" ]] || missing+=("$f")
 done
 if ((${#missing[@]})); then
@@ -47,15 +41,11 @@ if ((${#missing[@]})); then
   exit 1
 fi
 
-# Same canonical source as scripts/build.sh's drift guard. The trailing .*
-# matters: without it sed takes the longest overall match, so a `;` comment or
-# any text after the constant leaks into the version and into the archive name.
-VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)".*/\1/p' \
-  "$ROOT/Source/BotMod/Core/BotModVersion.cs")"
-if [[ -z "$VERSION" ]]; then
-  echo "ERROR: could not parse version from Source/BotMod/Core/BotModVersion.cs" >&2
-  exit 1
-fi
+# Same canonical source as scripts/build.sh's drift guard; the anchored parse
+# and the "one place that reads it" rule live in scripts/mod-version.sh.
+# shellcheck source=scripts/mod-version.sh
+source "$ROOT/scripts/mod-version.sh"
+VERSION="$MOD_VERSION"
 
 if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
   EPOCH="$SOURCE_DATE_EPOCH"
@@ -65,6 +55,11 @@ else
   echo "ERROR: not a git checkout; set SOURCE_DATE_EPOCH explicitly" >&2
   exit 1
 fi
+# Zip records entry mtimes in the DOS format, which has a two-second tick, so
+# an odd epoch is stored one second earlier than the instant asked for. Round
+# down here instead, where the declared value becomes the stamped one, so the
+# archive carries exactly the epoch in the contract above.
+EPOCH="$((EPOCH - EPOCH % 2))"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT

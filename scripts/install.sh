@@ -31,17 +31,20 @@ if [[ ! -f "$DS/Mods/0_TFP_Harmony/0Harmony.dll" ]]; then
   exit 1
 fi
 
-# Payload the mod cannot run without: the engine reads ModInfo.xml to list the
-# mod, BotConfig loads Config/botmod.json, and the dashboard serves
-# WebMod/bundle.js. A payload missing one of these installs cleanly and then
-# fails at runtime, one server start later.
-for required in ModInfo.xml Config/botmod.json WebMod/bundle.js; do
-  if [[ ! -f "$SRC/$required" ]]; then
-    echo "ERROR: payload $SRC is missing $required; nothing was installed" >&2
-    echo "Rebuild with scripts/build.sh (or re-extract the release zip)." >&2
-    exit 1
-  fi
+# The same list scripts/package.sh refuses to archive: a payload missing one of
+# these installs cleanly and then fails at runtime, one server start later.
+# shellcheck source=scripts/required-payload.sh
+source "$ROOT/scripts/required-payload.sh"
+missing=()
+for required in "${REQUIRED_PAYLOAD[@]}"; do
+  [[ -f "$SRC/$required" ]] || missing+=("$required")
 done
+if ((${#missing[@]})); then
+  echo "ERROR: payload $SRC is missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "nothing was installed; rebuild with scripts/build.sh (or re-extract the release zip)." >&2
+  exit 1
+fi
 
 # The release zip carries MANIFEST.sha256 over every payload file. Verifying it
 # here turns a tampered or half-extracted package into a refused install rather

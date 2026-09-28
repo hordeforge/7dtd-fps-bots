@@ -307,13 +307,20 @@ ids="$work/ds-install"
 # install.sh resolves its payload as <script-root>/dist/BotMod, so run a copy
 # of the script under the scratch root instead of writing into the repo's dist.
 payload="$work/install-root/dist/BotMod"
-mkdir -p "$work/install-root/scripts" "$payload/Config" "$payload/WebMod"
+mkdir -p "$work/install-root/scripts"
 cp "$ROOT/scripts/install.sh" "$ROOT/scripts/server-dir.sh" "$ROOT/scripts/digest.sh" \
-  "$ROOT/scripts/deploy-lock.sh" "$work/install-root/scripts/"
+  "$ROOT/scripts/deploy-lock.sh" "$ROOT/scripts/required-payload.sh" "$work/install-root/scripts/"
 install_script="$work/install-root/scripts/install.sh"
 mkdir -p "$ids/7DaysToDieServer_Data/Managed" "$ids/Mods/0_TFP_Harmony" "$ids/Mods/BotMod/Config"
 touch "$ids/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" "$ids/Mods/0_TFP_Harmony/0Harmony.dll"
-for f in BotMod.dll ModInfo.xml Config/botmod.json WebMod/bundle.js; do printf 'x\n' > "$payload/$f"; done
+# The complete set install.sh requires, taken from the list it reads, so a new
+# required file cannot make this fixture quietly incomplete.
+# shellcheck source=scripts/required-payload.sh
+source "$ROOT/scripts/required-payload.sh"
+for f in "${REQUIRED_PAYLOAD[@]}"; do
+  mkdir -p "$payload/$(dirname "$f")"
+  printf 'x\n' > "$payload/$f"
+done
 printf '{"TargetBotCount": 9}\n' > "$ids/Mods/BotMod/Config/botmod.json"
 # The digest the release zip carries, written by whatever tool this host has
 # (digest.sh picks sha256sum on Linux, shasum on macOS); install.sh's gate has
@@ -333,6 +340,27 @@ if grep -q '"TargetBotCount": 9' "$ids/Mods/BotMod/Config/botmod.json"; then
 else
   fail "operator config lost across the reinstall"
 fi
+# A payload built in place has no MANIFEST.sha256 to check, so the required-file
+# gate is the only thing standing between a half-built dist/BotMod and a live
+# install. It reads the list scripts/package.sh refuses to archive, so both
+# halves of the gate fail on the same missing file.
+mv "$payload/WebMod/styling.css" "$work/styling.css.away"
+find "$ids/Mods/BotMod" -type f | LC_ALL=C sort > "$work/live.before"
+expect_fail "payload missing a required file refused" \
+  env SEVENDTD_DS_DIR="$ids" bash "$install_script"
+if grep -q "styling.css" "$work/out"; then
+  ok "the refusal names the missing file"
+else
+  fail "the refusal did not name the missing file"
+fi
+find "$ids/Mods/BotMod" -type f | LC_ALL=C sort > "$work/live.after"
+if diff -q "$work/live.before" "$work/live.after" >/dev/null; then
+  ok "the refused install changed nothing"
+else
+  fail "a payload missing a required file was installed anyway"
+fi
+mv "$work/styling.css.away" "$payload/WebMod/styling.css"
+
 printf 'tampered\n' > "$payload/ModInfo.xml"
 expect_fail "payload failing its MANIFEST refused" \
   env SEVENDTD_DS_DIR="$ids" bash "$install_script"
