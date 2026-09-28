@@ -263,9 +263,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     island_fitness.append(fit)
                 all_fitness = [v for lst in island_fitness for v in lst]
                 all_pops_flat = [w for lst in island_pops for w in lst]
-            order = np.argsort(all_fitness)
-            ranked = np.empty(len(all_fitness), dtype=float)
-            ranked[order] = np.arange(len(all_fitness)) / max(1, len(all_fitness) - 1)
+            ranked, order = ga.rank_fitness(all_fitness)
 
             best_idx = int(np.argmax(all_fitness))
             f = float(all_fitness[best_idx])
@@ -326,9 +324,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 new_islands: list[list] = []
                 for ii, ip in enumerate(island_pops):
                     fit = island_fitness[ii]
-                    ord2 = np.argsort(fit)
-                    rk2 = np.empty(len(fit), dtype=float)
-                    rk2[ord2] = np.arange(len(fit)) / max(1, len(fit) - 1)
+                    rk2, ord2 = ga.rank_fitness(fit)
                     new_islands.append(ga.next_generation(ip, rk2, ord2, rng,
                                                           generation=g, total_gens=gens,
                                                           stagnant=stagnant))
@@ -343,10 +339,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             if g % 12 == 11 and len(hof) >= 2:
                 # pick a HOF entry not equal to current best (weight-hash dedup)
                 cand = hof[int(rng.integers(len(hof)))]
-                try:
-                    is_dup = best_w is not None and float(np.mean((cand - best_w) ** 2)) < 1e-8
-                except Exception:
-                    is_dup = False
+                is_dup = best_w is not None and float(np.mean((cand - best_w) ** 2)) < 1e-8
                 if not is_dup:
                     # NB: keep the rng draw inside the multi-island arm so the
                     # single-island rng stream stays byte-identical to history.
@@ -411,9 +404,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             print(f"skipped best.json: candidate held40 {candidate_held:+.4f} < existing {current_held:+.4f} (keep current champion)")
 
     print(f"run dir: {run_dir}")
-
-
-# --- best.json evaluation commands (folded eval.py / eval_static_vs_neural.py) ---
 
 
 def _load_best(best: str):

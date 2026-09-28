@@ -45,9 +45,7 @@ def run_one(activation: str, pop: int, gens: int, seed: int):
             curve.append((g, float(np.max(arr)), float(np.mean(arr))))
             if g == gens - 1:
                 break
-            order = np.argsort(fitness)
-            ranked = np.empty(len(fitness), dtype=float)
-            ranked[order] = np.arange(len(fitness)) / max(1, len(fitness) - 1)
+            ranked, order = ga.rank_fitness(fitness)
             # Defaults keep the historical short-sweep behavior: constant sigma
             # (generation=0 -> no anneal), no stagnant burst.
             pop_w = ga.next_generation(pop_w, ranked, order, rng)

@@ -392,16 +392,12 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             if vmag > 1.3:
                 vx *= 1.3 / vmag; vy *= 1.3 / vmag
             bx[bi] += vx; by[bi] += vy
-            # clamp to arena 0..80
-            if bx[bi] < 2: bx[bi] = 2
-            if bx[bi] > 78: bx[bi] = 78
-            if by[bi] < 2: by[bi] = 2
-            if by[bi] > 78: by[bi] = 78
+            # clamp to arena 2..78
+            bx[bi] = min(78, max(2, bx[bi])); by[bi] = min(78, max(2, by[bi]))
             # stuck detection
             if abs(bx[bi] - last_x[bi]) < 0.18 and abs(by[bi] - last_y[bi]) < 0.18:
                 stuck[bi] += 1
-                if stuck[bi] > 0:
-                    stuck_ticks += 1
+                stuck_ticks += 1
             else:
                 stuck[bi] = 0
                 last_x[bi] = bx[bi]; last_y[bi] = by[bi]
@@ -449,55 +445,44 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             # sniper gets little penalty, shotgun more forgiving
             hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
             v, rng = _lcg01(rng)
-            if v > hc2:
-                # miss: still burns burst
-                if burst_left[bi] > 0:
-                    burst_left[bi] -= 1
-                    if burst_left[bi] <= 0:
-                        burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]
-                        burst_cd[bi] = 0.55
-                else:
-                    reaction_cd[bi] = 0.28
-                continue
-            # hit!
-            hits += 1
-            if not use_opp or bi < n_evolved:
-                hits_ev += 1
-            # headshot roll (pellets==1 only)
-            is_head = False
-            if WEAPON_PELLETS[bweapon[bi]] == 1:
-                v2, rng = _lcg01(rng)
-                if v2 < (0.04 + bskill[bi] * 0.02):
-                    is_head = True
-            dmg = WEAPON_DAMAGE[bweapon[bi]]
-            if is_head:
-                dmg = dmg * 2.0
-            damage_dealt += dmg
-            if not use_opp or bi < n_evolved:
-                damage_dealt_ev += dmg
-            # apply
-            if best_kind == 0:
-                bhp[best] -= dmg
-                if not use_opp or best < n_evolved:
-                    damage_taken_ev += dmg
-                if bhp[best] <= 0:
-                    balive[best] = False
-                    deaths += 1
-                    kills += 1
-                    if not use_opp or bi < n_evolved:
-                        kills_ev += 1
+            if v <= hc2:
+                # hit!
+                hits += 1
+                if not use_opp or bi < n_evolved:
+                    hits_ev += 1
+                # headshot roll (pellets==1 only)
+                is_head = False
+                if WEAPON_PELLETS[bweapon[bi]] == 1:
+                    v2, rng = _lcg01(rng)
+                    if v2 < (0.04 + bskill[bi] * 0.02):
+                        is_head = True
+                dmg = WEAPON_DAMAGE[bweapon[bi]]
+                if is_head:
+                    dmg = dmg * 2.0
+                damage_dealt += dmg
+                if not use_opp or bi < n_evolved:
+                    damage_dealt_ev += dmg
+                # apply
+                if best_kind == 0:
+                    bhp[best] -= dmg
                     if not use_opp or best < n_evolved:
-                        deaths_ev += 1
-                    # respawn zombie-ish: keep FFA populated by reviving victim as fresh zombie for horde pressure?
-                    # no, leave dead for K/D accounting
-            else:
-                zhp[best] -= dmg
-                if zhp[best] <= 0:
-                    zalive[best] = False
-                    kills += 1
-                    if not use_opp or bi < n_evolved:
-                        kills_ev += 1
-            # burst accounting
+                        damage_taken_ev += dmg
+                    if bhp[best] <= 0:
+                        balive[best] = False
+                        deaths += 1
+                        kills += 1
+                        if not use_opp or bi < n_evolved:
+                            kills_ev += 1
+                        if not use_opp or best < n_evolved:
+                            deaths_ev += 1
+                else:
+                    zhp[best] -= dmg
+                    if zhp[best] <= 0:
+                        zalive[best] = False
+                        kills += 1
+                        if not use_opp or bi < n_evolved:
+                            kills_ev += 1
+            # burst accounting: a miss burns a round of the burst too
             if burst_left[bi] > 0:
                 burst_left[bi] -= 1
                 if burst_left[bi] <= 0:
@@ -526,19 +511,17 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 zx[zi] += dx / d * 0.42  # zombie speed (buffed for PvE pressure)
                 zy[zi] += dy / d * 0.42
             if d < 2.0:
-                bhp[best_b] -= 10 * dt * 8  # melee pressure (buffed)
-                damage_taken += 10 * dt * 8
+                melee = 10 * dt * 8  # melee pressure (buffed)
+                bhp[best_b] -= melee
+                damage_taken += melee
                 if not use_opp or best_b < n_evolved:
-                    damage_taken_ev += 10 * dt * 8
+                    damage_taken_ev += melee
                 if bhp[best_b] <= 0:
                     balive[best_b] = False
                     deaths += 1
                     if not use_opp or best_b < n_evolved:
                         deaths_ev += 1
-            if zx[zi] < 2: zx[zi] = 2
-            if zx[zi] > 78: zx[zi] = 78
-            if zy[zi] < 2: zy[zi] = 2
-            if zy[zi] > 78: zy[zi] = 78
+            zx[zi] = min(78, max(2, zx[zi])); zy[zi] = min(78, max(2, zy[zi]))
 
     # sim returns raw components: harness does scalarization (so weights can sweep)
     elo = float(kills) - float(deaths)

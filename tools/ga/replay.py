@@ -169,7 +169,6 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
         h = np.tanh(W1 @ np.array(x_obs, dtype=float) + b1)
         return W2 @ h + b2
 
-
     for tick in range(max_ticks):
         # Stop only when every bot is dead: the sim records FFA/K/D accounting,
         # so a wiped zombie horde or a lone survivor still plays out the clock.
@@ -279,17 +278,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                 hc2 = hc * (1.0 - aim_penalty * 0.35)
                 v, rng = _lcg01(rng)
                 fired = True
-                if v > hc2:
-                    # Miss still burns burst; reaction pause only when the
-                    # burst was already empty (same accounting as combat_sim
-                    # and this file's hit path below).
-                    if burst_left[bi] > 0:
-                        burst_left[bi] -= 1
-                        if burst_left[bi] <= 0:
-                            burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
-                    else:
-                        reaction_cd[bi] = 0.28
-                else:
+                if v <= hc2:
                     hits += 1
                     is_head = False
                     if WEAPON_PELLETS[bweapon[bi]] == 1:
@@ -311,12 +300,15 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                         if zhp[best] <= 0:
                             zalive[best] = False; kills += 1
                             killed_tgt = ("zombie" + str(best))
-                    if burst_left[bi] > 0:
-                        burst_left[bi] -= 1
-                        if burst_left[bi] <= 0:
-                            burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
-                    else:
-                        reaction_cd[bi] = 0.28
+                # Burst accounting, hit or miss: a miss still burns burst, and
+                # the reaction pause lands only when the burst was already
+                # empty (same accounting as combat_sim).
+                if burst_left[bi] > 0:
+                    burst_left[bi] -= 1
+                    if burst_left[bi] <= 0:
+                        burst_left[bi] = WEAPON_BURST_MIN[bweapon[bi]]; burst_cd[bi] = 0.55
+                else:
+                    reaction_cd[bi] = 0.28
             if tick % RECORD_STRIDE == 0:
                 frame["bots"].append({
                     "id": bi, "x": bx[bi], "y": by[bi], "hp": bhp[bi], "alive": balive[bi],
@@ -343,8 +335,9 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
             if d > 0.01:
                 zx[zi] += dx / d * 0.42; zy[zi] += dy / d * 0.42
             if d < 2.0:
-                bhp[best_b] -= 10 * dt * 8
-                damage_taken += 10 * dt * 8
+                melee = 10 * dt * 8
+                bhp[best_b] -= melee
+                damage_taken += melee
                 if bhp[best_b] <= 0:
                     balive[best_b] = False; deaths += 1
                     frame["events"].append("zombie%d ate b%d" % (zi, best_b))

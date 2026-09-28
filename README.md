@@ -257,7 +257,7 @@ atomic with a `.bak` last-known-good).
 make build && make install
 ./7DaysToDieServer.x86_64 -logfile .scratch/bot.log -quit -batchmode -nographics -dedicated -configfile .scratch/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.5.0 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True AuthBypass=False
+# [BotMod] BotMod v0.7.1 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True AuthBypass=False
 # [BotMod] BotManager ready. TargetBots=6 diff=4 weapon=mixed
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
 # [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) (1/6)

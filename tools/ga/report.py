@@ -125,7 +125,6 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
 
 def _last_best(run_dir: Path):
     """(best genome, last ckpt json) of the newest gen_*.json, or (None, None)."""
-    import numpy as np
     import ga
     cand = list(sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key))
     if not cand:
@@ -138,7 +137,6 @@ def _last_best(run_dir: Path):
 
 def weight_hist(run_dir: Path) -> bytes | None:
     """Weight histogram of the final best (or first gen ckpt if no best yet)."""
-    import numpy as np
     w, last = _last_best(run_dir)
     if w is None:
         return None
@@ -206,7 +204,7 @@ def build(runs: list[Path], out: Path):
                       f"pop/seed shown as ?", file=sys.stderr)
 
         # headline stats
-        rel = (best[-1] - best[0]) / max(1e-9, abs(best[0])) * 100 if best else 0
+        rel = (best[-1] - best[0]) / max(1e-9, abs(best[0])) * 100
         # pop/seed come from the run's config.json; a hand-edited file may hold
         # arbitrary text, so they are escaped like every other external string.
         headline = (

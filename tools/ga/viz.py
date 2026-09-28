@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +54,11 @@ def split(w, hidden, inputs, outputs=5):
     return W1, b1, W2, b2
 
 
+def _sigmoid(x) -> float:
+    """Clamped logistic, the same -8/+8 cutoff the sim kernels use."""
+    return 1.0 / (1.0 + math.exp(-float(np.clip(x, -8, 8))))
+
+
 def draw(w, hidden, inputs, title: str, out: Path, traces=None):
     if not HAS_MPL:
         print("matplotlib not available")
@@ -66,33 +72,24 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
     layers = [inputs, hidden, 5]
     xs = [0, 1, 2]
     max_n = max(layers)
+    # node positions per layer, centered against the tallest layer
+    yss = [np.linspace(0.08 + (max_n - n) * 0.04, 0.92 - (max_n - n) * 0.04, n) for n in layers]
     for li, (n, x) in enumerate(zip(layers, xs, strict=True)):
-        # pad centering
-        off = (max_n - n) * 0.04
-        ys = np.linspace(0.08 + off, 0.92 - off, n)
+        ys = yss[li]
         color = ["#0ea5e9", "#0369a1", "#0f172a"][li]
         ax.scatter([x] * n, ys, s=68, c=color, alpha=0.92, edgecolors="white", linewidths=1.0, zorder=3)
         labels = [INPUT_LABELS, [f"h{i}" for i in range(hidden)], OUT_LABELS][li]
         for y, lab in zip(ys, labels, strict=True):
             ax.text(x + 0.06, y, lab, fontsize=6.2, va="center", color="#334155")
         # bias ring (size by |b|)
-        if li == 1:
-            for y, b in zip(ys, b1, strict=True):
+        if li in (1, 2):
+            bias, ring = (b1, "#64748b") if li == 1 else (b2, "#475569")
+            for y, b in zip(ys, bias, strict=True):
                 s = float(np.clip(abs(b) * 22, 0, 18))
                 if s > 3:
-                    ax.scatter([x], [y], s=s * 10, facecolors="none", edgecolors="#64748b", alpha=0.85, zorder=2)
-        if li == 2:
-            for y, b in zip(ys, b2, strict=True):
-                s = float(np.clip(abs(b) * 22, 0, 18))
-                if s > 3:
-                    ax.scatter([x], [y], s=s * 10, facecolors="none", edgecolors="#475569", alpha=0.85, zorder=2)
+                    ax.scatter([x], [y], s=s * 10, facecolors="none", edgecolors=ring, alpha=0.85, zorder=2)
     # edges: subsample so it isn't a hairball (show top-|weight| edges)
     rng = np.random.default_rng(0)
-    # precompute ys per layer (centered)
-    yss = []
-    for n in layers:
-        pad = (max_n - n) * 0.04 if max_n > n else 0
-        yss.append(np.linspace(0.08 + pad, 0.92 - pad, n))
     for li in range(2):
         W = W1 if li == 0 else W2
         flat = np.abs(W).ravel()
@@ -134,17 +131,13 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
         traces = [("healthy duelist", mk(0.9, 0.8, 0.25, 1, 0.3)),
                   ("wounded / losing LOS", mk(0.22, 0.9, 0.55, 0, 0.7)),
                   ("camp opportunist", mk(0.82, 1.0, 0.72, 1, 0.05))]
-    import math
     outs = []
     for name, x in traces:
         h = np.tanh(W1 @ x + b1)
         y = W2 @ h + b2
-        camp = 1/(1+math.exp(-float(np.clip(y[0], -8, 8))))
-        retr = 1/(1+math.exp(-float(np.clip(y[1], -8, 8))))
-        aim = math.tanh(float(y[2]))
-        fire = 1/(1+math.exp(-float(np.clip(y[3], -8, 8))))
-        strafe = 1/(1+math.exp(-float(np.clip(y[4], -8, 8))))
-        outs.append((name, [camp, retr, aim, fire, strafe]))
+        # aim is the one tanh output; the rest are logistic
+        outs.append((name, [_sigmoid(y[0]), _sigmoid(y[1]), math.tanh(float(y[2])),
+                            _sigmoid(y[3]), _sigmoid(y[4])]))
     X = np.arange(5)
     wbar = 0.23
     for i, (name, vals) in enumerate(outs):

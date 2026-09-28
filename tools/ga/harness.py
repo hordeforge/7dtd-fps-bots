@@ -72,6 +72,23 @@ DUEL_SPAWN_GAP = 50.0
 DUEL_ENV = 2
 DUEL_WEAPON = 2
 
+# Arena shapes, weighted per curriculum in evaluate().
+_DUEL = (2, 1, 0, 1200)
+_SKIRMISH = (2, 2, 0, 1200)
+_FFA = (6, 6, 0, 1800)
+_HORDE_SHORT = (4, 4, 6, 1200)
+_HORDE_LONG = (4, 4, 6, 1800)
+
+
+def _pmap(fn, n: int):
+    """Run fn(0..n-1) across cores, sequential below two items. ex.map collects
+    in index order, so the result is byte-identical to a sequential loop."""
+    workers = min(_MAX_WORKERS, n)
+    if workers <= 1:
+        return [fn(i) for i in range(n)]
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return list(ex.map(fn, range(n)))
+
 
 def _seed_for(generation: int, genome_idx: int, match_idx: int, run_seed: int = 42) -> int:
     h = hashlib.sha256(f"{run_seed}:{generation}:{genome_idx}:{match_idx}".encode()).digest()
@@ -99,24 +116,14 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
     # n_bots the remaining bots fight with the fixed opponent policy (_OPP_STATIC,
     # an always-fire no-brain), so duels/FFA actually differentiate combat skill
     # instead of pitting the policy against itself (kills == deaths, elo pinned).
+    # A curriculum is a weighting of these shapes: one entry per occurrence, so
+    # a shape that outweighs another is a longer list, not a different tuple.
     if CURRICULUM == "pvp_first":
-        configs = [
-            (2, 1, 0, 1200), (2, 1, 0, 1200), (2, 1, 0, 1200), (2, 1, 0, 1200),
-            (2, 1, 0, 1200), (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800),
-            (4, 4, 6, 1200),
-        ]
+        configs = [_DUEL] * 5 + [_SKIRMISH, _FFA, _FFA, _HORDE_SHORT]
     elif CURRICULUM == "horde_first":
-        configs = [
-            (2, 1, 0, 1200), (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800),
-            (4, 4, 6, 1800), (4, 4, 6, 1800), (4, 4, 6, 1800), (4, 4, 6, 1800),
-            (6, 6, 0, 1800),
-        ]
+        configs = [_DUEL, _SKIRMISH, _FFA, _FFA, _HORDE_LONG, _HORDE_LONG, _HORDE_LONG, _HORDE_LONG, _FFA]
     else:
-        configs = [
-            (2, 1, 0, 1200), (2, 1, 0, 1200), (2, 1, 0, 1200),
-            (2, 2, 0, 1200), (6, 6, 0, 1800), (6, 6, 0, 1800), (6, 6, 0, 1800),
-            (4, 4, 6, 1800), (4, 4, 6, 1800),
-        ]
+        configs = [_DUEL] * 3 + [_SKIRMISH, _FFA, _FFA, _FFA, _HORDE_LONG, _HORDE_LONG]
     # dual-seed regularizer: training fitness = mean over two seed streams
     fn = _simulate_relu if ACTIVATION == 1 else _simulate
     seeds = (run_seed, run_seed ^ 0x9E3779B9)
@@ -145,11 +152,7 @@ def evaluate_many(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -> L
     This is the single definition behind canonical_scores and evolve's per-gen
     held probe: both used to run these sims strictly sequentially on the
     training loop's critical path."""
-    workers = min(_MAX_WORKERS, max(1, matches))
-    if workers <= 1:
-        return [evaluate(w, gen_key, m, run_seed) for m in range(matches)]
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        return list(ex.map(lambda m: evaluate(w, gen_key, m, run_seed), range(matches)))
+    return _pmap(lambda m: evaluate(w, gen_key, m, run_seed), matches)
 
 
 def evaluate_population(pop: List[np.ndarray], generation: int, run_seed: int = 42) -> List[float]:
@@ -160,8 +163,4 @@ def evaluate_population(pop: List[np.ndarray], generation: int, run_seed: int = 
     deterministic seed chain (evaluate(generation, idx, run_seed)), nothing
     is shared between sims, and ex.map collects results in index order.
     """
-    workers = min(_MAX_WORKERS, len(pop))
-    if workers <= 1:
-        return [evaluate(w, generation, i, run_seed) for i, w in enumerate(pop)]
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        return list(ex.map(lambda i: evaluate(pop[i], generation, i, run_seed), range(len(pop))))
+    return _pmap(lambda i: evaluate(pop[i], generation, i, run_seed), len(pop))

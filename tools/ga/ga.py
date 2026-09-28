@@ -52,6 +52,18 @@ def init_population(rng: np.random.Generator, P: int = 32, sigma: float = 0.02):
     return pop
 
 
+def rank_fitness(fitness) -> tuple[np.ndarray, np.ndarray]:
+    """Normalized rank vector (worst 0.0, best 1.0) plus the argsort order that
+    built it: the pair every caller feeds to next_generation. One definition so
+    the ranking cannot drift between the training loop, the sweeps and the
+    determinism probe."""
+    order = np.argsort(fitness)
+    n = len(fitness)
+    ranked = np.empty(n, dtype=float)
+    ranked[order] = np.arange(n) / max(1, n - 1)
+    return ranked, order
+
+
 def tournament(pop: List[np.ndarray], norm_fitness: List[float], rng: np.random.Generator, k: int = 3) -> np.ndarray:
     """k random contenders, highest rank wins. Draws from `rng`, the run's one
     stream: a caller that only holds a Generator can replay selection."""

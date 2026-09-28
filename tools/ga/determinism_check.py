@@ -38,9 +38,7 @@ def _evolution(seed: int) -> list[bytes]:
     frames = []
     for g in range(GENS):
         fitness = [float(np.sum(w.astype(np.float64))) for w in pop]
-        order = np.argsort(fitness)
-        ranked = np.empty(POP, dtype=float)
-        ranked[order] = np.arange(POP) / max(1, POP - 1)
+        ranked, order = ga.rank_fitness(fitness)
         frames.append(b"".join(w.tobytes() for w in pop))
         pop = ga.next_generation(pop, ranked, order, rng, generation=g, total_gens=GENS)
     return frames

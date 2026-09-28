@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover
 TOOLS = Path(__file__).resolve().parent          # repo/tools/ga
 import sys as _sys  # noqa: E402 -- sibling modules resolve only after the sys.path bootstrap above
 _sys.path.insert(0, str(TOOLS))
-from replay import record_match, render_html  # noqa: E402 -- same bootstrap
+from replay import WALLS, record_match, render_html  # noqa: E402 -- same bootstrap
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
 
@@ -126,7 +126,7 @@ def curves_b64(runs, best_run_name: str | None):
         gens, best, mean, q25, q75, _ = load_run_csv(run)
         if not gens:
             continue
-        label = run.name.replace("evolved/runs/", "")
+        label = run.name
         if run.name == best_run_name:
             ax.plot(gens, best, color="#0ea5e9", lw=2.2, label=f"{label} (BEST)")
             ax.fill_between(gens, q25, q75, color="#0ea5e9", alpha=0.10)
@@ -150,7 +150,7 @@ def held_strip_b64(runs):
         vals = [v for v in held if v == v]  # drop nan
         if not vals:
             continue
-        labels.append(run.name.replace("evolved/runs/", ""))
+        labels.append(run.name)
         helds.append(vals[-1])
     if not helds:
         # fig_b64 closes the figure on the success path (report.py closes it
@@ -271,7 +271,7 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
         heldv = [v for v in held if v == v]
         # A key the run config never wrote reads as "n/a", never as a value:
         # `None` in a results table is indistinguishable from a measured zero.
-        rows.append((run.name.replace("evolved/runs/", ""),
+        rows.append((run.name,
                      *("n/a" if cfg.get(k) is None else cfg.get(k)
                        for k in ("pop", "gens", "curriculum", "islands")),
                      f"{heldv[-1]:.2f}" if heldv else "n/a"))
@@ -331,10 +331,9 @@ exit status:
         if not (RUNS_DIR / req).is_file():
             raise SystemExit(f"{RUNS_DIR / req} not found (run tools/ga/evolve.py first)")
 
-    w = np.array(json.loads((RUNS_DIR / "best.json").read_text(encoding="utf-8"))["weights"], dtype=float)
     replays = {}
-    import replay as _rp
     if args.replays:
+        w = np.array(json.loads((RUNS_DIR / "best.json").read_text(encoding="utf-8"))["weights"], dtype=float)
         # Scratch replay HTML lives only long enough to be read back into the
         # dashboard string; the temp dir is removed on success and on failure.
         with tempfile.TemporaryDirectory(prefix="ga-dashboard-replay-") as tmp:
@@ -345,7 +344,7 @@ exit status:
                 "seed 42 · corridor": (42, 4, 3, 3),
             }.items():
                 summary, frames = record_match(w, seed, nb, nz, 1200, 3, -1, envf)
-                walls = _rp.WALLS[envf]
+                walls = WALLS[envf]
                 html_path = Path(tmp) / f"replay_seed{seed}.html"
                 render_html(summary, frames, walls, html_path, label)
                 replays[label] = html_path.read_text(encoding="utf-8")
