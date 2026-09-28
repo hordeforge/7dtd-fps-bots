@@ -17,7 +17,8 @@ tools/ga/
   harness.py             evaluation loop over combat_sim.py arenas
                          (the headless zdtd-binary bridge was the R0 stub)
   evolve.py              CLI trainer: --pop --gens --seed --resume <runDir>
-                         [--islands N] [--curriculum ...] [--activation ...]
+                         [--label <name>] [--islands N] [--curriculum ...]
+                         [--activation ...]
                          [--fit-elo/--fit-econ/--fit-surv/--fit-stuck];
                          eval and static-vs-neural subcommands evaluate
                          best.json (canonical promotion gate)
@@ -27,7 +28,28 @@ tools/ga/
   viz.py                 network diagram rendering
   report.py              per-run report.html generator
   dashboard.py           live training dashboard (docs/ga-dashboard.html)
+  determinism_check.py   runs the stack twice from one seed and diffs it
   requirements.txt       numpy, numba, matplotlib (+ optional Pillow)
+```
+
+## Determinism
+
+A run is a function of `--seed` alone: one `numpy.random.Generator` per
+process feeds selection, crossover, mutation, ring migration and HOF
+re-injection, and every arena sim is keyed by a hash of
+`(run_seed, generation, genome, match)`. Checkpoints carry that Generator's
+state, so `--resume` continues the interrupted run instead of drawing a new
+sequence, and two runs of the same seed produce byte-identical run dirs.
+
+`--label <name>` replaces the UTC run-dir stamp when you want a replay to land
+in a path the seed picks instead of the one the clock did. To check the claim
+rather than trust it:
+
+```bash
+python tools/ga/determinism_check.py
+python tools/ga/evolve.py --pop 8 --gens 6 --seed 7 --label a
+python tools/ga/evolve.py --pop 8 --gens 6 --seed 7 --label b
+diff -r evolved/runs/a_pop8_g6_s7 evolved/runs/b_pop8_g6_s7   # no output
 ```
 
 ## Generated HTML
@@ -67,7 +89,7 @@ python tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40
 ```
 
 `python tools/ga/evolve.py --resume evolved/runs/<ts>` replays from the last
-generation's checkpoint deterministically (same LCG chain as clanker/zdtd_bot).
+generation's checkpoint deterministically (see Determinism above).
 The `eval` subcommand re-evaluates a single best.json on the held-out pool; the
 `static-vs-neural` subcommand is the canonical promotion gate (champion vs
 static baseline, prints GOAL MET). Both share the one canonical measuring stick

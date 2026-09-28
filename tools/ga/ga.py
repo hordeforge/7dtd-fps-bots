@@ -10,7 +10,6 @@ import hashlib
 import json
 import math
 import os
-import random
 from pathlib import Path
 from typing import List
 
@@ -53,8 +52,10 @@ def init_population(rng: np.random.Generator, P: int = 32, sigma: float = 0.02):
     return pop
 
 
-def tournament(pop: List[np.ndarray], norm_fitness: List[float], k: int = 3) -> np.ndarray:
-    idxs = [random.randrange(len(pop)) for _ in range(k)]
+def tournament(pop: List[np.ndarray], norm_fitness: List[float], rng: np.random.Generator, k: int = 3) -> np.ndarray:
+    """k random contenders, highest rank wins. Draws from `rng`, the run's one
+    stream: a caller that only holds a Generator can replay selection."""
+    idxs = [int(rng.integers(len(pop))) for _ in range(k)]
     best = max(idxs, key=lambda i: norm_fitness[i])
     return pop[best]
 
@@ -110,11 +111,11 @@ def next_generation(pop_w: List[np.ndarray], ranked, order, rng: np.random.Gener
     children: List[np.ndarray] = []
     while len(children) < len(pop_w) - elite_k:
         if rng.random() < pc and len(pop_w) - elite_k >= 2:
-            a = tournament(pop_w, ranks, k=3)
-            b = tournament(pop_w, ranks, k=3)
+            a = tournament(pop_w, ranks, rng, k=3)
+            b = tournament(pop_w, ranks, rng, k=3)
             child = crossover(a, b, rng)
         else:
-            child = tournament(pop_w, ranks, k=3).copy()
+            child = tournament(pop_w, ranks, rng, k=3).copy()
         children.append(mutate(child, rng, sigma=sigma, rank_norm=rank_norm,
                                generation=generation, total_gens=total_gens,
                                stagnant=stagnant))
@@ -150,6 +151,14 @@ def atomic_write_text(path: Path, text: str) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+
+
+def rng_state(rng: np.random.Generator) -> dict:
+    """JSON-safe snapshot of a Generator's bit-generator state. PCG64's state is
+    a flat dict of ints, so it round-trips through json.dump unchanged. Stored
+    in each checkpoint so `--resume` continues the same draw sequence instead
+    of restarting the run's one stream from the seed."""
+    return json.loads(json.dumps(rng.bit_generator.state))
 
 
 def gen_ckpt_key(path: Path) -> int:

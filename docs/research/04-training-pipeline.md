@@ -43,7 +43,9 @@ evolved/
   best.meta.json            # { generation, fitness, configHash } (as written by ga.save_best)
   runs/<ts>/                # one dir per training run, never overwritten
     config.json             # full hyperparam table (03 §4) + run_seed
-    gen_000.json            # top-3 genomes of that gen (weights + fitness)
+    gen_000.json            # state gen 000 ends in: top-3 + fitness, the full pool
+                            # and the rng draw position, so --resume replays
+                            # (`nextGen` is the generation the pool belongs to)
     gen_001.json ...
     fitness.csv             # per-gen best/mean/median/q25/q75/held-probe, append-only
     innovations.json        # NEAT only
@@ -102,8 +104,14 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
 
 - `fitness.csv` is appended every generation; `gen_*.json` checkpoints are
   written only when a generation improves on the best-so-far (`evolve.py`,
-  see `03` §5). On crash, rerun from the last generation's checkpoint
-  (pop is deterministic from checkpoint + seeds).
+  see `03` §5). A checkpoint is written after reproduction, so it holds the
+  pool and the rng draw position the next generation starts from: rerunning
+  from the last checkpoint reproduces the interrupted run's `fitness.csv`
+  row for row. Checkpoints predating that shape carry no `pop`/`rngState`,
+  and `--resume` says so on stderr instead of pretending to replay.
+- `tools/ga/determinism_check.py` runs the operators, the match kernel and the
+  threaded harness twice from one seed and diffs the results; it is the
+  executable form of this section.
 - `best.meta.json` records `configHash = sha256(config.json)`. The loader does
   not enforce it (`configHash` never affects loadability, see `05` §4); it is
   informational, surfaced by `bot neural status`, so an operator can spot a

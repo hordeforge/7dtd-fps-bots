@@ -24,7 +24,6 @@ import csv
 import hashlib
 import json
 import os
-import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,13 +76,16 @@ def _synthetic_fitness(w) -> float:
 
 
 def _load_resume(resume: str, seed: int, pop: int):
-    """Prime (start_gen, population, best_weights, best_fitness) from the newest
-    gen_*.json checkpoint in `resume` (or the single file itself). Returns a
-    fresh start (gen 0, None, None, -inf) when nothing usable is there."""
+    """Prime (start_gen, population, best_weights, best_fitness, rng_state) from
+    the newest gen_*.json checkpoint in `resume` (or the single file itself).
+    Returns a fresh start (gen 0, None, None, -inf, None) when nothing usable is
+    there. The rng_state is what makes a resumed run a replay: the population is
+    restored, and the run's single draw stream resumes where the checkpoint left
+    it instead of replaying the draws the interrupted run already consumed."""
 
     def _fresh(reason: str):
         print(reason)
-        return 0, None, None, float("-inf")
+        return 0, None, None, float("-inf"), None
 
     resume_path = Path(resume)
     ckpts = sorted(resume_path.glob("gen_*.json"), key=ga.gen_ckpt_key) if resume_path.is_dir() else [resume_path]
@@ -112,20 +114,34 @@ def _load_resume(resume: str, seed: int, pop: int):
     if top3 is None:
         return _fresh(f"resume: no usable checkpoint in {resume}, starting fresh")
 
-    # Rebuild the population from the checkpoint's top-3; copies past the third
-    # get jitter for diversity (seeded, so resumed runs stay reproducible).
+    # Prefer the checkpoint's full population: with it, the resumed run is a
+    # replay of the interrupted one (same genomes, same rng state below).
+    # Otherwise rebuild from the top-3, jittering copies past the third: still
+    # deterministic, but a different population, so the run diverges from the
+    # original at the resume point.
     rng2 = np.random.default_rng(seed ^ 0x9E3779B9)
-    pop_w = []
-    for i in range(pop):
-        base = top3[i % len(top3)]
-        if i < len(top3):
-            pop_w.append(base.copy())
-        else:
-            pop_w.append(base + rng2.normal(0, 0.03, base.size).astype(float))
+    raw_pop = ckpt.get("pop") or []
+    if len(raw_pop) == pop:
+        pop_w = [np.array(w, dtype=float) for w in raw_pop]
+    else:
+        pop_w = []
+        for i in range(pop):
+            base = top3[i % len(top3)]
+            if i < len(top3):
+                pop_w.append(base.copy())
+            else:
+                pop_w.append(base + rng2.normal(0, 0.03, base.size).astype(float))
     best_f = float(ckpt.get("best_fitness", float("-inf")))
-    start_gen = int(ckpt.get("gen", -1)) + 1
+    # `nextGen` is the generation the stored pool and rng state belong to; older
+    # checkpoints predate it and stored the pool one generation earlier.
+    start_gen = int(ckpt.get("nextGen", int(ckpt.get("gen", -1)) + 1))
+    saved_rng = ckpt.get("rngState")
+    if saved_rng is None:
+        print("resume: checkpoint carries no rng state; the draw sequence "
+              "restarts from the seed, so this run is not a replay of the "
+              "interrupted one", file=sys.stderr)
     print(f"resume: loaded {chosen} gen {ckpt.get('gen')} fit {best_f:.3f}, seeded next gen")
-    return start_gen, pop_w, top3[0].copy(), best_f
+    return start_gen, pop_w, top3[0].copy(), best_f, saved_rng
 
 
 def _held_probe(weights) -> float:
@@ -144,7 +160,7 @@ def _held_probe(weights) -> float:
         return float("-inf")
 
 
-def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed", fitness: dict | None = None):
+def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed", fitness: dict | None = None, label: str | None = None):
     # Repo root anchors every relative output path below (evolved/runs/...,
     # evolved/best.json). If the chdir fails the run must stop here with the
     # real cause instead of scattering those paths under whatever cwd it got.
@@ -152,8 +168,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     mix = (fitness or DEFAULT_FITNESS).copy()
     _set_fitness(mix)
     rng = np.random.default_rng(seed)
-    random.seed(seed)
-    np.random.seed(seed)
 
     if activation not in ("tanh", "relu"):
         raise SystemExit(f"activation must be tanh or relu, got {activation}")
@@ -175,7 +189,10 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     # two launches within the same second must not share a run dir, or the
     # second silently truncates the first's fitness.csv and overwrites its
     # config.json mid-run.
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+    # --label replaces the wall-clock stamp so a replay writes to a path the
+    # seed alone picks; diffing two same-seed runs is then a diff of the run
+    # dirs, not a hunt for the one whose name happened to be earlier.
+    ts = label or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
     stem = f"{ts}_pop{pop}_g{gens}_s{seed}{tag}"
     run_dir = Path(f"evolved/runs/{stem}")
     n = 1
@@ -194,7 +211,12 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     best_w = None
     best_f = float("-inf")
     if resume:
-        start_gen, resumed_pop, best_w, best_f = _load_resume(resume, seed, pop)
+        start_gen, resumed_pop, best_w, best_f, saved_rng = _load_resume(resume, seed, pop)
+        if saved_rng is not None:
+            # Restored before the first draw: the population comes from the
+            # checkpoint, and every random choice after it (selection,
+            # crossover, mutation, ring migration) continues that run's stream.
+            rng.bit_generator.state = saved_rng
         if resumed_pop is not None:
             # A resumed pool continues as a single population: the checkpoint has
             # no island layout, and splitting a primed pool would scatter the
@@ -249,13 +271,16 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             best_idx = int(np.argmax(all_fitness))
             f = float(all_fitness[best_idx])
             improved = f > best_f + 1e-6
+            pending_ckpt = None
             if improved:
                 best_f = f
                 best_w = all_pops_flat[best_idx].copy()
                 plateau = 0
-                # checkpoint top-3 of this gen (global)
+                # top-3 of this gen (global). The file itself is written after
+                # reproduction, once the state is the one the next generation
+                # starts from (see _write_ckpt).
                 top3 = [all_pops_flat[int(i)] for i in order[-3:][::-1]]
-                ckpt = {
+                pending_ckpt = {
                     "gen": g,
                     "best_fitness": f,
                     "top3": [w.astype(float).tolist() for w in top3],
@@ -264,10 +289,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     "curriculum": curriculum,
                     "islands": islands,
                 }
-                # Atomic: --resume sorts by name and walks back only when a file
-                # fails to parse, but a torn newest checkpoint would still cost
-                # every generation after the last good one.
-                ga.atomic_write_text(run_dir / f"gen_{g:03d}.json", json.dumps(ckpt, indent=2))
             else:
                 plateau += 1
             stagnant = plateau >= 8
@@ -296,9 +317,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             cf.flush()
             print(f"gen {g:03d}  best {f:+.4f}  mean {np.mean(arr):+.4f}  median {np.median(arr):+.4f}  held20 {held_m:+.4f}  stag {plateau}")
 
-            if g == gens - 1:
-                break
-
             # selection + reproduction per island (elitism 2 each)
             if islands == 1:
                 pop_w = ga.next_generation(all_pops_flat, ranked, order, rng,
@@ -325,7 +343,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             hof = (hof + global_elites)[:8]
             if g % 12 == 11 and len(hof) >= 2:
                 # pick a HOF entry not equal to current best (weight-hash dedup)
-                cand = random.choice(hof)
+                cand = hof[int(rng.integers(len(hof)))]
                 try:
                     is_dup = best_w is not None and float(np.mean((cand - best_w) ** 2)) < 1e-8
                 except Exception:
@@ -333,8 +351,25 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 if not is_dup:
                     # NB: keep the rng draw inside the multi-island arm so the
                     # single-island rng stream stays byte-identical to history.
-                    tgt = island_pops[rng.integers(0, len(island_pops))] if islands > 1 else island_pops[0]
-                    tgt[random.randrange(len(tgt))] = cand.copy()
+                    tgt = island_pops[int(rng.integers(0, len(island_pops)))] if islands > 1 else island_pops[0]
+                    tgt[int(rng.integers(len(tgt)))] = cand.copy()
+
+            # The checkpoint is the state the NEXT generation starts from: the
+            # reproduced pool (after any HOF injection) and the rng positioned
+            # after this generation's draws, so --resume continues the identical
+            # draw sequence instead of replaying draws already consumed.
+            if pending_ckpt is not None:
+                next_pool = island_pops[0] if islands == 1 else [w for ip in island_pops for w in ip]
+                pending_ckpt["nextGen"] = g + 1
+                pending_ckpt["rngState"] = ga.rng_state(rng)
+                pending_ckpt["pop"] = [w.astype(float).tolist() for w in next_pool]
+                # Atomic: --resume sorts by name and walks back only when a file
+                # fails to parse, but a torn newest checkpoint would still cost
+                # every generation after the last good one.
+                ga.atomic_write_text(run_dir / f"gen_{g:03d}.json", json.dumps(pending_ckpt, indent=2))
+
+            if g == gens - 1:
+                break
 
     # promote best: held-gated so a weaker run never clobbers the shipped champion.
     # --dry-run never promotes: synthetic fitness says nothing about real combat,
@@ -442,13 +477,17 @@ def _train_run(a):
     subcommands share one dispatch."""
     return run(a.pop, a.gens, a.seed, a.dry_run, a.resume,
                activation=a.activation, islands=a.islands,
-               curriculum=a.curriculum, fitness=_mix_from_args(a))
+               curriculum=a.curriculum, fitness=_mix_from_args(a),
+               label=a.label)
 
 
 def _add_train_flags(p):
     p.add_argument("--pop", type=int, default=32, help="population size (default: %(default)s)")
     p.add_argument("--gens", type=int, default=40, help="generations to evolve (default: %(default)s)")
     p.add_argument("--seed", type=int, default=42, help="RNG seed (default: %(default)s)")
+    p.add_argument("--label", default=None,
+                   help="run-dir label; replaces the UTC timestamp so a same-seed "
+                        "replay lands in a path the seed picks")
     p.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
     p.add_argument("--resume", type=str, default=None,
                    help="run dir or gen_NNN.json to resume from")

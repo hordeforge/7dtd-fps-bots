@@ -37,9 +37,6 @@ def run_one(activation: str, pop: int, gens: int, seed: int):
     harness.ACTIVATION = 1 if activation == "relu" else 0
     try:
         rng = np.random.default_rng(seed)
-        import random as _r
-        _r.seed(seed)
-        np.random.seed(seed)
         pop_w = ga.init_population(rng, pop, sigma=0.02)
         curve = []
         for g in range(gens):
