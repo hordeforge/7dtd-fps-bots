@@ -403,3 +403,14 @@ else
     fi
   done
 fi
+
+# The mirror of that check on the other side: every file in tests/ must be
+# named by a run_suite call above. A test file no suite compiles never runs
+# and never fails, so the coverage it appears to provide is fictional.
+while IFS= read -r test_file; do
+  name="${test_file##*/}"
+  if ! grep -qF "$name" "${BASH_SOURCE[0]}"; then
+    echo "error: $test_file is in tests/ but no run_suite call compiles it" >&2
+    exit 1
+  fi
+done < <(find "$root/tests" -type f -name '*.cs' | sort)

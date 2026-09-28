@@ -26,8 +26,10 @@ if ! command -v dotnet-coverage >/dev/null 2>&1; then
 	exit 0
 fi
 
-suite() { # <name> <prod.cs> <tests.cs>
-	local name="$1" prod="$2" tests="$3"
+suite() { # <name> <tests.cs> <prod.cs>...   (last arg is the suite, the rest are the sources it compiles against)
+	local name="$1" tests
+	shift
+	tests="${*: -1}"
 	local dir="$work/$name"
 	mkdir -p "$dir"
 	{
@@ -40,21 +42,28 @@ suite() { # <name> <prod.cs> <tests.cs>
 		echo '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
 		echo '  </PropertyGroup>'
 		echo '  <ItemGroup>'
-		echo "    <Compile Include=\"$root/$prod\" />"
+		local src
+		for src in "$@"; do
+			echo "    <Compile Include=\"$root/$src\" />"
+		done
 		echo "    <Compile Include=\"$root/$tests\" />"
 		echo '  </ItemGroup>'
 		echo '</Project>'
 	} > "$dir/cov.csproj"
 }
 
-suite idempotency Source/BotMod/Web/IdempotencyLedger.cs tests/BotMod.Tests/IdempotencyLedgerTests.cs
-suite atomictextfile Source/BotMod/Foundation/AtomicTextFile.cs tests/BotMod.Tests/AtomicTextFileTests.cs
-suite idempotencyfuzz Source/BotMod/Web/IdempotencyLedger.cs tests/BotMod.Tests/IdempotencyLedgerFuzzTests.cs
-suite mainthreaddispatch Source/BotMod/Web/MainThreadDispatch.cs tests/BotMod.Tests/MainThreadDispatchTests.cs
-suite logsanitize Source/BotMod/Foundation/LogSanitizer.cs tests/BotMod.Tests/LogSanitizerTests.cs
-suite bottext Source/BotMod/Foundation/BotText.cs tests/BotMod.Tests/BotTextTests.cs
-suite botargparser Source/BotMod/Commands/BotArgParser.cs tests/BotMod.Tests/BotArgParserTests.cs
-suite botargparserfuzz Source/BotMod/Commands/BotArgParser.cs tests/BotMod.Tests/BotArgParserFuzzTests.cs
+suite idempotency tests/BotMod.Tests/IdempotencyLedgerTests.cs Source/BotMod/Web/IdempotencyLedger.cs
+suite atomictextfile tests/BotMod.Tests/AtomicTextFileTests.cs Source/BotMod/Foundation/AtomicTextFile.cs
+suite idempotencyfuzz tests/BotMod.Tests/IdempotencyLedgerFuzzTests.cs Source/BotMod/Web/IdempotencyLedger.cs
+suite mainthreaddispatch tests/BotMod.Tests/MainThreadDispatchTests.cs Source/BotMod/Web/MainThreadDispatch.cs
+suite logsanitize tests/BotMod.Tests/LogSanitizerTests.cs Source/BotMod/Foundation/LogSanitizer.cs
+suite logsanitizerfuzz tests/BotMod.Tests/LogSanitizerFuzzTests.cs Source/BotMod/Foundation/LogSanitizer.cs Source/BotMod/Foundation/BotText.cs
+suite requestfields tests/BotMod.Tests/RequestFieldsTests.cs Source/BotMod/Web/RequestFields.cs Source/BotMod/Foundation/BotText.cs
+suite combatgates tests/BotMod.Tests/CombatGatesTests.cs Source/BotMod/Config/CombatGates.cs
+suite bottext tests/BotMod.Tests/BotTextTests.cs Source/BotMod/Foundation/BotText.cs
+suite lcg tests/BotMod.Tests/LcgTests.cs Source/BotMod/Foundation/Lcg.cs
+suite botargparser tests/BotMod.Tests/BotArgParserTests.cs Source/BotMod/Commands/BotArgParser.cs
+suite botargparserfuzz tests/BotMod.Tests/BotArgParserFuzzTests.cs Source/BotMod/Commands/BotArgParser.cs
 
 xmls=()
 for d in "$work"/*/; do

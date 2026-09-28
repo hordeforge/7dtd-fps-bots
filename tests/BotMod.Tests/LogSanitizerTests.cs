@@ -19,16 +19,6 @@ static class LogSanitizerTests
         if (!ok) _failures++;
     }
 
-    static string Escape(string s)
-    {
-        var sb = new StringBuilder();
-        foreach (char c in (s ?? ""))
-            sb.Append(c < ' ' || (c >= '\x7f' && c <= '\x9f')
-                ? "\\u" + ((int)c).ToString("x4")
-                : c.ToString());
-        return sb.ToString();
-    }
-
     static bool HasControls(string s)
     {
         foreach (char c in s ?? "")

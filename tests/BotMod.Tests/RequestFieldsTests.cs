@@ -262,7 +262,14 @@ static class RequestFieldsTests
                 reads++;
             }
         }
-        Check("fuzz: " + reads + " adversarial field reads without throw or nondeterminism", true);
+        // The loop above returns early on the first bad read, so reaching here
+        // means every read passed; what is not yet proven is that it read
+        // anything. The count is exact (iterations x keys), so assert it
+        // rather than printing a hardcoded pass: a body builder that stopped
+        // producing keys, or a keys array that shrank, must fail here instead
+        // of reporting a green "0 adversarial field reads".
+        Check("fuzz: " + reads + " adversarial field reads without throw or nondeterminism",
+            reads == 20000L * keys.Length);
 
         return Finish();
     }

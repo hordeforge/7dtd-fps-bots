@@ -113,6 +113,12 @@ static class AtomicTextFileTests
             string s, src;
             bool ok = AtomicTextFile.TryRead(path, out s, out src);
             Check("missing primary falls back to .bak", ok && s == "{\"v\":1}");
+            // readFrom is how a caller tells the operator which copy served the
+            // data, so the fallback has to name the .bak, not the primary it
+            // never read. Asserted on both the hit and the miss: a TryRead
+            // that always returned null would satisfy the content checks while
+            // leaving the recovery report silent.
+            Check("fallback read names the .bak it served from", src == AtomicTextFile.BackupPath(path));
         }
 
         // 4. Recovery: primary present but garbage (torn write from an older
@@ -128,6 +134,9 @@ static class AtomicTextFileTests
             string s, src;
             Check("torn primary still readable via TryRead",
                 AtomicTextFile.TryRead(path, out s, out src) && s == "{\"v\":2");
+            // The primary is present, so it wins over the .bak: the caller
+            // must be told it is reading the live file, not the backup.
+            Check("present primary is the source, not the .bak", src == path);
             Check(".bak candidate exists for Load's fallback",
                 File.ReadAllText(AtomicTextFile.BackupPath(path)) == "{\"v\":1}");
         }
@@ -139,6 +148,9 @@ static class AtomicTextFileTests
             string s, src;
             Check("no primary and no .bak reads false", !AtomicTextFile.TryRead(path, out s, out src));
             Check("failed read yields no content", s == null);
+            // Documented pairing: readFrom is null together with a false
+            // return, so a caller cannot report a source it never read.
+            Check("failed read names no source", src == null);
         }
 
         // 6. Content round-trip fidelity: multi-line UTF-8 payload survives.
@@ -291,8 +303,13 @@ static class AtomicTextFileTests
             bool ok = AtomicTextFile.TryRead(path, out final, out readFrom);
             Check("final primary is the last written payload",
                 ok && final == pa); // 200 rewrites ending on an odd index rewrite pa last
+            // Floor, not just "> 0": a reader that gets scheduled once and
+            // exits would satisfy that while the swap window went unobserved,
+            // which is the whole thing this block exists to check. Runs land
+            // in the hundreds-to-thousands on a 200-rewrite storm, so 100 is
+            // far below any real run and far above "the hammer never ran".
             Check("readers completed a meaningful number of reads (" + reads + ")",
-                reads > 0);
+                reads >= 100);
             Check("reads during concurrent writes all saw a complete payload (" + reads + " reads)",
                 errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);

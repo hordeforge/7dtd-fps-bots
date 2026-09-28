@@ -1,13 +1,17 @@
+// WeaponProfileTests: pins per-gun profile selection, the one place the
+// "mixed" literal is expanded into a real gun id. BotArgParser.LooksLikeWeapon,
+// `bot weapon` and the web spawnNear field all match that literal
+// case-insensitively, so a differently cased spelling has to expand to a
+// LoadoutPool entry here too: falling through to the pistol default left
+// GunId pointing at a gun that does not exist, so the bot held nothing while
+// running pistol stats. Pins the passthrough and the empty-pool fallback too,
+// so a resolution change cannot silently swap a caller error for a pool pick.
+// Needs the same Newtonsoft gate as the other config-layer suites
+// (WeaponProfile references BotConfig.DefaultSeed); run with
+//   bash scripts/test-idempotency.sh weaponprofile
 using System;
-using System.Collections.Generic;
 using BotMod.Config;
 
-// Per-gun profile selection, the one place the "mixed" literal is expanded
-// into a real gun id. BotArgParser.LooksLikeWeapon, `bot weapon` and the web
-// spawnNear field all match that literal case-insensitively, so a differently
-// cased spelling has to expand to a LoadoutPool entry here too: falling
-// through to the pistol default left GunId pointing at a gun that does not
-// exist, so the bot held nothing while running pistol stats.
 static class WeaponProfileTests
 {
     static int _failures;
