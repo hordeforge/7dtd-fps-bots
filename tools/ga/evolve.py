@@ -342,9 +342,18 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             n += 1
             run_dir = Path(f"evolved/runs/{stem}_{n}")
 
-    start_gen = 0
-    best_w = None
-    best_f = float("-inf")
+    # A resumed run keeps what the checkpoint primed above. Resetting these
+    # unconditionally threw the loaded generation counter, champion and fitness
+    # away, so --resume re-ran generations the interrupted run had already
+    # evaluated (overwriting their rows in the new run's fitness.csv, which is
+    # what _seed_resume_csv exists to preserve), and re-armed the promotion gate
+    # at -inf so a champion worse than the interrupted run's could be promoted
+    # over it. _load_resume already returns the gen-0 / -inf values itself when
+    # the resume fell back to a fresh run.
+    if not resume:
+        start_gen = 0
+        best_w = None
+        best_f = float("-inf")
 
     # island split (ring migration)
     if islands == 1:

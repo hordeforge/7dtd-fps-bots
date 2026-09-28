@@ -66,8 +66,8 @@ exit status:
   1  no activation produced a curve (nothing to rank or plot)
   2  bad command line""",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--pop", type=int, default=24, help="population size (default: %(default)s)")
-    ap.add_argument("--gens", type=int, default=20, help="generations per activation (default: %(default)s)")
+    ap.add_argument("--pop", type=int, default=24, help="population size, >= 1 (default: %(default)s)")
+    ap.add_argument("--gens", type=int, default=20, help="generations per activation, >= 0 (default: %(default)s)")
     ap.add_argument("--seed", type=int, default=42, help="RNG seed (default: %(default)s)")
     ap.add_argument("--activations", nargs="*", default=None, choices=["tanh", "relu"],
                     help="activations to sweep (default: tanh relu)")
@@ -75,6 +75,12 @@ exit status:
                     help="plot PNG path (default: evolved/runs/sweep_H<pop>_g<gens>_s<seed>.png; "
                          "the JSON summary lands beside it)")
     args = ap.parse_args()
+    # argparse types the shape but not the range: --pop 0 and a negative --gens
+    # still produced a "successful" sweep of empty populations and reported it
+    # as a winner with exit 0, so a caller reading the exit code learned nothing.
+    for flag, value, low in (("--pop", args.pop, 1), ("--gens", args.gens, 0)):
+        if value < low:
+            ap.error(f"{flag} must be >= {low}, got {value}")
 
     acts = args.activations or ["tanh", "relu"]
 

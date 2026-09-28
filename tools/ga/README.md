@@ -125,7 +125,7 @@ All six CLIs follow the same convention, and each one documents it under
 | Code | Meaning |
 |---|---|
 | 0 | the command ran and did what it says |
-| 1 | the command understood its arguments but could not finish: a missing or malformed `best.json`, a missing run dir, a failed promotion gate, a sweep with no usable curve |
+| 1 | the command understood its arguments but could not finish: a missing or malformed `best.json`, a missing run dir, a failed promotion gate, a sweep with no usable curve, a report whose run dirs held no usable `fitness.csv` |
 | 2 | bad command line: unknown flag, missing required argument, a value outside its documented range, or a `--resume` of a checkpoint measured on a different stick |
 
 Data (scores, ranking tables, output paths) goes to stdout; diagnostics and

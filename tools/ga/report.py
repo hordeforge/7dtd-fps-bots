@@ -188,8 +188,15 @@ def best_net(run_dir: Path) -> bytes | None:
     return optimized_png_bytes(fig)
 
 
-def build(runs: list[Path], out: Path):
+def build(runs: list[Path], out: Path) -> int:
+    """Write the report and return how many runs contributed a section.
+
+    The count is the CLI's pass/fail signal: a report assembled from run dirs
+    that hold no fitness.csv (or only unparsable rows) renders "No runs." and
+    used to exit 0, so a CI step read an empty report as a success. The page is
+    still written, because it names the runs it could not read."""
     parts: list[str] = []
+    sections = 0
     for run_dir in runs:
         csv_path = run_dir / "fitness.csv"
         if not csv_path.exists():
@@ -247,6 +254,7 @@ def build(runs: list[Path], out: Path):
         if not HAS_MPL:
             sec.append(f"<p class='foot' style='color:{theme.ACCENT_TEXT}'>matplotlib not installed, headline only. <code>uv pip install matplotlib</code></p>")
         parts.append("\n".join(sec))
+        sections += 1
 
     page = f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clanker: evolution report</title>
@@ -261,9 +269,10 @@ def build(runs: list[Path], out: Path):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print(f"report -> {out}")
-    return out
+    return sections
 
-if __name__ == "__main__":
+
+def main() -> int:
     ap = argparse.ArgumentParser(
         description="Build a self-contained HTML evolution report from one or more runs.",
         epilog="""examples:
@@ -273,8 +282,9 @@ if __name__ == "__main__":
 --out defaults to <run>/report.html for a single run, else evolved/report.html.
 
 exit status:
-  0  the report was written
-  1  a --runs dir is missing or held no usable data
+  0  the report was written and at least one --runs dir held usable data
+  1  a --runs dir is missing, or none of them held usable data (the page is
+     still written, naming the runs it could not read)
   2  bad command line""",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", nargs="+", required=True, metavar="DIR",
@@ -288,4 +298,15 @@ exit status:
     if missing:
         raise SystemExit(f"--runs dir not found: {missing[0]} (e.g. evolved/runs/2026-08-19_011136_pop32_g30_s42)")
     out = Path(args.out) if args.out else (runs[0] / "report.html" if len(runs) == 1 else Path("evolved/report.html"))
-    build(runs, out)
+    sections = build(runs, out)
+    if not sections:
+        # stderr: the report path is the result on stdout, the fact that it
+        # holds nothing to report is status. Exit 1 as the epilog promises, so
+        # a caller reading the exit code does not take an empty page for a run.
+        print(f"no run in --runs held usable fitness data ({len(runs)} dir(s) read)", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
