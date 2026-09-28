@@ -19,10 +19,8 @@ from __future__ import annotations
 
 import argparse
 import base64
-import csv
 import html
 import json
-import math
 import tempfile
 from pathlib import Path
 
@@ -64,63 +62,18 @@ def fig_b64(fig) -> str:
     return base64.b64encode(_report.optimized_png_bytes(fig)).decode()
 
 
-def png_dimensions(data_b64: str) -> tuple[int, int]:
-    """Intrinsic pixel size from the base64 PNG's IHDR chunk (no image lib).
-    The IHDR ends at byte 24, i.e. base64 char 32."""
-    import struct
-    raw = base64.b64decode(data_b64[:32])
-    w, h = struct.unpack(">II", raw[16:24])
-    return w, h
-
-
 def chart_card(data_b64: str, alt: str) -> str:
-    w, h = png_dimensions(data_b64)
+    w, h = _report.png_dimensions(base64.b64decode(data_b64))
     return (f'<figure class="fig"><img alt="{alt}" src="data:image/png;base64,{data_b64}"'
             f' width="{w}" height="{h}" loading="lazy" decoding="async"></figure>')
 
 
 def load_run_csv(run: Path):
-    # Bounded open: this helper runs three times per run per build (curves,
-    # held strip, run table), so each read must release its own descriptor.
-    # Unparseable rows are skipped with one stderr note (same contract as
-    # report.load_csv): a torn row in one old run's fitness.csv must not kill
-    # the whole dashboard build; every section degrades independently.
-    with (run / "fitness.csv").open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
-    if not rows:
-        return [], [], [], [], [], []
-    gens, best, mean, q25, q75 = [], [], [], [], []
-    skipped = 0
-    for r in rows:
-        try:
-            g = int(r["gen"])
-            b = float(r["best"])
-            m = float(r["mean"])
-            lo = float(r.get("q25") or r["mean"])
-            hi = float(r.get("q75") or r["mean"])
-            # Same guard as report.load_csv: float("nan") parses fine but
-            # poisons every max/mean and delta downstream (max() over a list
-            # holding NaN returns NaN), so the chart silently drops the
-            # series. evolve.py writes a bare "nan" held column by design, and
-            # a torn or hand-edited row can carry one into best/mean.
-            if not all(map(math.isfinite, (b, m, lo, hi))):
-                raise ValueError("non-finite fitness value")
-        except (KeyError, TypeError, ValueError):
-            skipped += 1
-            continue
-        gens.append(g); best.append(b); mean.append(m); q25.append(lo); q75.append(hi)
-    if skipped:
-        print(f"{run / 'fitness.csv'}: skipped {skipped} unparseable row(s)", file=_sys.stderr)
-    held = []
-    for r in rows:
-        hv = r.get("held")
-        if hv is None or hv == "" or hv == "nan":
-            held.append(float("nan"))
-        else:
-            try:
-                held.append(float(hv))
-            except ValueError:
-                held.append(float("nan"))
+    # One parser for fitness.csv, shared with report.py: the two builds read
+    # the same runs, and two copies of the row rules are two places for them
+    # to drift (the private copy here also kept `held` aligned to every row,
+    # skipped ones included). median is not charted here.
+    gens, best, mean, _median, q25, q75, held = _report.load_csv(run / "fitness.csv")
     return gens, best, mean, q25, q75, held
 
 

@@ -7,7 +7,7 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 | Path | Meaning | Committed? |
 |---|---|---|
 | `best.json` | Champion weights (flat `float[W]` + meta) loaded by `BotNeuralBrain.TryLoad` | yes, when promoted |
-| `best.meta.json` | `{ generation, fitness, activation, configHash }` (as written by `ga.save_best`) | yes, alongside `best.json` |
+| `best.meta.json` | `{ generation, fitness, activation, configHash, seed }` (as written by `ga.save_best`) | yes, alongside `best.json` |
 | `report.html` | `report.py` output for the current run set (multi-MB embedded base64) | no (artifact; regenerate from `runs/`) |
 | `sweeps/` | Figures and JSON a `docs/research/REPORT-*.md` cites as evidence | yes (PNG/JSON only; `report_*.html` is ignored) |
 | `runs/<ts>/` | One dir per training run: `config.json`, `gen_*.json`, `fitness.csv` | no (artifact) |
@@ -21,6 +21,12 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
   pass is tanh-only, so `BotNeuralBrain.TryLoad` rejects any other value rather
   than scoring relu-trained weights as tanh. An artifact written before this
   field existed carries no `activation` and is read as tanh.
+- `seed` is the `evolve.py --seed` of the run that produced the champion. It
+  matches the `seed` in that run's `config.json`, which is how
+  `dashboard.py --all` picks the champion run to highlight among the others.
+  An artifact written before this field existed has no `seed`, and the
+  dashboard then highlights nothing rather than guessing, as it does for a
+  `best.meta.json` whose `configHash` does not match `best.json`.
 - The mod never writes here at runtime. It reads `best.json` when
   `UseNeuralBrain=true`: at world start (`ModApi.OnGameStartDone`) and on
   demand via `bot neural on|reload [path]` or the web API's `neural` action.

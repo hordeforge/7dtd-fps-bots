@@ -36,7 +36,6 @@ WEAPON_PELLETS = [1, 8, 1, 1, 6, 1]
 WEAPON_MAG = [12, 6, 30, 5, 6, 32]
 WEAPON_RELOAD = [1.2, 2.6, 2.0, 2.5, 2.6, 1.8]
 WEAPON_BURST_MIN = [1, 1, 3, 1, 1, 5]
-WEAPON_BURST_MAX = [3, 1, 6, 1, 1, 9]
 
 # Arena walls (env index 0..4), mirroring combat_sim.
 WALLS = [

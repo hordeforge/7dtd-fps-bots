@@ -86,7 +86,9 @@ def img_tag(data: bytes, alt: str) -> str:
 
 
 def load_csv(path: Path):
-    """gens/best/mean/median/q25/q75 lists from a run's fitness.csv.
+    """gens/best/mean/median/q25/q75/held lists from a run's fitness.csv.
+    The one reader of this file for both the report and the dashboard, so the
+    two builds cannot disagree about what a row means.
 
     Unparseable rows are skipped with one stderr note instead of raising:
     this loader runs for every historical run in a single build, and a torn
@@ -95,8 +97,14 @@ def load_csv(path: Path):
     NaN counts as unparseable for the same reason: float("nan") parses fine
     but poisons every max(), mean and delta downstream (max() over a list
     holding NaN returns NaN, and the chart silently drops the series).
+
+    `held` is the per-generation held-out probe. It is absent from pre-hold
+    runs and blank on generations the probe did not run, so a missing or
+    unparseable value is NaN per entry and the caller filters on it, rather
+    than a skipped row: the fitness series stay aligned with `gens` for runs
+    that predate the column.
     """
-    gens, best, mean, median, q25, q75 = [], [], [], [], [], []
+    gens, best, mean, median, q25, q75, held = [], [], [], [], [], [], []
     skipped = 0
     with path.open(encoding="utf-8") as f:
         for row in csv.DictReader(f):
@@ -114,9 +122,14 @@ def load_csv(path: Path):
                 continue
             gens.append(g); best.append(b); mean.append(m)
             median.append(md); q25.append(lo); q75.append(hi)
+            try:
+                hv = float(row["held"])
+            except (KeyError, TypeError, ValueError):
+                hv = float("nan")
+            held.append(hv if math.isfinite(hv) else float("nan"))
     if skipped:
         print(f"{path}: skipped {skipped} unparseable row(s)", file=sys.stderr)
-    return gens, best, mean, median, q25, q75
+    return gens, best, mean, median, q25, q75, held
 
 
 def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
@@ -136,10 +149,10 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
 def _last_best(run_dir: Path):
     """(best genome, last ckpt json) of the newest gen_*.json, or (None, None)."""
     import ga
-    cand = sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key)
-    if not cand:
+    last_ckpt = ga.latest_ckpt(run_dir)
+    if last_ckpt is None:
         return None, None
-    last = json.loads(cand[-1].read_text(encoding="utf-8"))
+    last = json.loads(last_ckpt.read_text(encoding="utf-8"))
     if "top3" not in last or not last["top3"]:
         return None, None
     return ga.genome_from_json(last["top3"][0]), last
@@ -202,7 +215,7 @@ def build(runs: list[Path], out: Path) -> int:
         if not csv_path.exists():
             parts.append(f"<p><b>{html.escape(run_dir.name)}</b>: no fitness.csv</p>")
             continue
-        gens, best, mean, median, q25, q75 = load_csv(csv_path)
+        gens, best, mean, median, q25, q75, _held = load_csv(csv_path)
         if not gens:
             # Every row was skipped (or the file holds only a header): say so
             # instead of indexing into an empty series below.

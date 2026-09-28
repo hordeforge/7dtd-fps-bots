@@ -29,7 +29,8 @@ tools/ga/
   theme.py               palette, type scale and page CSS for the HTML below
   report.py              per-run report.html generator
   dashboard.py           live training dashboard (docs/ga-dashboard.html)
-  determinism_check.py   runs the stack twice from one seed and diffs it
+  determinism_check.py   runs the stack twice from one seed and diffs it,
+                         and pins the champion artifact's run linkage
   requirements.txt       numpy, numba, matplotlib (+ optional Pillow)
 ```
 

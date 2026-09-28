@@ -225,6 +225,14 @@ def gen_ckpt_key(path: Path) -> int:
     return int(tail) if tail.isdigit() else -1
 
 
+def latest_ckpt(run_dir: Path) -> Path | None:
+    """Newest gen_*.json in run_dir, or None when the run has none yet. The
+    one ordering every reader of these checkpoints uses, so resume, report and
+    viz cannot each pick a different 'latest'."""
+    ckpts = sorted(run_dir.glob("gen_*.json"), key=gen_ckpt_key)
+    return ckpts[-1] if ckpts else None
+
+
 def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     # activation is part of the artifact, not just the run config: the hidden

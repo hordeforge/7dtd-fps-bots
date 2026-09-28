@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -280,6 +281,42 @@ def check_checkpoint_dtype() -> None:
     print("  ok  checkpoint: genomes round-trip as float32 and score unchanged")
 
 
+def check_best_meta_seed() -> None:
+    """best.meta.json must name the run that produced the champion.
+
+    The dashboard picks the run to highlight by matching that seed against each
+    run's config.json. Pins both halves: the writer emits the run's seed, and
+    dashboard.champion() hands it back only when the meta belongs to the
+    best.json beside it, never for a meta with no seed or a stale configHash.
+    """
+    import dashboard
+    with tempfile.TemporaryDirectory(prefix="ga-bestmeta-") as tmp:
+        root = Path(tmp)
+        meta_path = root / "best.meta.json"
+        config = {"pop": 8, "gens": 2, "seed": 4242, "activation": "tanh"}
+        ga.save_best(root / "best.json", ga.he_init(np.random.default_rng(SEED)),
+                     generation=2, fitness=1.0, config=config)
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        if meta.get("seed") != config["seed"]:
+            _fail(f"ga.save_best: best.meta.json records seed {meta.get('seed')!r}, "
+                  f"the run it promoted was seed {config['seed']}")
+        saved_root = dashboard.RUNS_DIR
+        dashboard.RUNS_DIR = root
+        try:
+            if dashboard.champion()[1] != config["seed"]:
+                _fail("dashboard: the champion's run seed was not read back")
+            meta_path.write_text(json.dumps({**meta, "configHash": "stale"}), encoding="utf-8")
+            if dashboard.champion()[1] is not None:
+                _fail("dashboard: a best.meta.json from an older champion supplied a seed")
+            del meta["seed"]
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            if dashboard.champion()[1] is not None:
+                _fail("dashboard: a best.meta.json with no seed supplied one")
+        finally:
+            dashboard.RUNS_DIR = saved_root
+    print("  ok  best.meta.json: the champion run is identified from its seed")
+
+
 def _fail(msg: str) -> None:
     # stderr: the passing checks are the report on stdout, a failure is status.
     print(f"FAIL  {msg}", file=sys.stderr)
@@ -298,6 +335,6 @@ if __name__ == "__main__":
                  check_loadout_draw, check_checkpoint_dtype,
                  check_threaded_harness,
                  check_canonical_stick, check_concurrent_canonical_stick,
-                 check_concurrent_pinned_knobs):
+                 check_concurrent_pinned_knobs, check_best_meta_seed):
         step()
     print("determinism: every layer replays from the seed")

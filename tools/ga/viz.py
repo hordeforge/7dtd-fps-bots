@@ -190,8 +190,7 @@ exit status:
         run_dir = Path(args.run)
         if not run_dir.is_dir():
             raise SystemExit(f"--run dir not found: {run_dir} (e.g. evolved/runs/2026-08-19_011136_pop32_g30_s42)")
-        cands = sorted(run_dir.glob("gen_*.json"), key=ga.gen_ckpt_key)
-        path = Path(cands[-1]) if cands else None
+        path = ga.latest_ckpt(run_dir)
         if path is None:
             raise SystemExit(f"no gen_*.json in {args.run}")
         try:

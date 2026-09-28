@@ -26,6 +26,21 @@ Cutting a release, in this order:
 
 ## [Unreleased]
 
+### Changed
+
+- Unread constants and write-only accumulators removed: the
+  `WEAPON_SPREAD`/`WEAPON_FIRE_RATE`/`WEAPON_BURST_MAX` tables in
+  `tools/ga/combat_sim.py` and `tools/ga/replay.py` (no reader in the repo),
+  the six `_ev` per-shot counters the match kernel returned to no caller
+  (harness reads slots 0..4), and the `n_evolved < 0` clamp whose conjunction
+  cannot hold for any call site. Fitness numbers are unchanged.
+- `fitness.csv` has one parser: `report.load_csv` returns the `held` column
+  as well, and `dashboard.py` calls it instead of keeping a second copy. The
+  copy kept `held` aligned to every row, skipped ones included, so a run with
+  a torn row charted its held-out series against the wrong generations. The
+  "newest `gen_*.json`" lookup is now `ga.latest_ckpt` rather than three
+  inlined sorts.
+
 ## [0.8.0] - 2026-09-29
 
 ### Breaking

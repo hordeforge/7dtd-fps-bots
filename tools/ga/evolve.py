@@ -140,6 +140,8 @@ def _load_resume(resume: str, seed: int, pop: int, stick: dict):
         return 0, None, None, float("-inf"), None
 
     resume_path = Path(resume)
+    # The whole list, not just the newest: an unreadable newest checkpoint must
+    # cost generations, not the run, so the walk below falls back to older ones.
     ckpts = sorted(resume_path.glob("gen_*.json"), key=ga.gen_ckpt_key) if resume_path.is_dir() else [resume_path]
     if not ckpts or not ckpts[-1].is_file():
         return _fresh(f"resume: no checkpoints in {resume}, starting fresh")
@@ -363,7 +365,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     else:
         per = max(8, pop // islands)
         island_pops = [ga.init_population(np.random.default_rng(seed ^ (i * 0x9E3779B9)), P=per, sigma=0.02) for i in range(islands)]
-        pop_w = island_pops[0]  # alias for the single-pool bookkeeping below
 
     # config.json is written after the split so "pop" is the size the run
     # actually evolves. The per-island floor made --pop 8 --islands 4 train 32

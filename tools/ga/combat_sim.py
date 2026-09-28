@@ -17,11 +17,8 @@ import numba
 # idx: 0 pistol, 1 shotgun, 2 AK, 3 sniper, 4 auto-shotgun, 5 SMG
 WEAPON_DAMAGE = np.array([16, 14, 16, 42, 9, 9], dtype=np.float32)
 WEAPON_RANGE = np.array([40, 22, 55, 90, 22, 35], dtype=np.float32)
-WEAPON_SPREAD = np.array([1.6, 9.0, 1.4, 0.35, 6.0, 2.2], dtype=np.float32)
 WEAPON_PELLETS = np.array([1, 8, 1, 1, 6, 1], dtype=np.int32)
-WEAPON_FIRE_RATE = np.array([0.28, 0.55, 0.11, 0.90, 0.22, 0.09], dtype=np.float32)
 WEAPON_BURST_MIN = np.array([1, 1, 3, 1, 1, 5], dtype=np.int32)
-WEAPON_BURST_MAX = np.array([3, 1, 6, 1, 1, 9], dtype=np.int32)
 # magazine sizes aligned to game Data/Config/items.xml MagazineSize base_set
 # (pistol 15, double-barrel 2, AK 30, sniper 12, auto-shotgun 16, SMG 30);
 # R13 parity audit found the old table (12/6/30/5/6/32) matched neither the game
@@ -311,9 +308,6 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
     x_obs = np.empty(INPUTS, dtype=numba.float32)
 
     use_opp = w_opp is not None
-    if use_opp and n_evolved < 0:
-        n_evolved = n_bots
-    kills_ev = 0; deaths_ev = 0; damage_dealt_ev = 0.0; damage_taken_ev = 0.0; shots_ev = 0; hits_ev = 0
 
     for _ in range(max_ticks):
         # check early termination: one side wiped
@@ -463,8 +457,6 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 continue
             # fire!
             shots += 1
-            if not use_opp or bi < n_evolved:
-                shots_ev += 1
             ammo[bi] -= 1
             spread[bi] = min(1.0, spread[bi] + SPREAD_ADD_PER_SHOT)
             # aim bias: small skill-scaled miss rotates hit chance
@@ -480,8 +472,6 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             if v <= hc2:
                 # hit!
                 hits += 1
-                if not use_opp or bi < n_evolved:
-                    hits_ev += 1
                 # headshot roll (pellets==1 only)
                 is_head = False
                 if WEAPON_PELLETS[bweapon[bi]] == 1:
@@ -492,28 +482,18 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 if is_head:
                     dmg = dmg * 2.0
                 damage_dealt += dmg
-                if not use_opp or bi < n_evolved:
-                    damage_dealt_ev += dmg
                 # apply
                 if best_kind == 0:
                     bhp[best] -= dmg
-                    if not use_opp or best < n_evolved:
-                        damage_taken_ev += dmg
                     if bhp[best] <= 0:
                         balive[best] = False
                         deaths += 1
                         kills += 1
-                        if not use_opp or bi < n_evolved:
-                            kills_ev += 1
-                        if not use_opp or best < n_evolved:
-                            deaths_ev += 1
                 else:
                     zhp[best] -= dmg
                     if zhp[best] <= 0:
                         zalive[best] = False
                         kills += 1
-                        if not use_opp or bi < n_evolved:
-                            kills_ev += 1
             # burst accounting: a miss burns a round of the burst too
             if burst_left[bi] > 0:
                 burst_left[bi] -= 1
@@ -546,13 +526,9 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 melee = 10 * dt * 8  # melee pressure (buffed)
                 bhp[best_b] -= melee
                 damage_taken += melee
-                if not use_opp or best_b < n_evolved:
-                    damage_taken_ev += melee
                 if bhp[best_b] <= 0:
                     balive[best_b] = False
                     deaths += 1
-                    if not use_opp or best_b < n_evolved:
-                        deaths_ev += 1
             zx[zi] = min(78, max(2, zx[zi])); zy[zi] = min(78, max(2, zy[zi]))
 
     # sim returns raw components: harness does scalarization (so weights can sweep)
@@ -567,7 +543,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
     survival = float(total_ticks) / float(max_ticks)
     stuck_frac = float(stuck_ticks) / max(1.0, float((total_ticks * n_bots)))
     camp_pen = 1.6 if (camp_ticks > total_ticks * n_bots * 0.6 and kills == 0) else 0.0
-    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits, kills_ev, deaths_ev, damage_dealt_ev, damage_taken_ev, shots_ev, hits_ev
+    return elo, econ, survival, stuck_frac, camp_pen, kills, deaths, damage_dealt, damage_taken, shots, hits
 
 
 def simulate_match(w, seed, n_bots, n_zombies, max_ticks, bot_skill,
