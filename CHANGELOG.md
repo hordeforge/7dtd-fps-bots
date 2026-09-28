@@ -128,6 +128,18 @@ of them removes a config key or a console command.
   mismatch raises instead of silently truncating, and the two loop counters
   that were never read are retired.
 
+### Performance
+
+- The GA dashboard's arena replays are decoded and handed to their iframes
+  when the card scrolls into view, not all four at parse time: a
+  `--replays` build spent ~343 KB of `atob` on the main thread and started
+  four canvas animations nobody had scrolled to. The payload script also
+  moved to the end of the document, so the run table above it is reached
+  after ~119 KB instead of ~463 KB. Iframe ids are the frame's position
+  rather than `abs(hash(label)) % 9999`, which was salted per process, so
+  the same runs produced different ids on every build and a label collision
+  left one card blank.
+
 ### Fixed
 
 - `IdempotencyLedger.cs` and `IdempotencyLedgerFuzzTests.cs` imported

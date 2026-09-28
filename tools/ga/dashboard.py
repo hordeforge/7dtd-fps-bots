@@ -7,7 +7,8 @@ Assembles, into a single HTML file:
   2. Held-out stability strip: per-run final held (seed 999) ranked.
   3. Neural-net controller viz (reuse viz.py's diagram, embedded as a PNG).
   4. Arena replays: top-down canvas matches of the champion on multiple seeds/arenas
-     (reuse replay.py; embedded as inline HTML frames).
+     (reuse replay.py; embedded as inline HTML frames, each mounted into its
+     iframe when the card scrolls into view).
   5. Per-run summary table (pop/gen/curriculum/islands/held/verdict).
 
 Usage:
@@ -197,6 +198,10 @@ def build(runs, out: Path, replays):
             best_run_name = run.name
 
     chunks = []
+    # Appended after the last section, not in place: the replay payloads are
+    # the bulk of this file, and a script in the middle of the body holds the
+    # parser at that byte offset, so everything after it waits.
+    tail = []
     chunks.append("""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bot Evolution Dashboard</title>
@@ -250,18 +255,37 @@ def build(runs, out: Path, replays):
     if replays:
         chunks.append('<h2>4 · Arena replays (top-down, live)</h2>')
         chunks.append('<div class="grid">')
-        encoded = {label: base64.b64encode(html.encode()).decode() for label, html in replays.items()}
-        for label in replays:
+        # Ids come from the frame's position, not from its label: str hashing is
+        # salted per process, so the same runs produced different element ids on
+        # every build, and two labels that collided on the same id left one
+        # iframe without a srcdoc (a permanently blank card).
+        frames = list(replays.items())
+        for i, (label, _) in enumerate(frames):
             safe = html.escape(str(label), quote=True)
-            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{safe}</div><iframe id="f{abs(hash(label))%9999}" title="Arena replay {safe}" style="width:100%" height="430"></iframe></div>')
+            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{safe}</div>'
+                          f'<iframe id="replay-{i}" title="Arena replay {safe}" loading="lazy" style="width:100%" height="430"></iframe>'
+                          '<div style="font-size:11px;color:#94a3b8;margin-top:6px">replay starts when this card scrolls into view</div></div>')
         chunks.append('</div>')
-        # Set srcdoc via JS so large embedded HTML/payloads don't need escaping in attributes.
-        chunks.append("<script>")
-        chunks.append("const fr = {};")
-        for label, b64 in encoded.items():
-            chunks.append(f'fr["{abs(hash(label))%9999}"] = "{b64}";')
-        chunks.append("""function deb64(s){ const bin=atob(s); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); return new TextDecoder().decode(u8); }
-for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=deb64(fr[k]); }
+        # Payloads stay base64 in the document (the output is one shareable
+        # file), but each is decoded and handed to its iframe only when that
+        # card approaches the viewport. Decoding all of them in one loop at
+        # parse time blocked the host page on ~90 KB of atob per replay, and
+        # mounted four canvas animations nobody had scrolled to. The fallback
+        # is the pre-IntersectionObserver path: mount everything at once.
+        tail.append("<script>")
+        tail.append("const fr = {};")
+        for i, (_, payload) in enumerate(frames):
+            tail.append(f'fr["replay-{i}"] = "{base64.b64encode(payload.encode()).decode()}";')
+        tail.append("""function deb64(s){ const bin=atob(s); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); return new TextDecoder().decode(u8); }
+function mount(el){ el.srcdoc=deb64(fr[el.id]||""); }
+if (typeof IntersectionObserver === "function") {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) { if (e.isIntersecting) { io.unobserve(e.target); mount(e.target); } }
+  }, {rootMargin:"200px"});
+  for (const k in fr) { const el=document.getElementById(k); if (el) io.observe(el); }
+} else {
+  for (const k in fr) { const el=document.getElementById(k); if (el) mount(el); }
+}
 </script>""")
 
     # Run table
@@ -288,7 +312,9 @@ for(const k in fr){ const el=document.getElementById('f'+k); if(el) el.srcdoc=de
     chunks.append("</tbody></table></div>")
     # Footer note in #94a3b8 (not the dimmer #64748b): it must keep 4.5:1
     # contrast on the dark page background.
-    chunks.append(f"""<p style="color:#94a3b8;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div></body></html>""")
+    chunks.append(f"""<p style="color:#94a3b8;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div>""")
+    chunks.extend(tail)
+    chunks.append("</body></html>")
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(chunks), encoding="utf-8")

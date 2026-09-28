@@ -67,6 +67,13 @@ python tools/ga/dashboard.py --all --out docs/ga-dashboard.html
 `make lint-html` runs vnu over the tracked HTML only, and warnings fail it, so
 regenerating the committed dashboard must keep it warning-clean.
 
+The output is one file: the charts and the `--replays` payloads are embedded,
+not linked, so the dashboard can be opened from disk or attached as is. Each
+replay is decoded into its iframe when that card scrolls into view (a browser
+without `IntersectionObserver` mounts them all at once), and the payload
+script sits at the end of the document so the sections above it are parsed
+first.
+
 ## How to run
 
 Requires Python 3 with NumPy, numba and matplotlib. Pillow is declared in
