@@ -123,8 +123,9 @@ for g in range(G):
     while len(children) < P - k:
         p = tournament(pop, norm, k=kt)   # one or two parents
         child = crossover(p) if rand()<pc else copy(p)
-        mutate(child, sigma * (1 - 0.5*norm[parent_rank]))
-        clamp(child, [-8,8])
+        mutate(child, sigma, rank_norm=norm[parent_rank], generation=g,
+               total_gens=G, stagnant=stagnant)   # anneal + burst + clip live in mutate
+        # mutate() clamps to [-8,8] on return (ga.py::mutate)
         children.append(child)
     pop = elite + children
     hof = update_hof(hof, elite)

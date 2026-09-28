@@ -102,7 +102,7 @@ No exception propagates to `Bot.Tick`.
 ## 6. Performance
 
 - Forward pass: ~500 MACs → ~2 KiB memory loads → ~19 µs/bot on Mono (measured on `net48`, not guessed).
-- 16 bots × 20 Hz → ~0.3 ms/s, invisibly small vs the 45 ms physics budget.
+- 16 bots × 20 Hz → ~0.3 ms per tick (~6 ms of CPU per wall second, 0.6% of one core), invisibly small vs the 50 ms tick budget.
 - No native calls, no `DllImport`, no `System.Numerics.Vectors` dependency (Mono ships without it on some distros).
 
 ## 7. Testing

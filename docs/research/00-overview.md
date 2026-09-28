@@ -1,6 +1,9 @@
 # Self-Improving 7DTD Bots via Neuroevolution: Overview
 
-*Status: research brainstorm, 2026-08-18: lives in `7dtd-fps-bots/docs/research/` so it travels with the bot mod, not the clean-room server.*
+*Status (updated 2026-09-28): the design below is the original 2026-08-18
+intent. The loop shipped: `evolved/best.json` gen 199 is the live champion and
+`UseNeuralBrain` ships true. Sections that the implementation moved past
+carry a `Status` note; `INDEX.md` holds the authoritative current state.*
 
 ## 1. Goal
 

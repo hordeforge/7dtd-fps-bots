@@ -129,7 +129,7 @@ Result: generation 0 already behaves like today's bots; evolution only needs to 
 | Weights per genome | ~325 floats (1.3 KiB), up to ~600 with NEAT |
 | Forward FLOPs | ~500 MACs/bot/tick |
 | 16 bots @ 20 Hz | ~160k MACS/s: negligible vs physics |
-| JSON `best.json` | ~5 KiB, loaded once at `GameStartDone` |
+| JSON `best.json` | ~8 KiB as committed, loaded once at `GameStartDone` |
 | No native deps | Pure C# loops; no `DllImport`, no ONNX Runtime |
 
 ## 9. Decision matrix

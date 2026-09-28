@@ -53,7 +53,7 @@ evolved/
   archive/                  # old bests moved here before promoting a new one
 ```
 
-`best.json` is small enough to commit (1-5 KiB). Keeping `runs/` git-ignored avoids repo bloat; CI uploads it as an artifact if needed.
+`best.json` is small enough to commit (~8 KiB for the 325-float champion on disk). Keeping `runs/` git-ignored avoids repo bloat; CI uploads it as an artifact if needed.
 
 ## 4. Warm-start: behavioral cloning
 
@@ -71,14 +71,18 @@ If cloning regresses (net worse than heuristic), retry with fewer steps or skip 
 For each genome `i` in generation `g`:
 
 - Derive `seeds = LCG(runSeed, g, i, arena, match)`.
-- For each of `F × 3` arenas (see `02`):
+- For each of the 9 arena configs the shipped mix carries (see `02` §2):
   - `world_store` flat ground or sampled `spawnpoints.xml` patch (deterministic hash).
   - `BotManager` spawn with `spawnNamed` + `weapon_id` draw from the same LCG.
   - Drive harness ticks at 20 Hz for `matchDuration`, piping `sense → brain → bot <verb>` each tick.
   - Accumulate `kills/deaths/damage/timeAlive` from `BotManager.hp` and `sim` health.
 - Aggregate to `fitness(i) = scalarized(F performances)` (see `02` §3).
 
-**Cost knob:** `F` is linear in wall-clock. `F=9` at ~90 ticks/match → ~810 ticks per genome. At 32 genomes that's ~26k ticks/gen; on headless that's seconds, not minutes. The live dedi path is 20× slower, hence we train headless.
+**Cost knob:** `F` is linear in wall-clock, and it is the matches-per-genome
+count, not the arena count: the shipped default is 9 configs × 2 seed streams
+× 2 draws = `F=36` at 1200/1800 ticks per match. At 32 genomes that is ~1.4M
+ticks/gen; on headless that's seconds, not minutes. The live dedi path is 20×
+slower, hence we train headless.
 
 **Parallelism:** genomes are independent. Shard across `N` workers (one sim per worker, or one process with `P` isolated `BotManager` instances). Seed independence keeps it deterministic regardless of shard order.
 
@@ -144,11 +148,15 @@ No Python ships, no extra DLL, no native module, just JSON.
 
 | Item | Approx |
 |---|---|
-| Gen 0..80, P=32, F=9, 90s matches, headless | ~40 min on a 8-core dev box (most of it is sim ticks, not GA math) |
+| Gen 0..80, P=32, F=36 (9 arena configs x 2 seed streams x 2 draws), 1200/1800-tick matches, headless | ~40 min on a 8-core dev box (most of it is sim ticks, not GA math) |
 | Same via live dedi | ~14 hours (physics + chunk IO), not used for training |
 | Disk for `runs/<ts>` (no traces) | ~40 MiB |
 | Disk with obs traces | ~400 MiB (optional; prune) |
-| Mod runtime overhead | ~0 (forward pass is already benchmarked < 1 µs/bot) |
+| Mod runtime overhead | ~0.3 ms per tick for 16 bots (forward pass benchmarked at ~19 µs/bot, see `05` §6) |
+
+> Status (2026-08-25): the wall-clock rows were measured before R9/R11
+> widened the arena mix from the 3-arena F=9 setting; treat them as
+> per-generation ballpark, not a re-benchmarked number.
 
 ## 11. Tools
 
@@ -164,5 +172,10 @@ No Python ships, no extra DLL, no native module, just JSON.
 | `tools/ga/evolve.py` | CLI that owns the loop; flags: `--pop 32 --gens 80 --seed 42 --resume` |
 | `tools/ga/evolve.py eval <best.json>` | Re-evaluates a single `best.json` on the validation pool, prints report |
 | `tools/ga/report.py` | Renders the `fitness.csv` best/mean curves into the HTML run report |
+| `tools/ga/dashboard.py` | Cross-run dashboard, writes `docs/ga-dashboard.html` |
+| `tools/ga/sweep.py` | Ablation sweep (currently the activation knob, §`06` §2) |
+| `tools/ga/replay.py` | Deterministic arena recorder + top-down HTML replay (pre-R10 rules, visualization only) |
+| `tools/ga/viz.py` | Renders the net topology/weight diagram to PNG |
+| `tools/ga/determinism_check.py` | Drives operators, match kernel and harness twice from one seed and diffs (§7) |
 
 All live under `7dtd-fps-bots/tools/ga/` so they ship with the mod's research and do not pollute the clean-room `zdtd` tree.
