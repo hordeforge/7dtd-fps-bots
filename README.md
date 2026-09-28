@@ -228,8 +228,9 @@ read plus the effective values, and the same dump is logged at startup and on
 `bot reload`. That dump is post-clamp: it shows values `Normalize` corrected
 and the difficulty preset moved, which the file on disk does not.
 
-- `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`). A `bot skill` change recomputes them from the values your `botmod.json` carried, so it always moves the whole way: `bot skill 0` then `bot skill 2` really does return to the normal reaction time. Setting `ReactionTimeSec` or `AimJitterDegrees` to something other than the stock value in `botmod.json` pins it and drops it out of the preset.
-- Combat feel: `HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.
+- `Difficulty` 0-4 drives `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`), and lerps each character's aim, aggression and alertness (see `BotCharacterDB.Load`). A `bot skill` change recomputes them from the values your `botmod.json` carried, so it always moves the whole way: `bot skill 0` then `bot skill 2` really does return to the normal reaction time. Setting `ReactionTimeSec` to something other than the stock value in `botmod.json` pins it and drops it out of the preset. The next spawn picks up the new lerp; bots already up keep the traits they were minted with.
+- Combat feel: `HeadshotChance/HeadshotMultiplier`, plus per-weapon burst shape, spread, damage and magazine pacing in `WeaponProfile` (classified from the gun id, no config key) and per-character aim in `characters.json`.
+- Retired: `AimJitterDegrees`, `BurstMin`, `BurstMax` and `BurstPauseSec` were config keys no code path read (aim came from the character's `AimAccuracy`, burst shape from the weapon profile). A `botmod.json` still carrying them logs an unknown-key warning on load and the value is ignored.
 - Announcements/loot: `AnnounceSpawns`, `BotAnnounceKillsInChat` (bot frags to chat), `DropLootOnDeath`.
 - `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies),
   `BotNames` (the base names bots are minted from), `BotWeapon`/`LoadoutPool`,

@@ -182,12 +182,24 @@ static class BotConfigLoadTests
         // whenever it happens to sit near the stock value.
         {
             string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
-            File.WriteAllText(path, "{ \"Difficulty\": 2, \"ReactionTimeSec\": 1.2, \"AimJitterDegrees\": 9.5 }");
+            File.WriteAllText(path, "{ \"Difficulty\": 2, \"ReactionTimeSec\": 1.2 }");
             BotConfig cfg = BotConfig.Load(path);
             cfg.SetDifficulty(4);
             cfg.SetDifficulty(0);
             Check("operator reaction override survives a difficulty change", cfg.ReactionTimeSec == 1.2f);
-            Check("operator aim-jitter override survives a difficulty change", cfg.AimJitterDegrees == 9.5f);
+        }
+
+        // The removed combat knobs must not come back as silently ignored keys:
+        // aim tightness and burst shape are the character's and the weapon
+        // profile's, so a botmod.json still carrying them is operator text for
+        // settings that do not exist, and the unknown-key warning is the only
+        // thing that says so.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"AimJitterDegrees\": 9.5, \"BurstMin\": 2, \"BurstMax\": 4, \"BurstPauseSec\": 0.65 }");
+            var unknown = BotConfig.UnknownKeys(File.ReadAllText(path));
+            foreach (string key in new[] { "AimJitterDegrees", "BurstMin", "BurstMax", "BurstPauseSec" })
+                Check("retired config key '" + key + "' is reported unknown", unknown.Contains(key));
         }
 
         // A JSON null TeamAssignments map must be repaired by Normalize: the

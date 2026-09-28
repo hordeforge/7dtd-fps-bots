@@ -16,10 +16,15 @@ namespace BotMod.Core
         // would close a namespace cycle between the two layers; it compiles in
         // one assembly but keep Core the only layer that reaches the other way.
         readonly List<Bot> _bots = new List<Bot>();
-        readonly HashSet<int> _botEntityIds = new HashSet<int>();
-        // O(1) id lookup for the per-damage-event / per-shot ally checks; a linear
-        // _bots.Find with a closure ran on every DamageEntity, trigger pull and
-        // FindTarget candidate.
+        // The one id index: O(1) membership and lookup for the per-damage-event /
+        // per-shot ally checks; a linear _bots.Find with a closure ran on every
+        // DamageEntity, trigger pull and FindTarget candidate. A separate
+        // HashSet<int> of the same keys stood beside this dictionary and had to
+        // be added to and cleared alongside it at every one of the six mutation
+        // sites, so any one of them drifting left IsBotEntity answering for a
+        // bot the rest of the registry no longer had (a corpse still counted as
+        // a bot, or a live one stopped counting); membership is this
+        // dictionary's key set, which has nothing to keep in step.
         readonly Dictionary<int, Bot> _botById = new Dictionary<int, Bot>();
         float _tickAccum;
         float _spawnRetryTimer;
@@ -31,7 +36,7 @@ namespace BotMod.Core
         BotManager() { }
         public IReadOnlyList<Bot> Bots => _bots;
         public int BotCount => _bots.Count;
-        public bool IsBotEntity(int entityId) => _botEntityIds.Contains(entityId);
+        public bool IsBotEntity(int entityId) => _botById.ContainsKey(entityId);
         public Bot GetBot(int entityId) => _botById.TryGetValue(entityId, out var b) ? b : null;
 
         /// <summary>Whether a player is a legal target of a bot operation: in
@@ -120,7 +125,7 @@ namespace BotMod.Core
         public void OnGameStartDone()
         {
             _started = true; _tickAccum = 0f; _spawnRetryTimer = 0f;
-            _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
+            _bots.Clear(); _botById.Clear();
             BotSpawner.InvalidateDmSpawnCache();
             var cfg = ModApi.Config;
             BotSpawner.Reseed((uint)cfg.Seed);
@@ -128,7 +133,7 @@ namespace BotMod.Core
         }
         public void OnWorldShuttingDown()
         {
-            _started = false; _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
+            _started = false; _bots.Clear(); _botById.Clear();
             // The spawnpoint memo is keyed on the world name, so a new world
             // carrying the same name would keep getting the old world's
             // coordinates. Drop it with the rest of the per-world state.
@@ -145,7 +150,7 @@ namespace BotMod.Core
             for (int i = _bots.Count - 1; i >= 0; i--)
             {
                 var b = _bots[i];
-                if (b.IsDeadOrUnloaded(world)) { _botEntityIds.Remove(b.EntityId); _botById.Remove(b.EntityId); _bots.RemoveAt(i); continue; }
+                if (b.IsDeadOrUnloaded(world)) { _botById.Remove(b.EntityId); _bots.RemoveAt(i); continue; }
                 try { b.Tick(dt, world); }
                 catch (Exception ex)
                 {
@@ -204,7 +209,7 @@ namespace BotMod.Core
             }
             BotSpawner.ConfigureBotEntity(e, cfg, wp.GunId, name);
             var bot = new Bot(e.entityId, name, BotClock.Now, wp, character);
-            _bots.Add(bot); _botEntityIds.Add(e.entityId); _botById[e.entityId] = bot;
+            _bots.Add(bot); _botById[e.entityId] = bot;
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
             return true;
         }
@@ -248,10 +253,10 @@ namespace BotMod.Core
                 if (removed) n++;
                 else { if (stuck == null) stuck = new List<Bot>(); stuck.Add(b); }
             }
-            _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
+            _bots.Clear(); _botById.Clear();
             if (stuck != null)
             {
-                foreach (var b in stuck) { _bots.Add(b); _botEntityIds.Add(b.EntityId); _botById[b.EntityId] = b; }
+                foreach (var b in stuck) { _bots.Add(b); _botById[b.EntityId] = b; }
                 ModApi.Warn("RemoveAll kept " + stuck.Count + " bot(s) whose world removal threw; they stay tracked, retry 'bot remove all'.");
             }
             if (n > 0) ModApi.Log($"Removed {n} bots ({reason}).");
@@ -280,7 +285,7 @@ namespace BotMod.Core
                 catch (Exception ex) { ModApi.Warn("Remove bot failed id=" + entityId + ": " + ex.Message); removed = false; }
             }
             if (!removed) return false;
-            _bots.Remove(bot); _botEntityIds.Remove(entityId); _botById.Remove(entityId);
+            _bots.Remove(bot); _botById.Remove(entityId);
             ModApi.Log("Removed bot id=" + entityId + " (" + reason + ").");
             return true;
         }

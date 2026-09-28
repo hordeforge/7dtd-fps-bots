@@ -738,7 +738,7 @@ namespace BotMod.Core
             {
                 // Start a new burst. No extra pause here: finishing the previous
                 // burst already armed BurstPause below, so pausing again would
-                // hold fire for ~2x BurstPauseSec between every burst.
+                // hold fire for ~2x the burst pause between every burst.
                 _burstLeft = Weapon.BurstMin + (int)(Rng01() * (Weapon.BurstMax - Weapon.BurstMin + 1));
                 // vary strafe dir between bursts
                 if (Rng01() < 0.6f) _strafeDir = -_strafeDir;

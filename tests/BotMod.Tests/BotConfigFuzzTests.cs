@@ -57,15 +57,12 @@ static class BotConfigFuzzTests
         Check(cfg.VisionRange >= 8f && cfg.VisionRange <= 300f, ctx + ": VisionRange out of range: " + cfg.VisionRange);
         Check(cfg.LoseTargetRange >= cfg.VisionRange && cfg.LoseTargetRange <= 400f, ctx + ": LoseTargetRange " + cfg.LoseTargetRange + " vs VisionRange " + cfg.VisionRange);
         Check(cfg.AttackRange >= 3f && cfg.AttackRange <= cfg.VisionRange, ctx + ": AttackRange " + cfg.AttackRange + " vs VisionRange " + cfg.VisionRange);
-        Check(cfg.AimJitterDegrees >= 0f && cfg.AimJitterDegrees <= 30f, ctx + ": AimJitterDegrees out of range: " + cfg.AimJitterDegrees);
         Check(cfg.HeadshotChance >= 0f && cfg.HeadshotChance <= 1f, ctx + ": HeadshotChance out of range: " + cfg.HeadshotChance);
         // Multiplier feeds Mathf.RoundToInt(dmg*mult): must be clamped and
         // finite or the int cast overflows (unspecified result can heal targets).
         Check(!float.IsNaN(cfg.HeadshotMultiplier) && !float.IsInfinity(cfg.HeadshotMultiplier)
             && cfg.HeadshotMultiplier >= 1f && cfg.HeadshotMultiplier <= 10f,
             ctx + ": HeadshotMultiplier out of range: " + cfg.HeadshotMultiplier);
-        Check(cfg.BurstMin >= 1 && cfg.BurstMin <= 20, ctx + ": BurstMin out of range: " + cfg.BurstMin);
-        Check(cfg.BurstMax >= cfg.BurstMin && cfg.BurstMax <= 30, ctx + ": BurstMax " + cfg.BurstMax + " vs BurstMin " + cfg.BurstMin);
         Check(cfg.BotTeamCount >= 0 && cfg.BotTeamCount <= 8, ctx + ": BotTeamCount out of range: " + cfg.BotTeamCount);
         Check(cfg.StrafeChance >= 0f && cfg.StrafeChance <= 1f, ctx + ": StrafeChance out of range: " + cfg.StrafeChance);
         Check(cfg.DodgeOnHitChance >= 0f && cfg.DodgeOnHitChance <= 1f, ctx + ": DodgeOnHitChance out of range: " + cfg.DodgeOnHitChance);
@@ -80,8 +77,8 @@ static class BotConfigFuzzTests
         float[] floats =
         {
             cfg.BotHealth, cfg.VisionRange, cfg.VisionAngle, cfg.LoseTargetRange,
-            cfg.LoseTargetTimeSec, cfg.AttackRange, cfg.AimJitterDegrees,
-            cfg.HeadshotChance, cfg.HeadshotMultiplier, cfg.BurstPauseSec,
+            cfg.LoseTargetTimeSec, cfg.AttackRange,
+            cfg.HeadshotChance, cfg.HeadshotMultiplier,
             cfg.ReactionTimeSec, cfg.PathRecalcIntervalSec, cfg.StuckTimeoutSec,
             cfg.RandomWanderRadius, cfg.RandomWanderIntervalSec, cfg.SpawnRadius,
             cfg.SpawnProtectionSec, cfg.SpawnNearPlayerChance, cfg.StrafeChance,
@@ -144,8 +141,8 @@ static class BotConfigFuzzTests
     {
         "TargetBotCount", "MaxBots", "BotAmmoCount", "BotHealth", "Difficulty",
         "VisionRange", "VisionAngle", "LoseTargetRange", "LoseTargetTimeSec",
-        "AttackRange", "AimJitterDegrees", "HeadshotChance", "HeadshotMultiplier",
-        "BurstMin", "BurstMax", "BurstPauseSec", "ReactionTimeSec",
+        "AttackRange", "HeadshotChance", "HeadshotMultiplier",
+        "ReactionTimeSec",
         "PathRecalcIntervalSec", "StuckTimeoutSec", "RandomWanderRadius",
         "RandomWanderIntervalSec", "SpawnRadius", "SpawnNearPlayerChance",
         "SpawnProtectionSec", "StrafeChance", "DodgeOnHitChance", "BotTeamCount"

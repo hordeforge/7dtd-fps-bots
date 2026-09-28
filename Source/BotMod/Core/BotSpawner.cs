@@ -59,13 +59,17 @@ namespace BotMod.Core
             if (raw.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) return raw;
             return "[Bot] " + raw;
         }
+        /// <summary>Profile for the gun this spawn should carry, with the
+        /// "mixed" literal (and an absent BotWeapon) expanded against
+        /// <see cref="BotConfig.LoadoutPool"/>. ForGun owns that expansion.
+        /// Expanding the pool here instead was a second implementation of the
+        /// same decision on the spawner's own stream, which also picks the name
+        /// and the spot, so editing LoadoutPool shifted every name and spot
+        /// picked after it. The mixed pick is salted off that stream on purpose
+        /// (WeaponProfile.LoadoutCounterSalt), and Reseed is what re-seeds it.</summary>
         public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride)
         {
-            string pick = gunOverride ?? cfg.BotWeapon;
-            if (!string.IsNullOrEmpty(pick) && !pick.Equals(WeaponProfile.Mixed, StringComparison.OrdinalIgnoreCase))
-                return WeaponProfile.ForGun(pick, cfg.LoadoutPool);
-            string gun = cfg.LoadoutPool[RngPick(cfg.LoadoutPool.Length)];
-            return WeaponProfile.ForGun(gun, cfg.LoadoutPool);
+            return WeaponProfile.ForGun(gunOverride ?? cfg.BotWeapon, cfg.LoadoutPool);
         }
 
         // Spawn near a specific player: FPS-like, out-of-sight preferred. DM

@@ -28,9 +28,21 @@ Cutting a release, in this order:
 
 ### Breaking
 
-Under the 0.x policy above, these change what an existing consumer sees. None
-of them removes a config key or a console command.
+Under the 0.x policy above, these change what an existing consumer sees.
 
+- `AimJitterDegrees`, `BurstMin`, `BurstMax` and `BurstPauseSec` are gone from
+  `botmod.json`. No code path read them: aim tightness comes from the
+  character's `AimAccuracy` (`Bot.AdoptTarget`, `Bot.AttackInRange`) and burst
+  shape, spread, damage and magazine pacing from the per-weapon
+  `WeaponProfile`, so a tuned value read as a live combat setting and changed
+  nothing. `Normalize` clamped them, the difficulty preset authored
+  `AimJitterDegrees`, and `bot skill` reported the new jitter as a consequence,
+  so the file, the startup dump and the console all described a knob with no
+  effect behind it. A `botmod.json` that still carries the keys logs the
+  existing unknown-key warning on load and is otherwise unaffected; the
+  effective dump no longer lists them. The difficulty preset still moves
+  reaction time, headshot chance and the vision/attack ranges, and still
+  lerps the per-character traits on the next spawn.
 - `POST /api/bot` now binds an idempotency `requestId` to the request it was
   issued for. Before: a retry under a live key whose body differed was answered
   with the earlier response and the new operation was dropped. Now: the
@@ -265,6 +277,18 @@ of them removes a config key or a console command.
   an edited or truncated `anti-slop-src` in the tool cache was linted against
   without a digest check. The tree is now rebuilt from the verified archive on
   every run and swapped in only once the extraction succeeded.
+- Editing `LoadoutPool` shifted every bot name and spawn point picked after
+  it. `BotSpawner.PickWeapon` expanded the "mixed" literal against the
+  spawner's own LCG, the same stream that picks the name and the spot, so a
+  gun pick consumed a draw those two later reads depended on, and
+  `WeaponProfile`'s salted mixed-loadout counter (reseeded per world for
+  exactly this) was never reached from the spawn path. The expansion now has
+  one owner, `WeaponProfile.ForGun`, and the salted counter is the live one.
+- `BotManager` kept two structures over the same ids, a `List<Bot>` and a
+  `HashSet<int>` beside a `Dictionary<int, Bot>`, and every add and clear had
+  to update all three. Membership (`IsBotEntity`, read on every damage event,
+  trigger pull and target candidate) now reads the dictionary's key set, which
+  has nothing to keep in step.
 - Three Unicode characters that reorder or hide text in a terminal reached the
   audit trail and split identity keys, because the invisible-character table
   listed Unicode's bidi embeddings and overrides but not the rest of its

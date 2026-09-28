@@ -340,7 +340,12 @@ namespace BotMod.Commands
             // Clamp + Normalize live in BotConfig.SetDifficulty (shared with the
             // web `skill` action); the persisted value is the post-clamp property.
             ModApi.PersistConfigField(ModApi.Config.SetDifficulty(d), ModApi.Config.Difficulty);
-            SdtdConsole.Instance.Output($"Skill set to {ModApi.Config.Difficulty} (persisted). Aim jitter {ModApi.Config.AimJitterDegrees:F1}deg, reaction {ModApi.Config.ReactionTimeSec:F2}s.");
+            // Reports the reaction time, which is the tunable the preset
+            // actually moves here; aim tightness and burst shape are the
+            // characters' and the weapon profile's, so naming them as
+            // consequences of `bot skill` would claim an effect it does not
+            // have. The next spawn picks up the new lerp.
+            SdtdConsole.Instance.Output($"Skill set to {ModApi.Config.Difficulty} (persisted). Reaction {ModApi.Config.ReactionTimeSec:F2}s, vision {ModApi.Config.VisionRange:F0}m, headshot {ModApi.Config.HeadshotChance:P0}.");
         }
         void DoVs(List<string> p)
         {
