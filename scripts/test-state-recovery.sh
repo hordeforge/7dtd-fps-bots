@@ -6,8 +6,9 @@
 # verify the digests, restore onto a second fake root, and confirm the file
 # that comes back is byte-identical to the one that went in. It also drives
 # the failure paths that make verification meaningful: a tampered file, a
-# missing MANIFEST, an unlisted file, an empty backup, and a restore whose
-# mounted-config target does not exist on this host.
+# missing MANIFEST, an unlisted file, an empty backup, a zero-byte config, a
+# restore whose mounted-config target does not exist on this host, and a
+# backup schedule that stopped running.
 #
 # No game install and no network: every path is a temp tree, so this runs in
 # CI as part of `make check`.
@@ -17,6 +18,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKUP="$ROOT/scripts/backup-state.sh"
 RESTORE="$ROOT/scripts/restore-state.sh"
+STATUS="$ROOT/scripts/backup-status.sh"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -204,6 +206,69 @@ expect_fail "restore without BOTMOD_CONFIG refused" \
 expect_ok "restore with BOTMOD_CONFIG" \
   env SEVENDTD_DS_DIR="$msnap_src" BOTMOD_CONFIG="$mounted" bash "$RESTORE" "$msnap" --apply
 if [[ -f "$mounted" ]]; then ok "mounted config still in place"; else fail "mounted config disappeared"; fi
+
+check "a blank live config falls back to the .bak, so the snapshot is not the one unrestorable state"
+blank_src="$work/blank-server"
+mkdir -p "$blank_src/Mods/BotMod/Config"
+: > "$blank_src/Mods/BotMod/Config/botmod.json"
+printf '{"TargetBotCount": 31}\n' > "$blank_src/Mods/BotMod/Config/botmod.json.bak"
+SEVENDTD_DS_DIR="$blank_src" BOTMOD_STATE_BACKUP_DIR="$work/snapshots-blank" \
+  BOTMOD_CONTAINER_CONFIG="$work/absent" bash "$BACKUP" > "$work/out" 2>&1
+bsnap="$(newest_snapshot "$work/snapshots-blank")"
+if [[ -s "$bsnap/botmod.json" ]] && grep -q '"TargetBotCount": 31' "$bsnap/botmod.json"; then
+  ok "snapshot holds the last-known-good, not the empty primary"
+else
+  fail "blank primary was snapshotted as-is; restore would install an unparseable config"
+  sed 's/^/    /' "$work/out" >&2
+fi
+if grep -q "^# fallback=botmod.json=" "$bsnap/MANIFEST"; then
+  ok "MANIFEST records the substituted copy"
+else
+  fail "MANIFEST does not record that the primary was substituted"
+fi
+expect_ok "verify passes on the substituted snapshot" \
+  env SEVENDTD_DS_DIR="$blank_src" bash "$RESTORE" "$bsnap"
+
+check "a snapshot holding a zero-byte config is refused, not installed over a good one"
+emptycfg="$work/empty-config-snapshot"
+cp -r "$bsnap" "$emptycfg"
+: > "$emptycfg/botmod.json"
+(
+  cd "$emptycfg"
+  source "$ROOT/scripts/digest.sh"
+  find . -type f ! -name MANIFEST | sed 's|^\./||' | sort | while IFS= read -r f; do
+    "${SHA[@]}" "$f"
+  done > "$work/manifest.blank"
+)
+mv "$work/manifest.blank" "$emptycfg/MANIFEST"
+emptycfg_host="$work/empty-config-host"
+mkdir -p "$emptycfg_host"
+expect_fail "zero-byte config snapshot rejected" \
+  env SEVENDTD_DS_DIR="$emptycfg_host" bash "$RESTORE" "$emptycfg" --apply
+if grep -q "EMPTY" "$work/out"; then ok "EMPTY reported"; else fail "the zero-byte config was not named"; fi
+if [[ -e "$emptycfg_host/Mods" ]]; then fail "refused restore still wrote into the host"; else ok "refused restore wrote nothing"; fi
+
+check "backup-status reports a stopped schedule instead of a stale snapshot reading as healthy"
+expect_fail "no backup directory is not healthy" \
+  env BOTMOD_STATE_BACKUP_DIR="$work/never-created" bash "$STATUS"
+expect_ok "a fresh snapshot is healthy" \
+  env BOTMOD_STATE_BACKUP_DIR="$work/snapshots" bash "$STATUS"
+# touch -t is POSIX and takes a fixed stamp, so this does not depend on the
+# host date syntax; the age is read from the snapshot directory, so moving it
+# back makes the snapshot look as old as the mtime says.
+touch -t 202001010000 "$snap"
+expect_fail "a snapshot older than the threshold is not healthy" \
+  env BOTMOD_STATE_BACKUP_DIR="$work/snapshots" BOTMOD_BACKUP_MAX_AGE_HOURS=1 bash "$STATUS"
+if grep -q "STALE" "$work/out"; then ok "STALE reported"; else fail "an old snapshot was not reported as stale"; fi
+# The tampered copy has to fail the health check even when it is the newest:
+# a green status must mean the recovery point would actually restore.
+cp -r "$snap" "$work/snapshots-tampered"
+printf 'corrupted\n' >> "$work/snapshots-tampered/botmod.json"
+expect_fail "a corrupt snapshot is not healthy" \
+  env BOTMOD_STATE_BACKUP_DIR="$work/snapshots-tampered" BOTMOD_BACKUP_MAX_AGE_HOURS=999999 bash "$STATUS"
+if grep -q "UNVERIFIABLE" "$work/out"; then ok "UNVERIFIABLE reported"; else fail "a corrupt snapshot was reported as healthy"; fi
+expect_fail "a non-numeric age threshold is a command-line error" \
+  env BOTMOD_STATE_BACKUP_DIR="$work/snapshots" BOTMOD_BACKUP_MAX_AGE_HOURS=soon bash "$STATUS"
 
 check "install.sh verifies MANIFEST.sha256 before it swaps the payload in"
 ids="$work/ds-install"

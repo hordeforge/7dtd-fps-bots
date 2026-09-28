@@ -75,7 +75,14 @@ namespace BotMod.Foundation
                 // so every interruption point stays recoverable: crash before this
                 // line leaves the old primary intact; crash during the swap leaves
                 // .bak as the last good copy, which BotConfig.Load picks up.
-                try { if (File.Exists(path)) File.Copy(path, BackupPath(path), overwrite: true); }
+                // Copy through a FileStream and flush it to disk rather than
+                // File.Copy: the swap below is fsynced, and an unsynced .bak
+                // would outlive a power cut as a zero- or partial-length file,
+                // which is exactly the last-known-good the next recovery needs.
+                // A power cut during a copy leaves the .bak holding page-cache
+                // bytes only, so Load's fallback finds an empty file and falls
+                // through to defaults: every persisted operator setting gone.
+                try { if (File.Exists(path)) CopySynced(path, BackupPath(path)); }
                 catch (Exception ex) { Warn("backup copy failed (" + BackupPath(path) + "); last-known-good not refreshed: " + ex.Message); }
                 // File.Move cannot overwrite on .NET Framework/Windows, and
                 // File.Replace is unavailable on some filesystems; delete-then-move
@@ -83,6 +90,21 @@ namespace BotMod.Foundation
                 // covered by the .bak above.
                 if (File.Exists(path)) File.Delete(path);
                 File.Move(tmp, path);
+            }
+        }
+
+        // Overwrite <paramref name="dest"/> with the bytes of <paramref name="src"/>
+        // and flush them to stable storage before returning. File.Copy leaves the
+        // destination in the page cache, so a power cut can leave the copy short or
+        // empty; this is the .bak, and Load falls back to it when the primary does
+        // not parse, so a short copy is a lost config rather than a stale one.
+        private static void CopySynced(string src, string dest)
+        {
+            byte[] bytes = File.ReadAllBytes(src);
+            using (var fs = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                fs.Write(bytes, 0, bytes.Length);
+                fs.Flush(true);
             }
         }
 

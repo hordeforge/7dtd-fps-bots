@@ -98,6 +98,24 @@ if [[ "$missing" == 1 ]]; then
   echo "Snapshot failed verification; nothing was restored." >&2
   exit 1
 fi
+# Digests only prove the snapshot is the one that was taken, not that what was
+# taken was restorable state. A zero-byte config is the state a torn write or a
+# full disk leaves on the server, and restoring it replaces a good config with
+# one BotConfig.Load cannot parse, so every persisted operator setting resets
+# to defaults at the next start. backup-state.sh substitutes the .bak for a
+# blank primary, so a snapshot this script wrote is never blank; an old one,
+# or one edited by hand, has to be refused rather than installed.
+blank=0
+for f in botmod.json botmod.config-path.json botmod.container.json; do
+  if [[ -f "$SNAP/$f" && ! -s "$SNAP/$f" ]]; then
+    echo "EMPTY: $f is a zero-byte config; restoring it would reset the operator config" >&2
+    blank=1
+  fi
+done
+if [[ "$blank" == 1 ]]; then
+  echo "Snapshot holds no recoverable config; nothing was restored." >&2
+  exit 1
+fi
 echo "Verified snapshot $SNAP"
 
 for f in evolved/best.json evolved/best.meta.json; do

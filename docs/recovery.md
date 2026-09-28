@@ -59,7 +59,15 @@ make backup                                    # snapshot into ./backups/<stamp>
 BOTMOD_STATE_BACKUP_DIR=/mnt/backup make backup # off-host destination
 make verify-snapshot SNAPSHOT=backups/<stamp>  # verify digests, write nothing
 make restore SNAPSHOT=backups/<stamp>          # verify, then restore the config
+make backup-status                             # newest snapshot: verifies, and how old
 ```
+
+`make backup-status` is the check to point a monitor at. The schedule itself
+lives outside the repo (cron, systemd, a host backup), so nothing in the tree
+can tell whether it is still running; this exits non-zero when the newest
+snapshot is missing, does not verify against its own MANIFEST, or is older than
+`BOTMOD_BACKUP_MAX_AGE_HOURS` (default 48). A green run means the recovery
+point exists, would restore, and is recent enough for the RPO above.
 
 Set `BOTMOD_STATE_BACKUP_DIR` off-host for protection against host loss; the
 repo-local default only survives `make uninstall` and stray deletions. The
@@ -78,9 +86,18 @@ that, and then the state is gone.
   single rename, so a failed copy leaves the running install untouched.
 - **Torn or corrupt config file** (crash/power cut mid-persist, bad manual
   edit): at most one mutation lost. Persists go through `AtomicTextFile`
-  (fsynced temp file, previous content kept at `.bak`, then move over the
-  primary), and `BotConfig.Load` recovers from `.bak` when the primary does not
-  parse (logged as `BotConfig restored from backup ...`).
+  (fsynced temp file, previous content kept at a fsynced `.bak`, then move over
+  the primary), and `BotConfig.Load` recovers from `.bak` when the primary does
+  not parse (logged as `BotConfig restored from backup ...`). The `.bak` is
+  flushed to disk before the swap, so the last-known-good survives a power cut
+  as a whole file rather than as page-cache bytes.
+- **Blank or unparseable config already on the host** (a persist that failed
+  after the disk filled, a hand edit): `make backup` does not snapshot the
+  blank primary, it snapshots the `.bak` in its place and records the swap as
+  `# fallback=<name>=<path>` in the MANIFEST, warning on stderr. A snapshot
+  holding a zero-byte config is refused by `make verify-snapshot` and
+  `make restore` rather than installed over a good one, so a bad recovery point
+  cannot be certified by its own digests.
 - **Instance/disk loss**: weights and default config come back from git;
   operator config is host-local, so it is gone unless a snapshot exists. Run
   `make backup` with `BOTMOD_STATE_BACKUP_DIR` pointed off-host, or have the
@@ -120,9 +137,11 @@ scratch server roots, snapshots them, verifies, restores onto a second root,
 and asserts the restored config is byte-identical to the original. It drives
 the failure paths too, so a green run means verification can actually fail: a
 tampered file, a listed file missing, an unlisted file added, a missing
-MANIFEST, a snapshot with no config in it, a `BOTMOD_CONFIG` snapshot restored
-without the override, and a container-only snapshot restored onto a host
-without that mount. The rest of the runbook needs the game install, so it
+MANIFEST, a snapshot with no config in it, a snapshot holding a zero-byte
+config, a blank live primary falling back to its `.bak`, a `BOTMOD_CONFIG`
+snapshot restored without the override, a container-only snapshot restored
+onto a host without that mount, and a `make backup-status` run against a
+missing, stale, or corrupt newest snapshot. The rest of the runbook needs the game install, so it
 stays manual:
 
 ```bash

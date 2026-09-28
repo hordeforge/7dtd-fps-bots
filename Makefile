@@ -8,7 +8,7 @@ SCRIPTS := $(ROOT)/scripts
 # installed: every script here needs one anyway.
 SHELL := $(shell command -v bash)
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot test-recovery clean coverage lint-html lint-webui lint-shell lint-python lint-yaml check preflight
+.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup backup-status restore verify-snapshot test-recovery clean coverage lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -35,6 +35,10 @@ Targets:
   make install      copy dist/BotMod into the dedicated server's Mods dir
   make uninstall    remove Mods/BotMod from the server (snapshots operator config first)
   make backup       snapshot operator config + champion weights into backups/<utc>/
+  make backup-status  verify the newest snapshot and fail when it is missing,
+                    unverifiable, or older than BOTMOD_BACKUP_MAX_AGE_HOURS (48).
+                    Point a monitoring check at it to alert on a backup schedule
+                    that stopped running.
   make verify-snapshot SNAPSHOT=backups/<utc>  check a snapshot's digests, write nothing
   make test-recovery  drive backup, verify, restore and their failure paths on scratch trees
   make restore SNAPSHOT=backups/<utc>  verify the snapshot, then put the config back
@@ -43,7 +47,9 @@ Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
 SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip
 timestamps; defaults to the HEAD commit time). BOTMOD_STATE_BACKUP_DIR (where
 `make backup` writes; defaults to ./backups, point it off-host for host-loss
-protection), SNAPSHOT (directory passed to restore-state.sh). CI runs `make check` plus
+protection), SNAPSHOT (directory passed to restore-state.sh),
+BOTMOD_BACKUP_MAX_AGE_HOURS (staleness threshold for `make backup-status`,
+default 48). CI runs `make check` plus
 `scripts/test-idempotency.sh` (mono installed in the workflow; ruff via uv tool
 for lint-python); `make build`
 additionally needs the game install locally.
@@ -108,6 +114,8 @@ uninstall:
 	bash "$(SCRIPTS)/uninstall.sh"
 backup:
 	bash "$(SCRIPTS)/backup-state.sh"
+backup-status:
+	bash "$(SCRIPTS)/backup-status.sh"
 restore:
 	@test -n "$(SNAPSHOT)" || { echo "usage: make restore SNAPSHOT=backups/<utc-stamp>" >&2; exit 1; }
 	bash "$(SCRIPTS)/restore-state.sh" "$(SNAPSHOT)" --apply
