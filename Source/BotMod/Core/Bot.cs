@@ -309,12 +309,15 @@ namespace BotMod.Core
             // off forever and never finish the fight.
             if (doRetreat)
             {
+                // Failing the finish-the-kill check leaves doRetreat at its
+                // heuristic value, so the bot backs off a nearly dead enemy and
+                // the mutual-retreat stalemate this exists to break returns.
                 try
                 {
                     float enemyFrac = _target.Health / System.Math.Max(1f, cfg.BotHealth);
                     if (enemyFrac <= 0.4f) doRetreat = false;
                 }
-                catch { }
+                catch (Exception ex) { ModApi.WarnRateLimited(() => "finish-the-kill check failed for " + Name + ", retreating as planned: " + ex.Message); }
             }
             if (!doRetreat) return;
             // Cover search costs 8 LOS raycasts + ground scans, so it runs on the
@@ -524,9 +527,18 @@ namespace BotMod.Core
                         toward.Normalize();
                         Vector3 perp = Vector3.Cross(Vector3.up, toward) * ((EntityId & 1) == 0 ? 3f : -3f);
                         Vector3 jukePos = from + perp;
-                        try { BotBrain.MoveTo(me, jukePos); juked = true; } catch { }
+                        // The stuck timer is reset below either way, so a juke
+                        // that never happens is not retried until the timeout
+                        // elapses again; the report is what tells an operator
+                        // the unstick path is broken rather than idle.
+                        try { BotBrain.MoveTo(me, jukePos); juked = true; }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "stuck juke threw for " + Name + ": " + ex.Message); }
                     }
-                    if (!juked) { try { BotBrain.JumpOrStrafe(me); } catch { } }
+                    if (!juked)
+                    {
+                        try { BotBrain.JumpOrStrafe(me); }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "stuck jump-or-strafe threw for " + Name + ": " + ex.Message); }
+                    }
                     _stuckSince = 0f; _nextPathRecalc = Time.time + 0.2f;
                 }
             }
@@ -571,7 +583,8 @@ namespace BotMod.Core
                     {
                         _nextPathRecalc = Time.time + 0.2f;
                         _campYaw += 0.05f;
-                        try { me.SetLookPosition(me.position + Quaternion.Euler(0, _campYaw * Mathf.Rad2Deg, 0) * Vector3.forward); } catch { }
+                        try { me.SetLookPosition(me.position + Quaternion.Euler(0, _campYaw * Mathf.Rad2Deg, 0) * Vector3.forward); }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "camp facing sweep failed for " + Name + ", bot holds a fixed facing: " + ex.Message); }
                     }
                 }
             }
@@ -636,7 +649,10 @@ namespace BotMod.Core
                         if (d < bestD) { bestD = d; best = e2.position; }
                     }
                 }
-                catch { }
+                // A half-completed scan returns the other class's best only, so the
+                // bot converges on a player it should have ignored (or ignores a
+                // nearby bot) with no sign anything went wrong. Reported per scan.
+                catch (Exception ex) { ModApi.WarnRateLimited(() => "bot-vs-bot scan aborted for " + Name + ", player candidates only: " + ex.Message); }
                 // nearest real player
                 try
                 {
@@ -648,10 +664,13 @@ namespace BotMod.Core
                             if (d < bestD) { bestD = d; best = p.position; }
                         }
                 }
-                catch { }
+                catch (Exception ex) { ModApi.WarnRateLimited(() => "player scan aborted for " + Name + ", bot candidates only: " + ex.Message); }
                 return best;
             }
-            catch { return Vector3.zero; }
+            // Vector3.zero is also the "nothing within maxDist" answer, so an
+            // exception here left the bot wandering instead of converging and the
+            // two were indistinguishable in the state dump.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "SeekNearestEnemy failed for " + Name + ", bot wanders: " + ex.Message); return Vector3.zero; }
         }
 
         /// <summary>True if another bot is engaging the same target from the same strafe side
@@ -733,7 +752,11 @@ namespace BotMod.Core
                     int hpBefore = target.Health;
                     DamageSource ds;
                     try { ds = new DamageSourceEntity(EnumDamageSource.External, EnumDamageTypes.Piercing, me.entityId); }
-                    catch { ds = new DamageSource(EnumDamageSource.External, EnumDamageTypes.Piercing); }
+                    // The plain source still applies the damage but carries no
+                    // attacker, so the victim cannot credit this bot: the frag
+                    // is lost while the hit registers, and nothing downstream
+                    // reports it.
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "attributed damage source unavailable for " + Name + ", hits land unattributed: " + ex.Message); ds = new DamageSource(EnumDamageSource.External, EnumDamageTypes.Piercing); }
                     int dmgResult = 0;
                     // Trader bodies (npcTraderJoel bots) are damage-immune in the engine: the
                     // vanilla DamageEntity call returns 0 and leaves HP unchanged. For a
@@ -743,7 +766,11 @@ namespace BotMod.Core
                     if (target is EntityTrader && targetIsBot)
                     {
                         target.Health = Mathf.Max(0, target.Health - dmg);
-                        try { target.Stats?.Health?.SetChangedFlag(target.Health, target.Health + dmg); } catch { }
+                        // The health write above already landed; this is the
+                        // replication flag, so a throw leaves clients showing the
+                        // pre-damage value for a body that is really hurt.
+                        try { target.Stats?.Health?.SetChangedFlag(target.Health, target.Health + dmg); }
+                        catch (Exception ex) { ModApi.WarnRateLimited(() => "health change flag failed for bot " + target.entityId + ", clients see stale health: " + ex.Message); }
                         dmgResult = dmg;
                         // A SetDead that throws leaves a 0-health bot tracked
                         // and alive-looking, with no death side effect and no
@@ -816,8 +843,12 @@ namespace BotMod.Core
 
         bool UseNeuralGate()
         {
+            // A throw here reads as "the gate is off", so the whole population
+            // would run on heuristics with the operator's neural setting still
+            // displayed as on. The gate only skips an optimisation, so the
+            // fallback stays; the reason belongs in the log.
             try { return ModApi.Config != null && ModApi.Config.UseNeuralBrain && BotNeuralBrain.Loaded; }
-            catch { return false; }
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "neural gate read failed, running heuristics: " + ex.Message); return false; }
         }
 
         /// <summary>CanSee against the current target, evaluated at most once per Tick.
@@ -867,35 +898,58 @@ namespace BotMod.Core
             }
         }
 
+        /// <summary>Report a neural input slot that could not be read and kept
+        /// its default. Every slot here feeds the trained net directly, so a
+        /// swallowed read is not a neutral default: a failed line-of-sight slot
+        /// reads as 0 and the bot never fires, a failed weapon-range slot reads
+        /// as 0 and the net treats the gun as a knife. Rate-limited because
+        /// this runs per bot per tick. The lazy message keeps the stack walk
+        /// off the suppressed path.</summary>
+        void WarnInputSlot(string slot, float fallback, Exception ex)
+        {
+            ModApi.WarnRateLimited(() => "neural input '" + slot + "' for " + Name
+                + " read failed, fed " + fallback.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ": " + ex.Message);
+        }
+
         BotNeuralBrain.NeuralInputs BuildNeuralInputs(EntityAlive me, World world, BotConfig cfg)
         {
             float hpFrac = 0f;
-            try { hpFrac = Mathf.Clamp01(me.Health / Mathf.Max(1f, cfg.BotHealth)); } catch { }
+            try { hpFrac = Mathf.Clamp01(me.Health / Mathf.Max(1f, cfg.BotHealth)); }
+            catch (Exception ex) { WarnInputSlot("hpFrac", hpFrac, ex); }
             float enemyHp = 1f;
-            try { if (_target != null && _target.IsAlive()) enemyHp = Mathf.Clamp01(_target.Health / Mathf.Max(1f, cfg.BotHealth)); } catch { }
+            try { if (_target != null && _target.IsAlive()) enemyHp = Mathf.Clamp01(_target.Health / Mathf.Max(1f, cfg.BotHealth)); }
+            catch (Exception ex) { WarnInputSlot("enemyHpFrac", enemyHp, ex); }
             float distNorm = 0f;
-            try { distNorm = Mathf.Clamp01(Vector3.Distance(me.position, _target != null ? _target.position : me.position) / Mathf.Max(1f, cfg.VisionRange)); } catch { }
+            try { distNorm = Mathf.Clamp01(Vector3.Distance(me.position, _target != null ? _target.position : me.position) / Mathf.Max(1f, cfg.VisionRange)); }
+            catch (Exception ex) { WarnInputSlot("distNorm", distNorm, ex); }
             float canSee = 0f;
-            try { canSee = TargetVisible(me, world, cfg) ? 1f : 0f; } catch { }
+            try { canSee = TargetVisible(me, world, cfg) ? 1f : 0f; }
+            catch (Exception ex) { WarnInputSlot("canSee", canSee, ex); }
             // Slot 4: sustained-fire spread fraction, same accumulator the sim
             // trains against (+per shot, decay per second).
             float spreadFrac = Mathf.Clamp01(_fireSpread);
             float wpRange = 0f;
-            try { wpRange = Mathf.Clamp01(Weapon.Range / Mathf.Max(1f, cfg.AttackRange)); } catch { }
+            try { wpRange = Mathf.Clamp01(Weapon.Range / Mathf.Max(1f, cfg.AttackRange)); }
+            catch (Exception ex) { WarnInputSlot("weaponRangeNorm", wpRange, ex); }
             float pellets = 0f;
-            try { pellets = Mathf.Clamp01(Weapon.Pellets / 8f); } catch { }
+            try { pellets = Mathf.Clamp01(Weapon.Pellets / 8f); }
+            catch (Exception ex) { WarnInputSlot("pelletsNorm", pellets, ex); }
             float acc = AimAcc;
             float skill = AimSkillVal;
             float aggr = 0.5f, selfPres = 0.5f, camper = 0.2f;
-            try { if (Character != null) { aggr = Character.Aggression; selfPres = Character.SelfPreservation; camper = Character.Camper; } } catch { }
+            try { if (Character != null) { aggr = Character.Aggression; selfPres = Character.SelfPreservation; camper = Character.Camper; } }
+            catch (Exception ex) { WarnInputSlot("characterTraits", aggr, ex); }
             // Slot 12: rounds-left fraction. The sim divides ammo+reserve by the
             // 2x-mag pool; the runtime has no finite reserve (BotAmmoCount is
             // decorative bag ammo and never runs dry), so the honest equivalent
             // is magazine fill: full after each reload, draining per shot.
             float ammoFrac = 0f;
-            try { ammoFrac = Mathf.Clamp01(_ammo / (float)System.Math.Max(1, Weapon.MagSize)); } catch { }
+            try { ammoFrac = Mathf.Clamp01(_ammo / (float)System.Math.Max(1, Weapon.MagSize)); }
+            catch (Exception ex) { WarnInputSlot("ammoLeftFrac", ammoFrac, ex); }
             float stuck = 0f;
-            try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); } catch { }
+            try { stuck = Mathf.Clamp01(_stuckSince > 0f ? Mathf.Min(Time.time - _stuckSince, cfg.StuckTimeoutSec) / Mathf.Max(0.01f, cfg.StuckTimeoutSec) : 0f); }
+            catch (Exception ex) { WarnInputSlot("stuckFrac", stuck, ex); }
             return new BotNeuralBrain.NeuralInputs
             {
                 HpFrac = hpFrac, EnemyHpFrac = enemyHp, DistNorm = distNorm, CanSee = canSee,

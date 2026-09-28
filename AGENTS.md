@@ -76,19 +76,27 @@ not C#; `scripts/build.sh` compiles it into the shipped `Mods/BotMod/WebMod/`.
 
 Recorded so they stay visible instead of being rediscovered as "someone forgot".
 
-- **Empty `catch` blocks: 80 sites**, counted by
+- **Empty `catch` blocks: 34 sites**, counted by
   `rg -U 'catch\s*(\(Exception\))?\s*\{\s*\}' Source/BotMod`
-  (`BotBrain.cs` 18, `Bot.cs` 16, `BotSpawner.cs` 31, `BotCombat.cs` 13,
-  and 2 in `MainThreadDispatch.cs`). They guard
+  (`BotSpawner.cs` 18, `BotBrain.cs` 8, `BotCombat.cs` 6, and 2 in
+  `MainThreadDispatch.cs`). They guard
   7DTD/Unity calls whose failure must not abort a bot tick or a spawn attempt.
   The root rule wants each one to name what it swallows and to wrap exactly one
   statement; most name nothing, and many wrap a whole loop. Fix them where a
   swallow can hide a defect, one file per change, never as a sweep: a bare
   `catch` removed from the tick path is a behavior change, not a comment
-  change. `AtomicTextFile.cs`, `IdempotencyLedger.cs`, `BotPatches.cs` and
-  `BotConsoleCommands.cs` are done: every site reports through a `Warn` sink
+  change. `AtomicTextFile.cs`, `IdempotencyLedger.cs`, `BotPatches.cs`,
+  `BotConsoleCommands.cs`, `Bot.cs`, `BotBrain.cs` and `BotCombat.cs` are done:
+  every site reports through a `Warn` sink
   (`ModApi.Warn` / `ModApi.WarnRateLimited`), wired to `ModApi.Warn` in
-  `InitMod`.
+  `InitMod`. What is left in `BotSpawner.cs`, `BotBrain.cs` and
+  `BotCombat.cs` is deliberate and documented at each site: per-statement
+  probes into engine calls that throw routinely for a body that died or was
+  unlinked this tick (`MoveEntityHeaded`, `SetLookPosition`, `SetRotation`,
+  `FindPath`, `StartJump`, `SetEntityName`), and reflect-and-try-the-next-path
+  lookups whose miss is already reported downstream. Logging those would cost
+  a line per frame to say nothing an operator can act on; the enclosing
+  per-tick and per-step catch reports the failure that actually costs a frame.
 - **Inline tuning constants** in the AI and spawner code (distances, score
   weights, timings) sit at their use site with a comment rather than as named
   constants. `BotCombat.cs` and `BotSpawner.cs` declare none at all. Promote

@@ -158,7 +158,16 @@ namespace BotMod.Core
                     if (bv.type != 0) { var block = Block.list[bv.type]; if (block != null && block.IsCollideMovement) return false; }
                 }
                 return true;
-            } catch { return false; }
+            } catch (Exception ex)
+            {
+                // "In sight", the opposite of the true-fallback BotBrain's LOS
+                // uses: both call sites only penalize a positive (spawn
+                // protection is off / the candidate is skipped), so a throw here
+                // would quietly turn spawn protection off rather than merely
+                // losing a candidate. Cheap to keep and worth saying out loud.
+                ModApi.WarnRateLimited(() => "spawn line-of-sight check failed, treating the candidate as visible (spawn protection off): " + ex.Message);
+                return false;
+            }
         }
 
         /// <summary>Positions of every live bot, resolved once per call. The
@@ -166,7 +175,11 @@ namespace BotMod.Core
         /// each one snapshots it up front; resolving per candidate made a spawn
         /// cost candidates x bots world-dictionary lookups, which is the N+1 the
         /// picking loops above were shaped around. Returns an empty list (never
-        /// null) when the manager or the world lookup throws.</summary>
+        /// null) when the manager or the world lookup throws. That empty list is
+        /// indistinguishable from a server with no bots, which silently turns
+        /// the farthest-from-anyone pick into a uniform random one and stacks
+        /// new bots on the spawnpoint of an existing one, so the failure is
+        /// reported rather than absorbed.</summary>
         static List<Vector3> BotPositions(World world)
         {
             var positions = new List<Vector3>();
@@ -179,7 +192,7 @@ namespace BotMod.Core
                     if (e != null) positions.Add(e.position);
                 }
             }
-            catch { }
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "bot roster snapshot failed, spawn points are chosen without bot avoidance: " + ex.Message); }
             return positions;
         }
 
@@ -194,7 +207,8 @@ namespace BotMod.Core
                     // Farthest-from-players spawn (avoid spawn stacking on someone) - FPS-like farthest spawn
                     Vector3 best = dm[RngPick(dm.Count)]; float bestDist = -1f;
                     List<Vector3> playerPos = new List<Vector3>();
-                    try { if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null && !p.IsDead()) playerPos.Add(p.position); } catch { }
+                    try { if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null && !p.IsDead()) playerPos.Add(p.position); }
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "player roster snapshot failed, spawnpoints are scored against bots only: " + ex.Message); }
                     // Resolved once, not once per candidate: the try loop scores
                     // every spawnpoint against the same roster snapshot, and
                     // resolving inside it repeated a world-dictionary lookup per
@@ -239,7 +253,10 @@ namespace BotMod.Core
                     }
                 }
             }
-            catch { }
+            // The near-player ring is the whole reason a joiner meets a fight;
+            // an exception here drops every spawn to the world-origin ring
+            // below with nothing in the log to say the setting was skipped.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "near-player spawn pick failed, falling back to the world-origin ring: " + ex.Message); }
             // Near world spawn / 0,0
             for (int a = 0; a < 8; a++)
             {
@@ -276,7 +293,9 @@ namespace BotMod.Core
                 var bv2 = world.GetBlock(new Vector3i(Mathf.FloorToInt(pos.x), Mathf.FloorToInt(pos.y + 1), Mathf.FloorToInt(pos.z)));
                 if (bv2.type != 0 && Block.list[bv2.type] != null && Block.list[bv2.type].IsCollideMovement) return false;
             }
-            catch { }
+            // "Clear" is unverified, not verified: a throwing block query means
+            // the candidate was never checked, and the caller spawns there.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "spawn clearance check failed, spawning without it: " + ex.Message); }
             return true;
         }
 
@@ -296,7 +315,7 @@ namespace BotMod.Core
                         // hit on terrain/mesh: anchor just above impact
                         if (hit.point.y > 10f) return new Vector3(pos.x, hit.point.y + 1f, pos.z);
                     }
-                } catch { }
+                } catch (Exception ex) { ModApi.WarnRateLimited(() => "ground raycast probe failed, using the voxel scan: " + ex.Message); }
                 // Voxel scan fallback: prefer highest walkable surface, not cave floor.
                 int top = Mathf.Clamp(Mathf.FloorToInt(pos.y) + 30, 0, 250);
                 for (int y = top; y >= 0; y--)
@@ -306,7 +325,7 @@ namespace BotMod.Core
                     {
                         // skip if there's ceiling directly above (inside cave)
                         bool caved = false;
-                        try { for (int yy = y + 3; yy <= y + 12 && yy <= 250; yy++) { var b2 = world.GetBlock(new Vector3i(x, yy, z)); if (b2.type != 0 && Block.list[b2.type] != null && Block.list[b2.type].IsCollideMovement) { caved = true; break; } } } catch { }
+                        try { for (int yy = y + 3; yy <= y + 12 && yy <= 250; yy++) { var b2 = world.GetBlock(new Vector3i(x, yy, z)); if (b2.type != 0 && Block.list[b2.type] != null && Block.list[b2.type].IsCollideMovement) { caved = true; break; } } } catch (Exception ex) { ModApi.WarnRateLimited(() => "cave-ceiling scan failed, treating the surface as open to the sky: " + ex.Message); }
                         if (caved && y < 20) continue; // cave floor, keep scanning up
                         return new Vector3(pos.x, y + 2f, pos.z);
                     }
@@ -317,7 +336,12 @@ namespace BotMod.Core
                     if (bv.type != 0) return new Vector3(pos.x, y + 2f, pos.z);
                 }
             }
-            catch { }
+            // "No ground found" and "the scan threw" are the same answer to every
+            // caller: the near-player and origin rings move on, and when all of
+            // them come back empty the spawn lands at a hardcoded y=61, dropping
+            // the bot out of the sky. Only the exception case is reported, since
+            // a legitimately groundless column is a normal outcome.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "ground scan failed, treating the column as groundless: " + ex.Message); }
             return Vector3.zero;
         }
 
@@ -466,7 +490,12 @@ namespace BotMod.Core
             {
                 if (e is EntityAlive alive)
                 {
-                    try { alive.Health = Mathf.RoundToInt(cfg.BotHealth); } catch { }
+                    // Every other hpFrac in the mod divides by cfg.BotHealth, so
+                    // a rejected write leaves the body on its class default and
+                    // the whole difficulty band is wrong for this bot with
+                    // nothing in the log to say so.
+                    try { alive.Health = Mathf.RoundToInt(cfg.BotHealth); }
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "bot health write failed for " + botName + ", body keeps its class default: " + ex.Message); }
                     // Give the gun and actually equip it so the Avatar renders it. Without the holding-item write
                     // the inventory has the gun but the model walks empty-handed.
                     if (!string.IsNullOrEmpty(gunId))
@@ -477,7 +506,11 @@ namespace BotMod.Core
                             if (iv != null)
                             {
                                 var stack = new ItemStack(iv, 1);
-                                try { alive.inventory.AddItem(stack); } catch { }
+                                // The "weapon not found" branch below only fires on a
+                                // lookup miss; a throwing AddItem leaves the same
+                                // unarmed body, so it needs the same report.
+                                try { alive.inventory.AddItem(stack); }
+                                catch (Exception ex) { ModApi.WarnRateLimited(() => "weapon '" + gunId + "' could not be given to " + botName + ", bot is unarmed: " + ex.Message); }
                                 // Equip in hand so AvatarSDCS/UMA actually draws the rifle (rifle can't be seen if only in bag)
                                 try { alive.inventory.SetHoldingItemIdx(0); } catch { }
                                 try { alive.inventory.updateHoldingItem(); } catch { }
@@ -516,6 +549,10 @@ namespace BotMod.Core
                     // and the weight/speed of a player rather than of a zombie.
                     try
                     {
+                        // Left silent: a body that rejects one of these still
+                        // fights and is tracked, it just behaves like the
+                        // vanilla soldier in that one respect, and the warn
+                        // gate has better uses than per-spawn physics notes.
                         try { alive.IsGodMode.Value = false; } catch {}
                         try { alive.IsNoCollisionMode.Value = false; } catch {}
                         try { alive.entityCollisionReduction = 0f; } catch {}
@@ -524,10 +561,17 @@ namespace BotMod.Core
                         try { alive.weight = 70f; } catch {}
                         // Health/stamina already set above; speed stays at the vanilla 1.0.
                         try { alive.speedModifier = 1f; } catch {}
-                    } catch {}
+                    }
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "player-physics pinning failed for " + botName + ": " + ex.Message); }
                     TrySetEntityName(alive, botName);
-                    try { alive.Buffs.SetCustomVar("botmod_isBot", 1f); } catch { }
-                    try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); } catch { }
+                    // The custom-var marker is the record that survives on the
+                    // body itself; a rejected write leaves the bot with no such
+                    // mark, which is exactly the sort of thing that is only
+                    // noticed weeks later.
+                    try { alive.Buffs.SetCustomVar("botmod_isBot", 1f); }
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "botmod_isBot marker write failed for " + botName + ": " + ex.Message); }
+                    try { alive.Buffs.SetCustomVar("botmod_skill", cfg.Difficulty); }
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "botmod_skill marker write failed for " + botName + ": " + ex.Message); }
                 }
             }
             catch (Exception ex) { ModApi.WarnRateLimited(() => "ConfigureBotEntity failed: " + ex.Message); }

@@ -1,3 +1,4 @@
+using System;
 using BotMod.Core;
 using BotMod.Foundation;
 
@@ -35,13 +36,19 @@ namespace BotMod.AI
                     {
                         // Bucket: zombie victims count as zombie kills for the leaderboard, everything else as player kills.
                         bool victimCountsAsZombie = victim is EntityZombie;
+                        // A throw here is lost leaderboard credit, not a degraded
+                        // cosmetic: the frag count is what the dashboard's kill
+                        // column reads. Rate-limited, so a body type that always
+                        // rejects the write costs one line per window.
                         if (victimCountsAsZombie)
                         {
-                            try { killer.KilledZombies++; } catch { }
+                            try { killer.KilledZombies++; }
+                            catch (Exception ex) { ModApi.WarnRateLimited(() => "zombie kill credit write failed for bot " + killer.entityId + ": " + ex.Message); }
                         }
                         else
                         {
-                            try { killer.KilledPlayers++; } catch { }
+                            try { killer.KilledPlayers++; }
+                            catch (Exception ex) { ModApi.WarnRateLimited(() => "player kill credit write failed for bot " + killer.entityId + ": " + ex.Message); }
                         }
 
                         // Score mirrors EntityAlive.AwardKill -> AddScore via GameStats 28/29/30.
@@ -49,33 +56,43 @@ namespace BotMod.AI
                         int z = victimCountsAsZombie ? 1 : 0;
                         int p = victimCountsAsZombie ? 0 : 1;
                         // Team isn't replicated on bots; use 0 (no team) to avoid bogus friendly-fire checks.
+                        // The local bump is a fallback, not an equivalent: only
+                        // GameManager's AddScoreServer feeds the server-side
+                        // scoreboard, so a takeover is worth reporting.
                         try { GameManager.Instance?.AddScoreServer(killer.entityId, z, p, 0, 0); }
-                        catch { try { killer.Score++; } catch { } }
+                        catch (Exception ex)
+                        {
+                            ModApi.WarnRateLimited(() => "AddScoreServer failed for bot " + killer.entityId
+                                + ", bumping the entity's local score only (server scoreboard will lag): " + ex.Message);
+                            try { killer.Score++; } catch { }
+                        }
 
                         // Shout it so players see bot frags alongside player frags in chat.
-                        try
+                        string msg = $"[Bot] {k} fragged {v}";
+                        ModApi.Log($"{msg} (K:{killer.KilledPlayers} Z:{killer.KilledZombies} D:{killer.Died} S:{killer.Score})");
+                        // Best-effort chat broadcast to connected players (reflection-based so the
+                        // exact GameMessageServer signature never breaks the build; no-op if the
+                        // API differs or no players are connected).
+                        // ChatMessageServer owns its own reporting: it distinguishes
+                        // "no usable API" from a delivered message, so a throw
+                        // escaping it must not be swallowed as though it were sent.
+                        if (ModApi.Config.BotAnnounceKillsInChat)
                         {
-                            string msg = $"[Bot] {k} fragged {v}";
-                            ModApi.Log($"{msg} (K:{killer.KilledPlayers} Z:{killer.KilledZombies} D:{killer.Died} S:{killer.Score})");
-                            // Best-effort chat broadcast to connected players (reflection-based so the
-                            // exact GameMessageServer signature never breaks the build; no-op if the
-                            // API differs or no players are connected).
-                            if (ModApi.Config.BotAnnounceKillsInChat)
-                                try { ChatMessageServer(msg); } catch { }
+                            try { ChatMessageServer(msg); }
+                            catch (Exception ex) { ModApi.WarnRateLimited(() => "kill chat announce threw: " + ex.Message); }
                         }
-                        catch { }
                     }
-                    catch { }
+                    catch (Exception ex) { ModApi.WarnRateLimited(() => "bot kill crediting failed for " + killer.entityId + " -> " + victim.entityId + ": " + ex.Message); }
                 }
 
                 // Bot victims also need a visible death bump even if the killer already logged.
                 // Victim-side Died/Score is normally handled by DamageEntity death path, but keep a trace.
                 if (victimIsBot && victim != null)
                 {
-                    try { ModApi.Log($"victim [Bot] {v} died (D:{victim.Died} S:{victim.Score})"); } catch { }
+                    ModApi.Log($"victim [Bot] {v} died (D:{victim.Died} S:{victim.Score})");
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 // Kill events are rare; an unexpected failure here (score crediting,
                 // chat announce) must not vanish without a trace.
@@ -131,9 +148,20 @@ namespace BotMod.AI
                                     // Recipients = connected players (empty collection
                                     // => broadcast). Built here, not for both
                                     // branches: the preferred overload above never
-                                    // looks at it.
+                                    // looks at it. A read that throws leaves an
+                                    // empty list, which sends to nobody while the
+                                    // announce still counts as delivered below, so
+                                    // it says so rather than passing for a send.
                                     System.Collections.Generic.List<ClientInfo> cts = new System.Collections.Generic.List<ClientInfo>();
-                                    try { if (ConnectionManager.Instance?.Clients?.List != null) cts = new System.Collections.Generic.List<ClientInfo>(ConnectionManager.Instance.Clients.List); } catch { }
+                                    try
+                                    {
+                                        if (ConnectionManager.Instance?.Clients?.List != null)
+                                            cts = new System.Collections.Generic.List<ClientInfo>(ConnectionManager.Instance.Clients.List);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        ModApi.WarnRateLimited(() => "kill chat recipient list unread, announcing to an empty recipient set: " + ex.Message);
+                                    }
                                     sp.Invoke(inst, new object[] { cts, msg, false });
                                     sent = true;
                                     return;

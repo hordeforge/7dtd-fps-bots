@@ -109,7 +109,10 @@ namespace BotMod.AI
                     }
                 }
             }
-            catch { }
+            // The vision-box pass aborting is not fatal (the sweep below still
+            // runs), but a bot that only ever fails this pass never acquires a
+            // target and the log says nothing about why.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "vision-box target scan failed, falling back to the world sweep: " + ex.Message); }
 
             if (best == null)
             {
@@ -164,7 +167,10 @@ namespace BotMod.AI
                             if (score < bestScore) { bestScore = score; best = a; }
                         }
                 }
-                catch { }
+                // Last resort gone: the bot ends this tick with no target at
+                // all and drifts into Wander, which reads exactly like a quiet
+                // world. Per bot per tick, so the gate is what bounds it.
+                catch (Exception ex) { ModApi.WarnRateLimited(() => "world target sweep failed, bot finds no enemy: " + ex.Message); }
             }
             return best;
         }
@@ -230,7 +236,13 @@ namespace BotMod.AI
                 }
                 return VoxelLineClear(from, to, world);
             }
-            catch { return true; }
+            // "Clear" is the fallback because a blind bot never fights, which is
+            // a worse outcome than one that shoots at a wall. It is also the
+            // outcome that hides itself: a throwing raycast had every bot in
+            // vision range shooting through geometry, with no LOS evidence
+            // anywhere in the log. Per bot per tick, so the flood gate is what
+            // keeps this to one line.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "line-of-sight raycast failed, assuming clear: " + ex.Message); return true; }
         }
         static bool VoxelLineClear(Vector3 from, Vector3 to, World world)
         {
@@ -247,7 +259,10 @@ namespace BotMod.AI
                 }
                 return true;
             }
-            catch { return true; }
+            // Same contract as HasLineOfSight above: the voxel fallback runs
+            // only when the physics ray found nothing, so a throw here is the
+            // only thing standing between the bot and a wall-shotted target.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "voxel line-of-sight failed, assuming clear: " + ex.Message); return true; }
         }
 
         public static Vector3 LeadAimPoint(Vector3 from, Vector3 targetPos, Vector3 targetVel, BotConfig cfg, WeaponProfile wp)
@@ -267,7 +282,25 @@ namespace BotMod.AI
                 lead.y = targetPos.y + 1.05f;
                 return lead;
             }
-            catch { return targetPos; }
+            // Unled aim is a real accuracy loss, so it is worth a line; the
+            // caller still gets a usable point and the bot keeps fighting.
+            catch (Exception ex) { ModApi.WarnRateLimited(() => "LeadAimPoint failed, aiming at the unshifted target: " + ex.Message); return targetPos; }
+        }
+
+        /// <summary>Report a movement primitive that threw before it moved the
+        /// body at all. The per-statement catches inside the primitives stay
+        /// silent on purpose: MoveEntityHeaded and SetLookPosition throw
+        /// routinely for a body that died or was unlinked earlier this tick, and
+        /// logging that would bury real failures under a per-frame flood. The
+        /// outer catch is the opposite case: the whole step never ran, so the
+        /// bot stands still and the state dump shows no reason. Rate-limited and
+        /// main-thread, like every other hot-path failure report.</summary>
+        static void WarnMoveFailed(string op, EntityAlive me, Exception ex)
+        {
+            string id = "?";
+            try { id = me != null ? me.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture) : "?"; }
+            catch { }
+            ModApi.WarnRateLimited(() => "bot " + id + " " + op + " failed, position unchanged: " + ex.Message);
         }
 
         public static void MoveTo(EntityAlive me, Vector3 pos)
@@ -288,7 +321,7 @@ namespace BotMod.AI
                 if (Vector3.Distance(me.position, before) <= 0.01f)
                     ManualStep(me, dir, dist);
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("MoveTo", me, ex); }
         }
         /// <summary>Direct position step used when the entity's motor ignores MoveEntityHeaded
         /// (trader bodies). Steps me.position toward `dir` at a fixed speed; used by move/strafe.</summary>
@@ -300,9 +333,12 @@ namespace BotMod.AI
                 Vector3 step = dir * (stepSpeed * UnityEngine.Time.deltaTime);
                 if (step.magnitude > dist) step = dir * dist;
                 Vector3 np = me.position + step;
-                try { me.position = np; } catch { }
+                // The assignment itself is the only way a trader body moves, and a
+                // throw here means the body is stuck for this tick.
+                try { me.position = np; }
+                catch (Exception ex) { WarnMoveFailed("ManualStep", me, ex); }
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("ManualStep", me, ex); }
         }
         /// <summary>Try the motor, falling back to a manual position step for static bodies
         /// (traders). Shared by Strafe/Backpedal so attacking player-model bots orbit.</summary>
@@ -315,7 +351,7 @@ namespace BotMod.AI
                 if (Vector3.Distance(me.position, before) <= 0.01f)
                     ManualStep(me, dir, dist);
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("MoveWithFallback", me, ex); }
         }
         public static void FaceTowards(EntityAlive me, Vector3 pos)
         {
@@ -328,7 +364,7 @@ namespace BotMod.AI
                 try { me.SetRotation(new Vector3(0, yaw, 0)); } catch { }
                 try { me.SetLookPosition(pos + Vector3.up * 1.12f); } catch { }
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("FaceTowards", me, ex); }
         }
         /// <summary>Move in an arbitrary direction (R10 neural movement): the net
         /// composes forward/lateral from (retreat, strafe) and this applies it.</summary>
@@ -342,7 +378,7 @@ namespace BotMod.AI
                 float dist = 0.8f;
                 MoveWithFallback(me, dir, dist);
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("MoveDir", me, ex); }
         }
         public static void Strafe(EntityAlive me, EntityAlive target, int dirSign)
         {
@@ -355,7 +391,7 @@ namespace BotMod.AI
                 float dist = Mathf.Max(0.3f, Vector3.Distance(me.position, target.position) * 0.2f);
                 MoveWithFallback(me, dir, dist);
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("Strafe", me, ex); }
         }
         public static void Backpedal(EntityAlive me, EntityAlive target, int dirSign)
         {
@@ -368,7 +404,7 @@ namespace BotMod.AI
                 float dist = Mathf.Max(0.3f, Vector3.Distance(me.position, target.position) * 0.2f);
                 MoveWithFallback(me, dir, dist);
             }
-            catch { }
+            catch (Exception ex) { WarnMoveFailed("Backpedal", me, ex); }
         }
         public static Vector3 FindCover(EntityAlive me, EntityAlive threat, World world)
         {
@@ -406,7 +442,9 @@ namespace BotMod.AI
                 Vector3 strafe = Vector3.Cross(Vector3.up, fwd) * (((me.entityId ^ 0x9E3779B9) & 1) == 0 ? -1 : 1);
                 me.MoveEntityHeaded(strafe, false);
             }
-            catch { }
+            // The unjumped/stationary case is the point of the call, so a
+            // throw here is the unstick that silently stopped working.
+            catch (Exception ex) { WarnMoveFailed("JumpOrStrafe", me, ex); }
         }
         static float WanderHash01(int entityId, int salt) { return Lcg.Seeded((uint)entityId * 2654435761u + (uint)salt * 97u + 1u).Next01(); }
         public static Vector3 PickWanderTarget(EntityAlive me, World world, float radius, float rollAng01, float rollDist01)
