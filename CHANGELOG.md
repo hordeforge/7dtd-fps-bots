@@ -227,6 +227,16 @@ of them removes a config key or a console command.
 
 ### Fixed
 
+- The shipped `WebMod/bundle.js` was 14489 bytes, over the 14336-byte wire
+  budget `scripts/lint-webui.sh` enforces, so `make check` failed on a clean
+  tree. The read-only note span that ends each control row and the localized
+  number formatters now live in one helper each, which brings the bundle to
+  14289 bytes with the same output.
+- `scripts/lint-webui.sh` checked the anti-slop plugin archive against its
+  pinned SHA-256 but extracted it only when the extracted tree was missing, so
+  an edited or truncated `anti-slop-src` in the tool cache was linted against
+  without a digest check. The tree is now rebuilt from the verified archive on
+  every run and swapped in only once the extraction succeeded.
 - Three Unicode characters that reorder or hide text in a terminal reached the
   audit trail and split identity keys, because the invisible-character table
   listed Unicode's bidi embeddings and overrides but not the rest of its

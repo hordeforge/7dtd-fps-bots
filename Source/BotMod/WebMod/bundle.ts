@@ -162,6 +162,13 @@ const METER_FORMAT: Intl.NumberFormat = new Intl.NumberFormat(undefined, { style
 // the categories its language defines, keyed off the same call.
 const PLURAL_RULES: Intl.PluralRules = new Intl.PluralRules();
 
+// The two formatters are the only way a number reaches the screen, and every
+// call site goes through them rather than naming the Intl object: the shipped
+// bundle has a wire budget, and spelling out COUNT_FORMAT.format at each of the
+// scoreboard and status-line call sites is bytes the panel pays on every load.
+const formatCount = (n: number): string => COUNT_FORMAT.format(n);
+const formatMeters = (n: number): string => METER_FORMAT.format(n);
+
 function isSingular(n: number): boolean {
   return PLURAL_RULES.select(n) === "one";
 }
@@ -170,7 +177,7 @@ function isSingular(n: number): boolean {
 // bare `undefined` child did, instead of a formatted 0: a missing reading and
 // a real zero must not read the same. A zero the server did send is formatted.
 function fmtCell(v: number | undefined): string | undefined {
-  return v === undefined ? undefined : COUNT_FORMAT.format(v);
+  return v === undefined ? undefined : formatCount(v);
 }
 
 function strOrEmpty(v: unknown): string {
@@ -228,7 +235,7 @@ function newRequestId(): string {
 
 function botCount(count: number | undefined): string {
   const n = numOr(count, 1);
-  return `${COUNT_FORMAT.format(n)} ${isSingular(n) ? "bot" : "bots"}`;
+  return `${formatCount(n)} ${isSingular(n) ? "bot" : "bots"}`;
 }
 
 // Plain-language name of a command, for the command-result line. The button
@@ -425,7 +432,7 @@ function nearLabel(b: BotStat): string {
   if (b.nearestPlayerDist === undefined || b.nearestPlayerDist < 0) {
     return "n/a";
   }
-  return `${METER_FORMAT.format(b.nearestPlayerDist)}${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
+  return `${formatMeters(b.nearestPlayerDist)}${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
 }
 
 // Team palette: index 0 = free-for-all (neutral), 1..TEAM_LIMIT team colors.
@@ -470,14 +477,14 @@ function renderBotHeader(h: CreateElement, s: BotStatus, onlinePlayers: Array<Bo
   const onlineText: unknown = online === 0
     ? "no players online"
     : h("span", null,
-        `${COUNT_FORMAT.format(online)} ${isSingular(online) ? "player" : "players"} online (`,
+        `${formatCount(online)} ${isSingular(online) ? "player" : "players"} online (`,
         h("span", { dir: "auto" }, onlinePlayers.map((p): string => p.name).join(", ")),
         ")");
   return h("div", { className: "botmod-head" },
     h("h2", null, "Bot Control"),
     pill(s.enabled === true, "ENABLED", "DISABLED"),
-    h("span", { className: "botmod-window" },
-      `alive ${COUNT_FORMAT.format(num(s.alive))}/${COUNT_FORMAT.format(num(s.targetBotCount))} · max ${COUNT_FORMAT.format(num(s.maxBots))} · brain ${brainLabel(s.neural, s.neuralLoaded)} · `,
+    note(h,
+      `alive ${formatCount(num(s.alive))}/${formatCount(num(s.targetBotCount))} · max ${formatCount(num(s.maxBots))} · brain ${brainLabel(s.neural, s.neuralLoaded)} · `,
       onlineText));
 }
 
@@ -526,7 +533,7 @@ function renderSkillRow(h: CreateElement, s: BotStatus, busy: string, post: (bod
         key: d, className: `botmod-btn${s.difficulty === d ? " botmod-primary" : ""}`, disabled: busy !== "",
         onClick: (): void => post({ action: "skill", level: d })
       }, String(d))),
-    h("span", { className: "botmod-window" }, "0 bot · 1 easy · 2 normal · 3 hard · 4 nightmare"));
+    note(h, "0 bot · 1 easy · 2 normal · 3 hard · 4 nightmare"));
 }
 
 // With no player online there is nothing to spawn near: the count, weapon and
@@ -536,7 +543,7 @@ function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPl
   return h("div", { className: "botmod-row" },
     rowLabel(h, "Near player"),
     noPlayers
-      ? h("span", { className: "botmod-window" }, "no players online")
+      ? note(h, "no players online")
       : h("select", {
           className: "botmod-select", value: nearPlayer,
           "aria-label": "Player",
@@ -563,7 +570,7 @@ function renderBrainRow(h: CreateElement, s: BotStatus, btn: (label: string, bod
   return h("div", { className: BRAIN_ROW_CLASS },
     rowLabel(h, "Brain"),
     btn(s.neural === true ? "Static AI" : "GA brain", { action: "neural", on: s.neural !== true }),
-    s.neuralPath !== undefined && s.neuralPath !== "" ? h("span", { className: "botmod-window" }, `weights: ${s.neuralPath}`) : null);
+    s.neuralPath !== undefined && s.neuralPath !== "" ? note(h, `weights: ${s.neuralPath}`) : null);
 }
 
 function renderTeamRow(h: CreateElement, s: BotStatus, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
@@ -571,7 +578,7 @@ function renderTeamRow(h: CreateElement, s: BotStatus, btn: (label: string, body
   return h("div", { className: BRAIN_ROW_CLASS },
     rowLabel(h, "Squad"),
     btn(team ? "Free-for-all" : "Squad mode", { action: "team", on: !team }, team ? "botmod-primary" : ""),
-    h("span", { className: "botmod-window" }, team ? "all bots are allies" : "bots fight each other"));
+    note(h, team ? "all bots are allies" : "bots fight each other"));
 }
 
 function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: BotAction) => void): unknown {
@@ -587,7 +594,7 @@ function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: 
         key: t.target, className: `botmod-btn${t.on ? " botmod-primary" : ""}`, disabled: busy !== "",
         onClick: (): void => post({ action: "vs", target: t.target, on: !t.on })
       }, `${t.label}${t.on ? "" : " OFF"}`)),
-    h("span", { className: "botmod-window" }, "squad mode overrides vs Bots"));
+    note(h, "squad mode overrides vs Bots"));
 }
 
 function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: string, post: (body: BotAction) => void, armedBtn: (label: string, body: BotAction, cls?: string) => unknown, dragName: string | null, setDragName: (v: string | null) => void, dropOver: number | null, setDropOver: (v: number | null) => void): unknown {
@@ -652,10 +659,10 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
 
 function renderConfigRow(h: CreateElement, s: BotStatus): unknown {
   return h("div", { className: "botmod-row botmod-cfg" },
-    h("span", { className: "botmod-window" },
-      `vision ${METER_FORMAT.format(num(s.visionRange))} · attack ${METER_FORMAT.format(num(s.attackRange))} · spawn r ${METER_FORMAT.format(num(s.spawnRadius))}` +
+    note(h,
+      `vision ${formatMeters(num(s.visionRange))} · attack ${formatMeters(num(s.attackRange))} · spawn r ${formatMeters(num(s.spawnRadius))}` +
       ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
-      `${s.botVsBot === true ? " · vsBot" : ""} · hp ${COUNT_FORMAT.format(num(s.botHealth))}`));
+      `${s.botVsBot === true ? " · vsBot" : ""} · hp ${formatCount(num(s.botHealth))}`));
 }
 
 function ariaSortValue(sort: SortState, key: string): string {
@@ -677,6 +684,13 @@ function sortArrowNode(h: CreateElement, sort: SortState, key: string): unknown 
 // trailing colon live in one place.
 function rowLabel(h: CreateElement, text: string): unknown {
   return h("span", { className: "botmod-label" }, `${text}:`);
+}
+
+// The read-only text that ends a control row. Same span in every row, so the
+// element and its class live in one place: the bundle is served uncompressed
+// and every row would otherwise carry its own copy of the class name.
+function note(h: CreateElement, ...text: Array<unknown>): unknown {
+  return h("span", { className: "botmod-window" }, text);
 }
 
 // One scoreboard row: draggable for pointer users; the Team select is the

@@ -72,18 +72,25 @@ verify_archive() {
     return 1
   fi
 }
-if [ ! -d "$cache_dir/anti-slop-src" ]; then
+if [ ! -f "$archive" ]; then
   curl -fsSL "https://github.com/dmmulroy/anti-slop/archive/$ANTI_SLOP_SHA.tar.gz" -o "$archive.part"
   if ! verify_archive "$archive.part"; then
     rm -f "$archive.part"
     exit 1
   fi
   mv "$archive.part" "$archive"
-  mkdir -p "$cache_dir/anti-slop-src"
-  tar xzf "$archive" -C "$cache_dir/anti-slop-src" --strip-components=2 "anti-slop-$ANTI_SLOP_SHA/src"
-elif [ -f "$archive" ]; then
-  verify_archive "$archive" || exit 1
 fi
+verify_archive "$archive" || exit 1
+# The digest covers the archive, not the tree oxlint loads, so the tree is
+# rebuilt from the verified archive on every run: a hand-edited, truncated or
+# otherwise tampered anti-slop-src is replaced instead of linted against.
+# Extracting next to the live directory and swapping it in keeps a failed
+# extraction from replacing good source with a half-written tree.
+rm -rf "$cache_dir/anti-slop-src.new"
+mkdir -p "$cache_dir/anti-slop-src.new"
+tar xzf "$archive" -C "$cache_dir/anti-slop-src.new" --strip-components=2 "anti-slop-$ANTI_SLOP_SHA/src"
+rm -rf "$cache_dir/anti-slop-src"
+mv "$cache_dir/anti-slop-src.new" "$cache_dir/anti-slop-src"
 # type module: the vendored anti-slop plugin source is ESM; without the field
 # node reparses it with a MODULE_TYPELESS_PACKAGE_JSON warning.
 [ -f "$cache_dir/package.json" ] || printf '{"type":"module"}\n' > "$cache_dir/package.json"
