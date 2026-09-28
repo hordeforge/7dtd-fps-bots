@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using BotMod.Config;
+using BotMod.Foundation;
 
 namespace BotMod.Core
 {
@@ -54,7 +56,7 @@ namespace BotMod.Core
             if (world.Players != null && world.Players.list != null) {
                 foreach (var p in world.Players.list) if (p != null) {
                     string name = p.EntityName ?? p.PlayerDisplayName ?? "";
-                    if (Config.BotText.NameMatches(name, ident)) return p;
+                    if (BotText.NameMatches(name, ident)) return p;
                 }
                 // Numeric lookup above resolves the id through ClientInfo, which
                 // misses when the connection is gone but the player is still listed.
@@ -92,7 +94,7 @@ namespace BotMod.Core
             // registry entry (GetTeamId would return 0) and the hot damage path
             // skips the dictionary work for them.
             if (!aBot || !bBot) return false;
-            return Config.CombatGates.AllyBlocks(aBot, bBot, cfg.BotVsBot, cfg.BotTeam, GetTeamId(aId), GetTeamId(bId));
+            return CombatGates.AllyBlocks(aBot, bBot, cfg.BotVsBot, cfg.BotTeam, GetTeamId(aId), GetTeamId(bId));
         }
         public void OnGameStartDone()
         {
@@ -155,7 +157,7 @@ namespace BotMod.Core
             string name = BotSpawner.PickName(cfg);
             var wp = BotSpawner.PickWeapon(cfg, weaponOverride);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
-            var character = BotMod.Config.BotCharacterDB.ForName(name);
+            var character = BotCharacterDB.ForName(name);
             if (e == null) { ModApi.Warn("Spawn failed at " + pos); return false; }
             BotSpawner.ConfigureBotEntity(e, cfg, wp, name);
             var bot = new Bot(e.entityId, name, Time.time, wp, character);

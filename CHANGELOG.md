@@ -14,6 +14,19 @@ fails on drift between them.
 
 ### Changed
 
+- `Source/BotMod/Config/` held four engine-free primitives that have nothing
+  to do with configuration and are used by every layer (`Lcg`, `BotText`,
+  `LogSanitizer`, `AtomicTextFile`). They moved to `Source/BotMod/Foundation/`
+  under namespace `BotMod.Foundation`, which sits below `Config/` (nothing in
+  it references a config type). `Config/` is now only the operator-config
+  layer: `BotConfig`, `BotCharacter`, `WeaponProfile`, `CombatGates`. No
+  behavior change.
+- `tests/BotMod.Web.Tests/` was renamed `tests/BotMod.Tests/`: it holds
+  suites for every layer (Config, Foundation, AI, Web, Commands), not just the
+  web API.
+- `Core/BotManager.cs`, `Patches/BotPatches.cs`, `ModApi.cs` and two test
+  files were reaching into `BotMod.Config` with fully qualified names instead
+  of a `using`; they now match the rest of the tree.
 - The shipped web dashboard panel (`Mods/BotMod/WebMod/bundle.js`) is minified
   at build time by `scripts/webmod-minify.sh` (terser, pinned in
   `scripts/tool-versions.sh`): 24,583 -> 13,668 bytes. The stock webserver
@@ -61,7 +74,7 @@ fails on drift between them.
   value that then resolved to the pistol default with `GunId="MIXED"`: no such
   item, so later bots held no gun while running pistol stats. Both spellings
   now expand to a `LoadoutPool` entry, and
-  `tests/BotMod.Web.Tests/WeaponProfileTests.cs` pins it.
+  `tests/BotMod.Tests/WeaponProfileTests.cs` pins it.
 - Every `best.json` reader in `tools/ga` rebuilt the weights array with its
   own dtype: `evolve.py eval` used float32, while the promotion gate,
   `replay.py`, `viz.py` and `dashboard.py` used float64. A float64 array runs
@@ -224,7 +237,7 @@ fails on drift between them.
 
 ### Added
 - `make test` now also pins the deny side of the authorization matrix
-  (`tests/BotMod.Web.Tests/WebApiAuthzTests.cs`): `GET/POST /api/bot` must
+  (`tests/BotMod.Tests/WebApiAuthzTests.cs`): `GET/POST /api/bot` must
   keep declaring permission level 0 for every request-method slot, and the
   `bot` console command must keep its default level 0. A change that widens
   either declaration fails the suite instead of silently handing bot control
@@ -246,7 +259,7 @@ fails on drift between them.
   retention window instead of executing twice; a concurrent duplicate gets
   `409 REQUEST_IN_PROGRESS`; failures are not cached and may be retried.
   Requests without `requestId` behave exactly as before.
-- Fuzz suites in `tests/BotMod.Web.Tests`, run by `scripts/test-idempotency.sh`
+- Fuzz suites in `tests/BotMod.Tests`, run by `scripts/test-idempotency.sh`
   (`make test`): a differential model fuzzer hammering the idempotency ledger
   with adversarial `requestId` shapes, clock jitter and capacity/retention
   pressure, a mutation fuzzer for the `evolved/best.json` weights-file parser,

@@ -1,4 +1,5 @@
 using System;
+using BotMod.Foundation;
 
 namespace BotMod.Config
 {

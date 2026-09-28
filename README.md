@@ -154,7 +154,7 @@ what the game already holds for connected players, and only on an admin surface:
   makes no outbound request.
 - **In the server log**: player-chosen names appear where gameplay needs them
   (kill feed, spawn-near, admin mutations) and pass through `LogSanitizer`
-  (`Source/BotMod/Config/LogSanitizer.cs`) so they cannot forge log lines. The
+  (`Source/BotMod/Foundation/LogSanitizer.cs`) so they cannot forge log lines. The
   synthetic-auth bypass (`AllowSyntheticAuthBypass`, off by default) logs the
   connection's entity id only, not the Steam id or client IP
   (`Source/BotMod/Patches/BotPatches.cs`).
@@ -237,7 +237,7 @@ reported as a WARN line at load and ignored.
 `make help` lists all targets. The common loop:
 
 ```bash
-make test          # C# unit tests (tests/BotMod.Web.Tests, mcs + mono)
+make test          # C# unit tests (tests/BotMod.Tests, mcs + mono)
 make test-list     # names of the individual C# suites
 make test SUITE=lcg # one suite (SUITE=lcg bottext for several)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod

@@ -9,7 +9,7 @@ define HELP
 Targets:
   make build        compile BotMod.dll + web bundle into dist/BotMod (needs game DLLs or dotnet SDK)
   make build-mcs    same, forcing the mono mcs backend
-  make test         run tests/BotMod.Web.Tests via scripts/test-idempotency.sh (needs mcs + mono; CI runs it after installing mono)
+  make test         run tests/BotMod.Tests via scripts/test-idempotency.sh (needs mcs + mono; CI runs it after installing mono)
   make test SUITE=x run one suite by name (make test-list prints the names)
   make test-list    print the C# suite names SUITE= accepts
   make ci           everything CI runs: make check then make test

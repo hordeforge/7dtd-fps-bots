@@ -14,7 +14,7 @@ older releases receive no fixes).
   Steam ids 76561199000000000..10000 join without Steam authentication while
   enabled. Enabling it on any server reachable by untrusted networks means
   those ids are accepted without proof of game ownership
-  (`Source/BotMod/Patches/BotPatches.cs:25`). The startup log line reports the
+  (`Source/BotMod/Patches/BotPatches.cs:26`). The startup log line reports the
   flag state (`AuthBypass=True|False`).
 - The admin web API (`GET/POST /api/bot`) performs no authentication of its
   own; it relies entirely on the dedicated server's stock webserver

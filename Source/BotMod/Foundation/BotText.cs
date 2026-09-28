@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace BotMod.Config
+namespace BotMod.Foundation
 {
     /// <summary>
     /// Canonical text handling for identity-bearing names (bot names, player

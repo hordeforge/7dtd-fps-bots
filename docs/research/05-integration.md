@@ -107,7 +107,7 @@ No exception propagates to `Bot.Tick`.
 
 ## 7. Testing
 
-- `tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs` (**shipped**): compiles `BotNeuralBrain.cs` against a `ModApi.ModPath` stub and fuzzes `TryLoad` (byte-level + structure-aware JSON mutants of the golden `best.json`) plus `TryEval` (sane/extreme observations must stay finite, bounded, internally consistent; non-14 input counts rejected). Run via `bash scripts/test-idempotency.sh` (`make test`; skipped when the game's Newtonsoft.Json.dll is absent).
+- `tests/BotMod.Tests/BotNeuralBrainFuzzTests.cs` (**shipped**): compiles `BotNeuralBrain.cs` against a `ModApi.ModPath` stub and fuzzes `TryLoad` (byte-level + structure-aware JSON mutants of the golden `best.json`) plus `TryEval` (sane/extreme observations must stay finite, bounded, internally consistent; non-14 input counts rejected). Run via `bash scripts/test-idempotency.sh` (`make test`; skipped when the game's Newtonsoft.Json.dll is absent).
 - Harness comparison: run the same deterministic match twice with `UseNeuralBrain=false` vs `true` and diff the replay traces: they must differ only via net decisions, not physics.
 
 ## 8. Migration path

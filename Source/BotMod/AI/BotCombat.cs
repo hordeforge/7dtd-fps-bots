@@ -1,4 +1,5 @@
 using BotMod.Core;
+using BotMod.Foundation;
 
 namespace BotMod.AI
 {
@@ -22,8 +23,8 @@ namespace BotMod.AI
                 // sanitized audit fields).
                 // Entity ids are protocol tokens, so the fallback renders invariantly
                 // (same convention as the invariant int.TryParse on every id surface).
-                string k = BotMod.Config.LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
-                string v = BotMod.Config.LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
+                string k = LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
+                string v = LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
                 ModApi.Log($"Kill: {k} killed {v}");
 
                 // Keep vanilla score paths for player->anything. For bot killers we must credit manually

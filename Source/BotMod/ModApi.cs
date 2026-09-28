@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using BotMod.Config;
 using BotMod.Core;
+using BotMod.Foundation;
 using HarmonyLib;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -120,7 +121,7 @@ namespace BotMod
             string configPath = BotConfig.ConfigPath();
             Config = BotConfig.Load(configPath);
             Config.Normalize();
-            try { BotMod.Config.BotCharacterDB.Load(Config); }
+            try { BotCharacterDB.Load(Config); }
             catch (Exception ex) { Warn("characters.json load failed, keeping previous characters: " + ex); }
             Log($"Config reloaded: ConfigPath={configPath} Enabled={Config.Enabled} TargetBotCount={Config.TargetBotCount} Weapon={Config.BotWeapon}");
             Log("Config: " + Config.EffectiveSummary());

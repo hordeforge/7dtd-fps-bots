@@ -1,5 +1,5 @@
 // BotTextFuzzTests: randomized fuzzing of the canonical identity-text layer
-// (Source/BotMod/Config/BotText.cs). Every admin-supplied name reaches the
+// (Source/BotMod/Foundation/BotText.cs). Every admin-supplied name reaches the
 // mod through here: the web API's setTeam and spawnNear "player"/"name" bodies,
 // the console `bot team` / `bot player` arguments, the character table keys
 // and the pasted scoreboard names spawnNear resolves. The layer calls
@@ -32,7 +32,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
-using BotMod.Config;
+using BotMod.Foundation;
 
 static class BotTextFuzzTests
 {

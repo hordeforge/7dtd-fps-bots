@@ -1,4 +1,4 @@
-namespace BotMod.Config
+namespace BotMod.Foundation
 {
     /// <summary>
     /// Deterministic 32-bit LCG (zdtd parity: state -> state*1103515245+12345,

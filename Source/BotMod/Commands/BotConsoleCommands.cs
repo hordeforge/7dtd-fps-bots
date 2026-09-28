@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using BotMod.Config;
 using BotMod.Core;
+using BotMod.Foundation;
 using UnityEngine;
 
 namespace BotMod.Commands
@@ -177,7 +178,7 @@ namespace BotMod.Commands
             if (target == null) target = BotManager.FindPlayerByNameOrId(world, ident);
             if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game).\n  Online: " + ListPlayerNames(world)); return; }
             int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
-            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {BotMod.Config.LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident)} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
+            SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident)} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
         }
         static EntityPlayer FindPlayerBySender(World world, CommandSenderInfo sender)
         {
@@ -199,7 +200,7 @@ namespace BotMod.Commands
         {
             try {
                 var names = new List<string>();
-                if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{BotMod.Config.LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
+                if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
                 return names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none online)";
             }
             // The "(unknown)" the console prints is not diagnosable on its own;
@@ -271,9 +272,9 @@ namespace BotMod.Commands
             }
             var cfg = ModApi.Config;
             if (team < 0 || team > cfg.BotTeamCount) { SdtdConsole.Instance.Output("teamId must be 0.." + cfg.BotTeamCount + "."); return; }
-            string name = BotMod.Config.BotText.BaseName(p[2]);
+            string name = BotText.BaseName(p[2]);
             bool live = false;
-            foreach (var b in BotManager.Instance.Bots) if (BotMod.Config.BotText.BaseName(b.Name) == name) { live = true; break; }
+            foreach (var b in BotManager.Instance.Bots) if (BotText.BaseName(b.Name) == name) { live = true; break; }
             cfg.SetTeamAssignment(name, team);
             ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
             SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).") + (live ? "" : " No live bot with that name - applies to future spawns."));

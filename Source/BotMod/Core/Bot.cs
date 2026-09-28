@@ -1,6 +1,7 @@
 using System;
 using BotMod.AI;
 using BotMod.Config;
+using BotMod.Foundation;
 using UnityEngine;
 
 namespace BotMod.Core

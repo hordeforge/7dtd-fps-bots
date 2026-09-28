@@ -7,7 +7,7 @@
 //   bash scripts/test-idempotency.sh
 using System;
 using System.Text;
-using BotMod.Config;
+using BotMod.Foundation;
 
 static class LogSanitizerTests
 {

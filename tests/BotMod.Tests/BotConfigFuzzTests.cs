@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json.Linq;
+using BotMod.Config;
 
 static class BotConfigFuzzTests
 {
@@ -44,7 +45,7 @@ static class BotConfigFuzzTests
 
     /// <summary>Normalize's contract, restated independently: whatever came
     /// off disk, a loaded config is inside these bounds before first use.</summary>
-    static void CheckLoadedContract(BotMod.Config.BotConfig cfg, string ctx)
+    static void CheckLoadedContract(BotConfig cfg, string ctx)
     {
         Check(cfg != null, ctx + ": Load returned null");
         if (cfg == null) return;
@@ -109,23 +110,23 @@ static class BotConfigFuzzTests
     static void FuzzLoad(string path, string ctx)
     {
         _docs++;
-        BotMod.Config.BotConfig.Warn = _ => _warns++;
-        BotMod.Config.BotConfig cfg = null, again = null;
+        BotConfig.Warn = _ => _warns++;
+        BotConfig cfg = null, again = null;
         try
         {
-            cfg = BotMod.Config.BotConfig.Load(path);
+            cfg = BotConfig.Load(path);
             // Load determinism: the same bytes twice give the same core state.
             // Both instances are untouched here (the contract check below
             // mutates via SetTeamAssignment).
-            again = BotMod.Config.BotConfig.Load(path);
+            again = BotConfig.Load(path);
         }
         catch (Exception ex)
         {
-            BotMod.Config.BotConfig.Warn = null;
+            BotConfig.Warn = null;
             Check(false, ctx + ": Load threw " + ex.GetType().Name + ": " + ex.Message);
             return;
         }
-        BotMod.Config.BotConfig.Warn = null;
+        BotConfig.Warn = null;
         Check(cfg != null && again != null, ctx + ": Load returned null");
         if (cfg == null || again == null) return;
         Check(cfg.TargetBotCount == again.TargetBotCount
@@ -300,7 +301,7 @@ static class BotConfigFuzzTests
                 string p = Path.Combine(dir, "nan-literals.json");
                 File.WriteAllText(p, nan);
                 FuzzLoad(p, "nan-literals");
-                BotMod.Config.BotConfig cfg = BotMod.Config.BotConfig.Load(p);
+                BotConfig cfg = BotConfig.Load(p);
                 Check(cfg.BotHealth == 100f && cfg.VisionRange == 70f && cfg.HeadshotMultiplier == 2f,
                     "nan-literals: non-finite values did not fall back to defaults ("
                     + cfg.BotHealth + "/" + cfg.VisionRange + "/" + cfg.HeadshotMultiplier + ")");
@@ -313,7 +314,7 @@ static class BotConfigFuzzTests
                 string big = "{\"HeadshotMultiplier\": 3e8}";
                 string p = Path.Combine(dir, "headshot-mult.json");
                 File.WriteAllText(p, big);
-                BotMod.Config.BotConfig cfg = BotMod.Config.BotConfig.Load(p);
+                BotConfig cfg = BotConfig.Load(p);
                 Check(cfg.HeadshotMultiplier >= 1f && cfg.HeadshotMultiplier <= 10f,
                     "headshot-mult: 3e8 survived unclamped (" + cfg.HeadshotMultiplier + ")");
             }

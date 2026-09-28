@@ -25,6 +25,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json.Linq;
+using BotMod.Config;
+using BotMod.Foundation;
 
 static class BotCharacterFuzzTests
 {
@@ -63,19 +65,19 @@ static class BotCharacterFuzzTests
     /// off disk, every table entry is finite, in range and lookup-ready.</summary>
     static void CheckLoadedContract(string ctx)
     {
-        Dictionary<string, BotMod.Config.BotCharacter> table = BotMod.Config.BotCharacterDB.Characters;
+        Dictionary<string, BotCharacter> table = BotCharacterDB.Characters;
         Check(table != null, ctx + ": Characters null after Load");
         if (table == null) return;
 
-        foreach (KeyValuePair<string, BotMod.Config.BotCharacter> kv in table)
+        foreach (KeyValuePair<string, BotCharacter> kv in table)
         {
-            BotMod.Config.BotCharacter ch = kv.Value;
+            BotCharacter ch = kv.Value;
             Check(ch != null, ctx + ": null entry under key '" + kv.Key + "'");
             if (ch == null) continue;
 
             // Keys are stored post-IdentityKey; the transform is idempotent,
             // so canonical form shows up as exact self-equality.
-            Check(kv.Key == BotMod.Config.BotText.IdentityKey(kv.Key),
+            Check(kv.Key == BotText.IdentityKey(kv.Key),
                 ctx + ": non-canonical key survived: '" + kv.Key + "'");
 
             Check(ch.Name != null, ctx + ": null Name under key '" + kv.Key + "'");
@@ -117,7 +119,7 @@ static class BotCharacterFuzzTests
         // The lookup chain must serve any name shape with a usable entry.
         foreach (string probe in new[] { "Grunt", "[Bot] Grunt_42", "", "\u0000ctl", "Zed_9", "[Bot] K\u00edra_7" })
         {
-            BotMod.Config.BotCharacter c = BotMod.Config.BotCharacterDB.ForName(probe);
+            BotCharacter c = BotCharacterDB.ForName(probe);
             Check(c != null, ctx + ": ForName('" + probe + "') returned null");
             if (c == null) continue;
             Check(AimWindowSane(c.AimAccuracy) && !float.IsNaN(c.ReactionTime) && c.ReactionTime > 0f,
@@ -130,7 +132,7 @@ static class BotCharacterFuzzTests
     static void FuzzLoad(byte[] content, int difficulty, string ctx)
     {
         _docs++;
-        BotMod.Config.BotConfig.Warn = _ => _warns++;
+        BotConfig.Warn = _ => _warns++;
         string dir = TempDir();
         string oldCwd = Environment.CurrentDirectory;
         try
@@ -138,7 +140,7 @@ static class BotCharacterFuzzTests
             Directory.CreateDirectory(Path.Combine(dir, "config"));
             File.WriteAllBytes(Path.Combine(dir, "config", "characters.json"), content);
             Environment.CurrentDirectory = dir;
-            BotMod.Config.BotCharacterDB.Load(new BotMod.Config.BotConfig { Difficulty = difficulty });
+            BotCharacterDB.Load(new BotConfig { Difficulty = difficulty });
         }
         catch (Exception ex)
         {
@@ -149,7 +151,7 @@ static class BotCharacterFuzzTests
             Environment.CurrentDirectory = oldCwd;
             try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
         }
-        BotMod.Config.BotConfig.Warn = null;
+        BotConfig.Warn = null;
         CheckLoadedContract(ctx);
     }
 
@@ -333,7 +335,7 @@ static class BotCharacterFuzzTests
         {
             FuzzLoad(Encoding.UTF8.GetBytes("{\"Grunt\": {\"Camper\": NaN, \"AimAccuracy\": Infinity, \"ReactionTime\": -Infinity}}"),
                 0, "nan-literals");
-            BotMod.Config.BotCharacter g = BotMod.Config.BotCharacterDB.ForName("Grunt");
+            BotCharacter g = BotCharacterDB.ForName("Grunt");
             Check(g.Camper == 0.2f, "nan-literals: NaN camper did not become default 0.2 (" + g.Camper + ")");
             Check(!float.IsInfinity(g.AimAccuracy) && g.AimAccuracy >= 0.2f && g.AimAccuracy <= 1f,
                 "nan-literals: infinite aim accuracy not re-railed (" + g.AimAccuracy + ")");
@@ -346,13 +348,13 @@ static class BotCharacterFuzzTests
         {
             FuzzLoad(Encoding.UTF8.GetBytes("{ \"Sora\u0301\": {\"Aggression\": 0.9}, \"Ze\u200bdb\": {\"Aggression\": 0.1} }"),
                 0, "hostile-keys");
-            var table = BotMod.Config.BotCharacterDB.Characters;
+            var table = BotCharacterDB.Characters;
             Check(table.ContainsKey("Sor\u00e1") && !table.ContainsKey("Sora\u0301"),
                 "hostile-keys: NFD key not stored under its NFC spelling");
             Check(table.ContainsKey("Zedb"), "hostile-keys: ZWSP key did not collapse onto the clean spelling");
-            BotMod.Config.BotCharacter zedb;
+            BotCharacter zedb;
             if (table.TryGetValue("Zedb", out zedb))
-                Check(ReferenceEquals(BotMod.Config.BotCharacterDB.ForName("[Bot] Ze\u200bdb_7"), zedb),
+                Check(ReferenceEquals(BotCharacterDB.ForName("[Bot] Ze\u200bdb_7"), zedb),
                     "hostile-keys: spawned-name form does not bridge to the collapsed table entry");
         }
 
@@ -361,12 +363,12 @@ static class BotCharacterFuzzTests
         {
             FuzzLoad(Encoding.UTF8.GetBytes("{ \"Grunt\": {\"Camper\": 0.1}, \"GRUNT\": {\"Camper\": 0.9} }"),
                 0, "dup-casing");
-            var table = BotMod.Config.BotCharacterDB.Characters;
+            var table = BotCharacterDB.Characters;
             int grunts = 0;
             foreach (string k in table.Keys) if (string.Equals(k, "Grunt", StringComparison.OrdinalIgnoreCase)) grunts++;
             Check(grunts == 1, "dup-casing: expected exactly one Grunt entry, found " + grunts);
-            Check(BotMod.Config.BotCharacterDB.ForName("Grunt").Camper == 0.9f,
-                "dup-casing: last-wins binding violated (" + BotMod.Config.BotCharacterDB.ForName("Grunt").Camper + ")");
+            Check(BotCharacterDB.ForName("Grunt").Camper == 0.9f,
+                "dup-casing: last-wins binding violated (" + BotCharacterDB.ForName("Grunt").Camper + ")");
         }
 
         // 7. Load determinism: the same bytes twice give the same core state.
@@ -378,18 +380,18 @@ static class BotCharacterFuzzTests
             Environment.CurrentDirectory = dir;
             try
             {
-                BotMod.Config.BotConfig.Warn = _ => { };
-                BotMod.Config.BotCharacterDB.Load(new BotMod.Config.BotConfig { Difficulty = 3 });
-                var first = BotMod.Config.BotCharacterDB.Characters;
+                BotConfig.Warn = _ => { };
+                BotCharacterDB.Load(new BotConfig { Difficulty = 3 });
+                var first = BotCharacterDB.Characters;
                 var snap = new List<KeyValuePair<string, float>>();
                 foreach (var kv in first) snap.Add(new KeyValuePair<string, float>(kv.Key, kv.Value.Aggression));
-                BotMod.Config.BotCharacterDB.Load(new BotMod.Config.BotConfig { Difficulty = 3 });
-                var second = BotMod.Config.BotCharacterDB.Characters;
+                BotCharacterDB.Load(new BotConfig { Difficulty = 3 });
+                var second = BotCharacterDB.Characters;
                 Check(first.Count == second.Count, "determinism: reload changed entry count " + first.Count + " -> " + second.Count);
                 bool same = first.Count == second.Count;
                 for (int i = 0; i < snap.Count && same; i++)
                 {
-                    BotMod.Config.BotCharacter c;
+                    BotCharacter c;
                     same = second.TryGetValue(snap[i].Key, out c) && c.Aggression == snap[i].Value;
                 }
                 Check(same, "determinism: reload shifted entry state");
@@ -397,7 +399,7 @@ static class BotCharacterFuzzTests
             finally
             {
                 Environment.CurrentDirectory = oldCwd;
-                BotMod.Config.BotConfig.Warn = null;
+                BotConfig.Warn = null;
                 try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
             }
         }

@@ -7,6 +7,7 @@ using Webserver;
 using Webserver.WebAPI;
 using BotMod.Config;
 using BotMod.Core;
+using BotMod.Foundation;
 using UnityEngine;
 
 namespace BotMod.Web

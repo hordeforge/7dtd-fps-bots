@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace BotMod.Config
+namespace BotMod.Foundation
 {
     /// <summary>
     /// Crash-safe text file replacement for the operator-maintained

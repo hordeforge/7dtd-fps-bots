@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compile and run the pure-BCL unit + fuzz suites (tests/BotMod.Web.Tests)
+# Compile and run the pure-BCL unit + fuzz suites (tests/BotMod.Tests)
 # with mcs + mono. IdempotencyLedger and AtomicTextFile are pure BCL, so no
 # game DLL references are needed. The BotNeuralBrain weights-file fuzzer also
 # parses JSON, so it additionally needs Newtonsoft.Json.dll from the game
@@ -94,13 +94,14 @@ run_suite() { # <name> <sources...>
   mono "$work/$name.exe"
 }
 
-# Engine-free Config sources shared by every suite that compiles the config
-# layer headless (one list so a new Config dependency is added once).
+# Engine-free sources from Config/ and Foundation/ shared by every suite that
+# compiles the config layer headless (one list so a new dependency is added
+# once).
 config_src=(
   "$root/Source/BotMod/Config/BotConfig.cs"
-  "$root/Source/BotMod/Config/BotText.cs"
-  "$root/Source/BotMod/Config/AtomicTextFile.cs"
-  "$root/Source/BotMod/Config/Lcg.cs"
+  "$root/Source/BotMod/Foundation/BotText.cs"
+  "$root/Source/BotMod/Foundation/AtomicTextFile.cs"
+  "$root/Source/BotMod/Foundation/Lcg.cs"
   "$root/Source/BotMod/Config/WeaponProfile.cs"
 )
 character_src=(
@@ -110,60 +111,60 @@ character_src=(
 
 run_suite idempotency \
   "$root/Source/BotMod/Web/IdempotencyLedger.cs" \
-  "$root/Source/BotMod/Config/BotText.cs" \
-  "$root/tests/BotMod.Web.Tests/IdempotencyLedgerTests.cs"
+  "$root/Source/BotMod/Foundation/BotText.cs" \
+  "$root/tests/BotMod.Tests/IdempotencyLedgerTests.cs"
 
 run_suite atomictextfile \
-  "$root/Source/BotMod/Config/AtomicTextFile.cs" \
-  "$root/tests/BotMod.Web.Tests/AtomicTextFileTests.cs"
+  "$root/Source/BotMod/Foundation/AtomicTextFile.cs" \
+  "$root/tests/BotMod.Tests/AtomicTextFileTests.cs"
 
 # Differential model fuzzer over the untrusted requestId surface.
 run_suite idempotencyfuzz \
   "$root/Source/BotMod/Web/IdempotencyLedger.cs" \
-  "$root/Source/BotMod/Config/BotText.cs" \
-  "$root/tests/BotMod.Web.Tests/IdempotencyLedgerFuzzTests.cs"
+  "$root/Source/BotMod/Foundation/BotText.cs" \
+  "$root/tests/BotMod.Tests/IdempotencyLedgerFuzzTests.cs"
 
 # Web -> main-thread dispatch lifecycle: wait handle released on every exit
 # path, abandoned (timed-out) dispatch signals a disposed event safely.
 run_suite mainthreaddispatch \
   "$root/Source/BotMod/Web/MainThreadDispatch.cs" \
-  "$root/tests/BotMod.Web.Tests/MainThreadDispatchTests.cs"
+  "$root/tests/BotMod.Tests/MainThreadDispatchTests.cs"
 
 # Log-injection guard: request-supplied requestId/action must reach server log
 # lines with control characters (CRLF, ANSI escapes) scrubbed. Clean delegates
 # its invisible-character table to BotText, so both sources compile here.
 run_suite logsanitize \
-  "$root/Source/BotMod/Config/LogSanitizer.cs" \
-  "$root/Source/BotMod/Config/BotText.cs" \
-  "$root/tests/BotMod.Web.Tests/LogSanitizerTests.cs"
+  "$root/Source/BotMod/Foundation/LogSanitizer.cs" \
+  "$root/Source/BotMod/Foundation/BotText.cs" \
+  "$root/tests/BotMod.Tests/LogSanitizerTests.cs"
 
 # Randomized fuzzing of the same guard: arbitrary request-supplied strings
 # must sanitize without throwing, keep length, leave nothing scrubbable, and
 # stay idempotent.
 run_suite logsanitizerfuzz \
-  "$root/Source/BotMod/Config/LogSanitizer.cs" \
-  "$root/Source/BotMod/Config/BotText.cs" \
-  "$root/tests/BotMod.Web.Tests/LogSanitizerFuzzTests.cs"
+  "$root/Source/BotMod/Foundation/LogSanitizer.cs" \
+  "$root/Source/BotMod/Foundation/BotText.cs" \
+  "$root/tests/BotMod.Tests/LogSanitizerFuzzTests.cs"
 
 # POST /api/bot body-field readers: absent vs present-but-garbage triage for
 # untrusted JSON values (named 400s instead of silent defaults), plus a
 # shape fuzzer over adversarial value types.
 run_suite requestfields \
   "$root/Source/BotMod/Web/RequestFields.cs" \
-  "$root/tests/BotMod.Web.Tests/RequestFieldsTests.cs"
+  "$root/tests/BotMod.Tests/RequestFieldsTests.cs"
 
 # vs-class combat gate: bot identity overrides body class (zombieSoldier
 # bodies are EntityZombie), so the vs-zombie/vs-player toggles must never
 # block bot targets or bot-on-bot damage.
 run_suite combatgates \
   "$root/Source/BotMod/Config/CombatGates.cs" \
-  "$root/tests/BotMod.Web.Tests/CombatGatesTests.cs"
+  "$root/tests/BotMod.Tests/CombatGatesTests.cs"
 
 # Unicode identity contract: NFC canonicalization and ordinal case folding
 # for bot/player name lookups and team-assignment keys.
 run_suite bottext \
-  "$root/Source/BotMod/Config/BotText.cs" \
-  "$root/tests/BotMod.Web.Tests/BotTextTests.cs"
+  "$root/Source/BotMod/Foundation/BotText.cs" \
+  "$root/tests/BotMod.Tests/BotTextTests.cs"
 
 # Randomized fuzzing of the identity-text layer: arbitrary names (lone
 # surrogates, hostile UTF-8, invisible and combining characters) through
@@ -171,8 +172,8 @@ run_suite bottext \
 # idempotent and canonical. Seeded with the string literals of the shipped
 # config/characters.json and config/botmod.json.
 mcs -warnaserror -out:"$work/bottextfuzz.exe" \
-  "$root/Source/BotMod/Config/BotText.cs" \
-  "$root/tests/BotMod.Web.Tests/BotTextFuzzTests.cs" > /dev/null
+  "$root/Source/BotMod/Foundation/BotText.cs" \
+  "$root/tests/BotMod.Tests/BotTextFuzzTests.cs" > /dev/null
 # Repo root as argv[1] so the fuzzer can seed from the shipped config files.
 mono "$work/bottextfuzz.exe" "$root"
 
@@ -181,20 +182,20 @@ mono "$work/bottextfuzz.exe" "$root"
 # would silently desync the GA simulation from in-game rolls. Exact
 # sequences from the documented formula plus Index/Range boundaries.
 run_suite lcg \
-  "$root/Source/BotMod/Config/Lcg.cs" \
-  "$root/tests/BotMod.Web.Tests/LcgTests.cs"
+  "$root/Source/BotMod/Foundation/Lcg.cs" \
+  "$root/tests/BotMod.Tests/LcgTests.cs"
 
 # Positional grammar of `bot spawn` / `bot player`: strict parse, named
 # errors for leftover tokens (see Source/BotMod/Commands/BotArgParser.cs).
 run_suite botargparser \
   "$root/Source/BotMod/Commands/BotArgParser.cs" \
-  "$root/tests/BotMod.Web.Tests/BotArgParserTests.cs"
+  "$root/tests/BotMod.Tests/BotArgParserTests.cs"
 
 # Randomized token fuzzing of the same grammar: never throws, clamped counts,
 # named usage errors, deterministic re-parse.
 run_suite botargparserfuzz \
   "$root/Source/BotMod/Commands/BotArgParser.cs" \
-  "$root/tests/BotMod.Web.Tests/BotArgParserFuzzTests.cs"
+  "$root/tests/BotMod.Tests/BotArgParserFuzzTests.cs"
 
 # Weights-file parser fuzzer: needs the game install's Newtonsoft.Json.dll,
 # copied beside the exe so mono resolves the reference at runtime.
@@ -248,21 +249,21 @@ else
 
     run_game_suite neuralfuzz \
       "$root/Source/BotMod/AI/BotNeuralBrain.cs" \
-      "$root/tests/BotMod.Web.Tests/BotNeuralBrainFuzzTests.cs"
+      "$root/tests/BotMod.Tests/BotNeuralBrainFuzzTests.cs"
 
     # Forward-pass correctness pins for the same brain (needs only Newtonsoft):
     # input packing order, sigmoid/tanh head math, decision thresholds, eval
     # purity.
     run_game_suite neuraleval \
       "$root/Source/BotMod/AI/BotNeuralBrain.cs" \
-      "$root/tests/BotMod.Web.Tests/BotNeuralBrainEvalTests.cs"
+      "$root/tests/BotMod.Tests/BotNeuralBrainEvalTests.cs"
 
     # Config-file parser fuzzer: mutated botmod.json documents must never throw
     # and always land inside Normalize's documented ranges (same Newtonsoft
     # gate as above; compiles only the engine-free Config sources).
     run_game_suite configfuzz \
       "${config_src[@]}" \
-      "$root/tests/BotMod.Web.Tests/BotConfigFuzzTests.cs"
+      "$root/tests/BotMod.Tests/BotConfigFuzzTests.cs"
 
     # Character-file parser fuzzer: the same trust boundary as botmod.json
     # (operator hand-edited JSON at every startup) gets the same treatment:
@@ -270,7 +271,7 @@ else
     # land inside the Normalize+difficulty-lerp contract with canonical keys.
     run_game_suite charfuzz \
       "${character_src[@]}" \
-      "$root/tests/BotMod.Web.Tests/BotCharacterFuzzTests.cs"
+      "$root/tests/BotMod.Tests/BotCharacterFuzzTests.cs"
 
     # Admin-setter fuzzer: the web API and console hand caller-supplied target
     # names, team numbers and difficulty/team-count levels straight to these
@@ -280,7 +281,7 @@ else
     # the Normalize contract whatever the sequence.
     run_game_suite adminsettersfuzz \
       "${config_src[@]}" \
-      "$root/tests/BotMod.Web.Tests/BotAdminSettersFuzzTests.cs"
+      "$root/tests/BotMod.Tests/BotAdminSettersFuzzTests.cs"
 
     # Character-file ingestion pins: NaN/Infinity literals and out-of-range
     # traits in hand-edited characters.json must land finite and in range
@@ -288,7 +289,7 @@ else
     # the aim-bias rotation.
     run_game_suite botchararith \
       "${character_src[@]}" \
-      "$root/tests/BotMod.Web.Tests/BotCharacterArithTests.cs"
+      "$root/tests/BotMod.Tests/BotCharacterArithTests.cs"
   else
     declared_suites+=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith)
     echo "skip neuralfuzz, neuraleval, configfuzz, charfuzz, adminsettersfuzz, botchararith (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
@@ -314,11 +315,11 @@ else
     cp "$managed/Assembly-CSharp.dll" "$managed/UnityEngine.CoreModule.dll" "$managed/Unity.Burst.dll" "$work/"
 
     run_mod_suite teamshammer \
-      "$root/tests/BotMod.Web.Tests/TeamAssignmentsConcurrencyTests.cs"
+      "$root/tests/BotMod.Tests/TeamAssignmentsConcurrencyTests.cs"
 
     # Config load/validation: unknown-key detection, range clamping, .bak recovery.
     run_mod_suite botconfig \
-      "$root/tests/BotMod.Web.Tests/BotConfigLoadTests.cs"
+      "$root/tests/BotMod.Tests/BotConfigLoadTests.cs"
 
     # Authorization matrix (deny side): the web API must declare permission
     # level 0 for every request-method slot and the console command must keep
@@ -326,12 +327,12 @@ else
     # server (the ctor registers with the live AdminTools singleton), so the
     # suite asserts the constant-returning declarations on ctor-less instances.
     run_mod_suite webapiauthz \
-      "$root/tests/BotMod.Web.Tests/WebApiAuthzTests.cs"
+      "$root/tests/BotMod.Tests/WebApiAuthzTests.cs"
 
     # Numeric-correctness pins for BotBrain's hash arithmetic (int*uint sign
     # promotion made negative-id bots pass the camper gate every time).
     run_mod_suite botarith \
-      "$root/tests/BotMod.Web.Tests/BotBrainArithTests.cs"
+      "$root/tests/BotMod.Tests/BotBrainArithTests.cs"
   else
     declared_suites+=(teamshammer botconfig webapiauthz botarith)
     echo "skip teamshammer, botconfig, webapiauthz, botarith (game DLLs or 0_TFP_Harmony not found; set SEVENDTD_DS_DIR to a dedicated-server install)"

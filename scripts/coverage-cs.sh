@@ -44,14 +44,14 @@ suite() { # <name> <prod.cs> <tests.cs>
 	} > "$dir/cov.csproj"
 }
 
-suite idempotency Source/BotMod/Web/IdempotencyLedger.cs tests/BotMod.Web.Tests/IdempotencyLedgerTests.cs
-suite atomictextfile Source/BotMod/Config/AtomicTextFile.cs tests/BotMod.Web.Tests/AtomicTextFileTests.cs
-suite idempotencyfuzz Source/BotMod/Web/IdempotencyLedger.cs tests/BotMod.Web.Tests/IdempotencyLedgerFuzzTests.cs
-suite mainthreaddispatch Source/BotMod/Web/MainThreadDispatch.cs tests/BotMod.Web.Tests/MainThreadDispatchTests.cs
-suite logsanitize Source/BotMod/Config/LogSanitizer.cs tests/BotMod.Web.Tests/LogSanitizerTests.cs
-suite bottext Source/BotMod/Config/BotText.cs tests/BotMod.Web.Tests/BotTextTests.cs
-suite botargparser Source/BotMod/Commands/BotArgParser.cs tests/BotMod.Web.Tests/BotArgParserTests.cs
-suite botargparserfuzz Source/BotMod/Commands/BotArgParser.cs tests/BotMod.Web.Tests/BotArgParserFuzzTests.cs
+suite idempotency Source/BotMod/Web/IdempotencyLedger.cs tests/BotMod.Tests/IdempotencyLedgerTests.cs
+suite atomictextfile Source/BotMod/Foundation/AtomicTextFile.cs tests/BotMod.Tests/AtomicTextFileTests.cs
+suite idempotencyfuzz Source/BotMod/Web/IdempotencyLedger.cs tests/BotMod.Tests/IdempotencyLedgerFuzzTests.cs
+suite mainthreaddispatch Source/BotMod/Web/MainThreadDispatch.cs tests/BotMod.Tests/MainThreadDispatchTests.cs
+suite logsanitize Source/BotMod/Foundation/LogSanitizer.cs tests/BotMod.Tests/LogSanitizerTests.cs
+suite bottext Source/BotMod/Foundation/BotText.cs tests/BotMod.Tests/BotTextTests.cs
+suite botargparser Source/BotMod/Commands/BotArgParser.cs tests/BotMod.Tests/BotArgParserTests.cs
+suite botargparserfuzz Source/BotMod/Commands/BotArgParser.cs tests/BotMod.Tests/BotArgParserFuzzTests.cs
 
 xmls=()
 for d in "$work"/*/; do

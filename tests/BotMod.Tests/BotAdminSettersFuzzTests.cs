@@ -26,6 +26,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using BotMod.Config;
+using BotMod.Foundation;
 
 static class BotAdminSettersFuzzTests
 {

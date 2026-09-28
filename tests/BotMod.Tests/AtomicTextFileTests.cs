@@ -9,7 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using BotMod.Config;
+using BotMod.Foundation;
 
 static class AtomicTextFileTests
 {

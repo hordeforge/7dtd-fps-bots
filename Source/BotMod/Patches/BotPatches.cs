@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
+using BotMod.Config;
 
 namespace BotMod.Patches
 {
@@ -143,10 +144,10 @@ namespace BotMod.Patches
                         // Class gates describe world bodies only; a bot victim's
                         // soldier body is an EntityZombie, so the vsZombie gate
                         // used to block bot-on-bot damage whenever it was off
-                        // (shared rule: BotMod.Config.CombatGates). Bot victims
+                        // (shared rule: CombatGates). Bot victims
                         // answer to the ally check below alone.
                         bool victimIsBot = BotMod.Core.BotManager.Instance.IsBotEntity(__instance.entityId);
-                        if (BotMod.Config.CombatGates.ClassGateBlocks(victimIsBot, __instance is EntityPlayer, __instance is EntityZombie, cfg.BotVsPlayer, cfg.BotVsZombie)) return false;
+                        if (CombatGates.ClassGateBlocks(victimIsBot, __instance is EntityPlayer, __instance is EntityZombie, cfg.BotVsPlayer, cfg.BotVsZombie)) return false;
                         // Squad mode, vsBot-off and same-team block bot-on-bot damage.
                         if (victimIsBot && BotMod.Core.BotManager.Instance.AreAllies(attackerId, __instance.entityId)) return false;
                     }

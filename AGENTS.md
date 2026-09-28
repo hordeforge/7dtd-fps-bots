@@ -21,6 +21,23 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 - Keep performance overhead bounded: physics raycasts, vision cone calculations, and GA neural network inference must run efficiently within the 20 TPS (50 ms) tick budget.
 - Do not add declarative `suites/*.json` here for stock fidelity; those stay in `7dtd-playtest`.
 
+## Source layout
+
+`Source/BotMod/`, one namespace per directory, dependencies pointing down:
+
+| Directory | Holds | May reference |
+|---|---|---|
+| `Foundation/` | engine-free primitives every layer shares: `Lcg`, `BotText`, `LogSanitizer`, `AtomicTextFile` | nothing else in the mod |
+| `Config/` | the operator-config layer: `BotConfig`, `BotCharacter`, `WeaponProfile`, `CombatGates` | `Foundation` |
+| `AI/` | decision-making: `BotBrain`, `BotCombat`, `BotNeuralBrain` | `Core`, `Config`, `Foundation` |
+| `Core/` | runtime: `Bot`, `BotManager`, `BotSpawner`, `BotModVersion` | `AI`, `Config`, `Foundation` |
+| `Commands/`, `Web/` | transport: console commands and the `/api/bot` handler | `Core` and below |
+| `Patches/` | Harmony patches onto game types | `Config` |
+
+`ModApi.cs` at the root is the mod entry point (load, config read, Web API
+and console command registration). `WebMod/` holds the dashboard's TypeScript,
+not C#; `scripts/build.sh` compiles it into the shipped `Mods/BotMod/WebMod/`.
+
 ## Commands
 
 - `make check` is what CI runs: shellcheck, yamllint, vnu HTML lint, tsc + oxlint +

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Xml;
 using BotMod.Config;
+using BotMod.Foundation;
 using UnityEngine;
 
 namespace BotMod.Core

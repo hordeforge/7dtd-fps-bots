@@ -1,6 +1,7 @@
 using System;
-using BotMod.Core;
 using BotMod.Config;
+using BotMod.Core;
+using BotMod.Foundation;
 using UnityEngine;
 
 namespace BotMod.AI
@@ -184,7 +185,7 @@ namespace BotMod.AI
         /// previous inline form ((me.entityId * 2654435761u) % 100) went negative
         /// for every negative entity id and compared true against the unsigned
         /// threshold unconditionally - fallback spawn classes camped every idle
-        /// tick instead of rolling. Same tap as Config.Lcg.</summary>
+        /// tick instead of rolling. Same tap as Foundation.Lcg.</summary>
         internal static bool CampHashGate(int entityId, float camper)
         {
             if (float.IsNaN(camper) || float.IsInfinity(camper) || camper <= 0f) return false;

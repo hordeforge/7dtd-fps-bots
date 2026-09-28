@@ -18,7 +18,7 @@
 //
 // Needs Newtonsoft.Json.dll from the game install (same gate as the neural
 // suites); compiles BotCharacter.cs (BotCharacter + BotCharacterDB) +
-// BotConfig.cs + BotText.cs + AtomicTextFile.cs. Run locally:
+// BotConfig.cs + Foundation/BotText.cs + Foundation/AtomicTextFile.cs. Run locally:
 // bash scripts/test-idempotency.sh
 using System;
 using System.Collections.Generic;
