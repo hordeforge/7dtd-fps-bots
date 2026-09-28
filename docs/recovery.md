@@ -49,7 +49,10 @@ writes, plus the champion weights) into
 `$BOTMOD_STATE_BACKUP_DIR/<utc-timestamp>/`, git-ignored by default at
 `backups/`. `scripts/restore-state.sh` verifies the snapshot against its
 `MANIFEST` (sha256 per file, plus a check that no unlisted file is present)
-before it writes anything, and defaults to verify-only.
+before it writes anything, and defaults to verify-only. Each run takes its own
+directory: a second backup inside the same second lands in
+`<utc-timestamp>_2/`, never in the first one's, so a repeated `make backup`
+cannot blend two states into one snapshot.
 
 ```bash
 make backup                                    # snapshot into ./backups/<stamp>

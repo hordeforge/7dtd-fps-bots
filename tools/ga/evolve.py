@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 import os
 import sys
@@ -144,6 +145,48 @@ def _load_resume(resume: str, seed: int, pop: int):
     return start_gen, pop_w, top3[0].copy(), best_f, saved_rng
 
 
+def _seed_resume_csv(resume: str, csv_path: Path, start_gen: int) -> int:
+    """Carry the pre-resume generations of an interrupted run's fitness.csv into
+    the new run's, and return how many rows landed.
+
+    `--resume` reads the checkpoint out of the old run dir and continues in a
+    fresh one, so the new fitness.csv would otherwise open with a header and a
+    row for generation start_gen: every generation the interrupted run already
+    evaluated disappears from the one file the dashboard, report and viz plot.
+    Rows at or after start_gen are not copied; the resumed run rewrites them.
+    A resume that fell back to gen 0 carries nothing, because the replay then
+    writes every generation itself."""
+
+    src = Path(resume)
+    if src.is_file():
+        src = src.parent
+    old_csv = src / "fitness.csv"
+    if not old_csv.is_file():
+        return 0
+    with open(old_csv, newline="", encoding="utf-8") as f:
+        rows = list(csv.reader(f))
+    if not rows:
+        return 0
+    carried = []
+    for row in rows[1:]:
+        if not row:
+            continue
+        try:
+            gen = int(row[0])
+        except ValueError:
+            continue  # a torn row belongs to the run that wrote it, not to this one
+        if gen < start_gen:
+            carried.append(row)
+    if not carried:
+        return 0
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(rows[0])
+    writer.writerows(carried)
+    ga.atomic_write_text(csv_path, buf.getvalue())
+    return len(carried)
+
+
 def _held_probe(weights) -> float:
     """Held-out score on HELD_SEED under the shared canonical measuring stick
     (harness.canonical_scores: tanh + DEFAULT_FITNESS scalarization + the
@@ -247,9 +290,17 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     plateau = 0
 
     csv_path = run_dir / "fitness.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as cf:
+    # Resume continues an interrupted run, so its history belongs in this run's
+    # csv too; "w" would drop the carried generations and leave the file
+    # looking like a run that started at start_gen.
+    carried = _seed_resume_csv(resume, csv_path, start_gen) if resume else 0
+    if carried:
+        print(f"resume: carried {carried} generation(s) of fitness history into the new run's csv")
+    # A seeded file already holds the header the append path must not repeat.
+    with open(csv_path, "a" if carried else "w", newline="", encoding="utf-8") as cf:
         writer = csv.writer(cf)
-        writer.writerow(["gen", "best", "mean", "median", "q25", "q75", "held"])
+        if not carried:
+            writer.writerow(["gen", "best", "mean", "median", "q25", "q75", "held"])
 
         for g in range(start_gen, gens):
             # curriculum phase (pvp_first/horde_first shift arena mix for early gens)

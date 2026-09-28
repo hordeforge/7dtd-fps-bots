@@ -40,12 +40,30 @@ source "$ROOT/scripts/server-dir.sh"
 
 DEST_ROOT="${1:-${BOTMOD_STATE_BACKUP_DIR:-$ROOT/backups}}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-SNAP="$DEST_ROOT/$STAMP"
 
 # The MANIFEST is verified on restore, so the digest tool has to exist on both
 # sides of that trip; scripts/digest.sh picks it and fails when neither is there.
 source "$ROOT/scripts/digest.sh"
 
+mkdir -p "$DEST_ROOT"
+# The stamp has one-second resolution, so a second backup in the same second
+# (a retried `make backup`, two hosts sharing a NAS destination) names the same
+# directory. Reusing it would blend two states: this run overwrites the files it
+# found and leaves the earlier run's files it did not, and the MANIFEST written
+# last describes that mix, so restore verifies it and hands back a torn
+# snapshot. Exclusive mkdir plus a numeric suffix gives every run its own
+# directory, as tools/ga/evolve.py does for its run dirs.
+SNAP="$DEST_ROOT/$STAMP"
+n=1
+while true; do
+  if mkdir "$SNAP" 2>/dev/null; then break; fi
+  if [[ ! -d "$SNAP" ]]; then
+    echo "ERROR: cannot create snapshot directory '$SNAP'" >&2
+    exit 1
+  fi
+  n=$((n + 1))
+  SNAP="$DEST_ROOT/${STAMP}_$n"
+done
 mkdir -p "$SNAP/evolved"
 copied=0
 
