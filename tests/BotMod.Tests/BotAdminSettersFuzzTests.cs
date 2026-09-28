@@ -171,8 +171,11 @@ static class BotAdminSettersFuzzTests
                             // shape this method can ever receive.
                             int team = Math.Max(0, Math.Min(cfg.BotTeamCount, RandInt()));
                             string key = BotText.BaseName(name);
-                            cfg.SetTeamAssignment(name, team);
-                            if (key.Length == 0 || team <= 0) live.Remove(key);
+                            BotConfig.TeamAssignResult assigned = cfg.SetTeamAssignment(name, team);
+                            // A refused write (over-long name, map at its cap)
+                            // must not be expected back: the callers surface
+                            // the verdict instead of reporting a stored team.
+                            if (key.Length == 0 || team <= 0 || assigned != BotConfig.TeamAssignResult.Ok) live.Remove(key);
                             else live[key] = team;
                             foreach (var spelling in Spellings(name))
                                 Check(cfg.GetTeamAssignment(spelling) == (live.TryGetValue(key, out int t) ? Math.Max(0, t) : 0),
@@ -222,11 +225,56 @@ static class BotAdminSettersFuzzTests
             CheckInRange(cfg, "seed=" + seed + " final");
         }
 
+        CheckTeamMapBound();
         Console.WriteLine("admin setter fuzz: " + _ops + " operations over " + Seeds + " seeds, "
             + _failures + " failures");
         if (_failures > 0) { Console.WriteLine("admin setter fuzz tests FAILED"); return 1; }
         Console.WriteLine("all admin setter fuzz tests passed");
         return 0;
+    }
+
+    /// <summary>The team map is keyed by caller-supplied text and nothing but a
+    /// clear or a team drop removes a key, so it has to stop somewhere: past
+    /// the cap a new key is refused (and said so), an existing key still
+    /// updates, and a drop-to-zero still frees its slot. A file holding more
+    /// entries than the cap is truncated at ingestion by Normalize.</summary>
+    static void CheckTeamMapBound()
+    {
+        var cfg = new BotConfig();
+        for (int i = 0; i < BotConfig.MaxTeamAssignments; i++)
+        {
+            var r = cfg.SetTeamAssignment("Fuzz" + i, 1);
+            Check(r == BotConfig.TeamAssignResult.Ok, "assignment " + i + " below the cap was refused: " + r);
+        }
+        Check(cfg.SetTeamAssignment("OneTooMany", 1) == BotConfig.TeamAssignResult.AtCapacity,
+            "assignment past the cap was accepted");
+        Check(cfg.SnapshotTeamAssignments().Count == BotConfig.MaxTeamAssignments,
+            "map holds " + cfg.SnapshotTeamAssignments().Count + " entries after refusing the overflow");
+        // An existing key updates; it does not need a free slot.
+        Check(cfg.SetTeamAssignment("Fuzz0", 2) == BotConfig.TeamAssignResult.Ok
+            && cfg.GetTeamAssignment("Fuzz0") == 2, "an existing key was not updated at the cap");
+        // Dropping a key frees exactly one slot.
+        Check(cfg.SetTeamAssignment("Fuzz0", 0) == BotConfig.TeamAssignResult.Ok, "team drop refused at the cap");
+        Check(cfg.SetTeamAssignment("OneTooMany", 1) == BotConfig.TeamAssignResult.Ok,
+            "a freed slot was not reusable");
+        // Over-long names never enter the map.
+        var wide = new BotConfig();
+        string longName = new string('x', BotConfig.MaxTeamNameChars + 1);
+        Check(wide.SetTeamAssignment(longName, 1) == BotConfig.TeamAssignResult.NameTooLong,
+            "an over-long name was accepted");
+        Check(wide.SnapshotTeamAssignments().Count == 0, "an over-long name was stored anyway");
+        Check(wide.SetTeamAssignment(new string('x', BotConfig.MaxTeamNameChars), 1) == BotConfig.TeamAssignResult.Ok,
+            "a name at the character limit was refused");
+        Check(wide.SetTeamAssignment("[Bot] _42", 1) == BotConfig.TeamAssignResult.NoName,
+            "a name that reduces to nothing was accepted");
+        // Ingestion bounds too: a file with more entries than the cap is cut
+        // back, and every kept key is still in canonical form.
+        var loaded = new BotConfig();
+        loaded.TeamAssignments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < BotConfig.MaxTeamAssignments + 50; i++) loaded.TeamAssignments["Loaded" + i] = 1;
+        loaded.Normalize();
+        Check(loaded.TeamAssignments.Count == BotConfig.MaxTeamAssignments,
+            "Normalize left " + loaded.TeamAssignments.Count + " assignments");
     }
 
     /// <summary>The spellings one logical name arrives in: as written, in the

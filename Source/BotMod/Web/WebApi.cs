@@ -46,7 +46,11 @@ namespace BotMod.Web
     /// Required fields (spawnNear's player, removeOne's entityId, setTeam's
     /// name, vs's target, the toggles' on flag) reject absence the same way,
     /// each action checking the field that names its target before the ones
-    /// that qualify it. A requestId that is present but
+    /// that qualify it. A team name is stored in a map with a hard cap
+    /// (BotConfig.SetTeamAssignment), so setTeam answers 400 INVALID_NAME for
+    /// an empty or over-long name and 400 TEAM_ASSIGNMENT_LIMIT once the map
+    /// is full, rather than reporting a team that was never stored. A requestId
+    /// that is present but
     /// unusable (empty or over the ledger key limit) is INVALID_REQUEST_ID:
     /// the caller must learn its retry protection is not active. Range
     /// clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
@@ -399,7 +403,14 @@ namespace BotMod.Web
                             // this write from ever touching the dictionary
                             // concurrently (this body now runs on the main
                             // thread, but console/web surfaces share it).
-                            cfg.SetTeamAssignment(baseName, team);
+                            // The helper refuses an over-long name or a map past
+                            // its cap, so the answer has to name that: a 200
+                            // here would report a team that was never stored.
+                            var assigned = cfg.SetTeamAssignment(baseName, team);
+                            if (assigned == BotConfig.TeamAssignResult.AtCapacity)
+                            { failure = "TEAM_ASSIGNMENT_LIMIT"; break; }
+                            if (assigned != BotConfig.TeamAssignResult.Ok)
+                            { failure = "INVALID_NAME"; break; }
                             ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
                             respBody = RespondJson("name", baseName, "team", team);
                         }

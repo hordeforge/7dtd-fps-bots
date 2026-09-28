@@ -85,15 +85,50 @@ namespace BotMod.Config
         /// same split live-bot lookups use (Bot.TeamKey), so every surface
         /// (web JSON, console, a pasted scoreboard name) lands on one stored
         /// NFC form instead of a near-miss key that silently never matches.</summary>
-        public void SetTeamAssignment(string baseName, int team)
+        /// <summary>Outcome of one SetTeamAssignment call. Callers must report
+        /// anything but <see cref="Ok"/>: a silently dropped assignment reads
+        /// to the operator as "the team is set and the bots still fight each
+        /// other".</summary>
+        public enum TeamAssignResult { Ok, NoName, NameTooLong, AtCapacity }
+
+        /// <summary>Upper bound on stored team assignments. The map is keyed by
+        /// operator-supplied text (web `setTeam`, console `bot team assign`) and
+        /// only `bot team clear` or a team drop removes a key, so an unbounded
+        /// map grows for the life of the process and is written whole into
+        /// botmod.json on every assignment. It is also read under TeamGate on
+        /// every damage event and every FindTarget candidate, so the growth
+        /// lands on the combat hot path, not just on disk. Generous next to a
+        /// real deployment (BotNames holds a handful of base names) and well
+        /// above any hand-built set, so the cap is only reached by a client
+        /// looping distinct names.</summary>
+        internal const int MaxTeamAssignments = 256;
+        /// <summary>Key limit in characters, counted by BotText.CharCount so an
+        /// emoji name is not rejected for measuring double in UTF-16 (same
+        /// convention as the idempotency ledger's key limit).</summary>
+        internal const int MaxTeamNameChars = 64;
+
+        /// <summary>Set (team > 0) or clear (team <= 0) an assignment keyed by
+        /// base bot name. Accepts a bare base name or a full spawned name
+        /// ("[Bot] Kíra_42"): the key derives through BotText.BaseName, the
+        /// same split live-bot lookups use (Bot.TeamKey), so every surface
+        /// (web JSON, console, a pasted scoreboard name) lands on one stored
+        /// NFC form instead of a near-miss key that silently never matches.
+        /// A key over the name limit, or a new key past MaxTeamAssignments, is
+        /// refused rather than stored, and the caller learns why from the
+        /// returned result.</summary>
+        public TeamAssignResult SetTeamAssignment(string baseName, int team)
         {
-            if (string.IsNullOrEmpty(baseName)) return;
+            if (string.IsNullOrEmpty(baseName)) return TeamAssignResult.NoName;
             string key = BotText.BaseName(baseName);
-            if (key.Length == 0) return;
+            if (key.Length == 0) return TeamAssignResult.NoName;
+            if (BotText.CharCount(key) > MaxTeamNameChars) return TeamAssignResult.NameTooLong;
             lock (TeamGate)
             {
-                if (team <= 0) TeamAssignments.Remove(key);
-                else TeamAssignments[key] = team;
+                if (team <= 0) { TeamAssignments.Remove(key); return TeamAssignResult.Ok; }
+                if (!TeamAssignments.ContainsKey(key) && TeamAssignments.Count >= MaxTeamAssignments)
+                    return TeamAssignResult.AtCapacity;
+                TeamAssignments[key] = team;
+                return TeamAssignResult.Ok;
             }
         }
 
@@ -340,10 +375,15 @@ namespace BotMod.Config
                 {
                     string key = BotText.IdentityKey(kv.Key);
                     if (key.Length == 0) continue;
+                    // Same key limits the runtime setter enforces: botmod.json is
+                    // hand-edited operator text and every assignment is written
+                    // back into it whole, so an over-long or unbounded key set
+                    // would otherwise enter the map once per load and stay.
+                    if (BotText.CharCount(key) > MaxTeamNameChars) continue;
                     int team = kv.Value < 0 || kv.Value > BotTeamCount ? 0 : kv.Value;
                     canonical[key] = team;
                 }
-                TeamAssignments = canonical;
+                TeamAssignments = TruncateToCap(canonical);
             }
             // Drop null/empty entries first (hand-edited JSON tolerates them,
             // e.g. "LoadoutPool": ["gunHandgunT1Pistol", null]): left in,
@@ -363,6 +403,23 @@ namespace BotMod.Config
             LoseTargetRange = Math.Max(VisionRange, Math.Min(400f, LoseTargetRange));
             AttackRange = Math.Max(3f, Math.Min(VisionRange, AttackRange));
         }
+        /// <summary>Map bounded to MaxTeamAssignments. Over the cap, the
+        /// ordinal-first keys are kept so two hosts loading the same file keep
+        /// the same assignments (dictionary order is not stable), and the drop
+        /// is reported: a silently shortened map reads as "those teams were
+        /// never set".</summary>
+        static Dictionary<string, int> TruncateToCap(Dictionary<string, int> assignments)
+        {
+            if (assignments.Count <= MaxTeamAssignments) return assignments;
+            var keys = new List<string>(assignments.Keys);
+            keys.Sort(StringComparer.Ordinal);
+            var kept = new Dictionary<string, int>(Math.Min(assignments.Count, MaxTeamAssignments), StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < MaxTeamAssignments; i++) kept[keys[i]] = assignments[keys[i]];
+            Warn("TeamAssignments holds " + assignments.Count + " entries; kept the first "
+                + MaxTeamAssignments + " (botmod.json is hand-edited text, and each key is stored and looked up per damage event)");
+            return kept;
+        }
+
         /// <summary>v replaced by fallback when NaN or Infinite (hand-edited
         /// JSON may carry bare NaN/Infinity literals that survive Max/Min
         /// clamps); range clamps then apply to the finite value.</summary>

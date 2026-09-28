@@ -293,7 +293,17 @@ namespace BotMod.Commands
             string name = BotText.BaseName(p[2]);
             bool live = false;
             foreach (var b in BotManager.Instance.Bots) if (BotText.BaseName(b.Name) == name) { live = true; break; }
-            cfg.SetTeamAssignment(name, team);
+            var result = cfg.SetTeamAssignment(name, team);
+            if (result != BotConfig.TeamAssignResult.Ok)
+            {
+                // Reported, never silent: a stored-and-ignored assignment would
+                // read to the operator as "the team is set" while the bots keep
+                // fighting each other.
+                SdtdConsole.Instance.Output(result == BotConfig.TeamAssignResult.AtCapacity
+                    ? $"Team map is full ({cfg.MaxTeamAssignments} assignments); not stored. 'bot team clear' or assign teamId 0 first."
+                    : "Team name is empty or longer than " + cfg.MaxTeamNameChars + " characters; not stored.");
+                return;
+            }
             ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
             SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).") + (live ? "" : " No live bot with that name - applies to future spawns."));
         }
