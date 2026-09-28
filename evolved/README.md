@@ -7,7 +7,7 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 | Path | Meaning | Committed? |
 |---|---|---|
 | `best.json` | Champion weights (flat `float[W]` + meta) loaded by `BotNeuralBrain.TryLoad` | yes, when promoted |
-| `best.meta.json` | `{ generation, fitness, configHash }` (as written by `ga.save_best`) | yes, alongside `best.json` |
+| `best.meta.json` | `{ generation, fitness, activation, configHash }` (as written by `ga.save_best`) | yes, alongside `best.json` |
 | `report.html` | `report.py` output for the current run set (multi-MB embedded base64) | no (artifact; regenerate from `runs/`) |
 | `sweeps/` | Figures and JSON a `docs/research/REPORT-*.md` cites as evidence | yes (PNG/JSON only; `report_*.html` is ignored) |
 | `runs/<ts>/` | One dir per training run: `config.json`, `gen_*.json`, `fitness.csv` | no (artifact) |
@@ -17,17 +17,26 @@ This directory holds the *outcome* of `docs/research/00..06`. It is not hand-edi
 
 - Weights order is canonical: `W1 row-maj(16×14) | b1(16) | W2 row-maj(5×16) | b2(5)`, see `docs/research/01` §4 and `Source/BotMod/AI/BotNeuralBrain.cs`.
 - JSON version field must match the loader's `kVersion`; mismatch → fallback to heuristic.
+- `activation` records which hidden pass trained the weights. The mod's forward
+  pass is tanh-only, so `BotNeuralBrain.TryLoad` rejects any other value rather
+  than scoring relu-trained weights as tanh. An artifact written before this
+  field existed carries no `activation` and is read as tanh.
 - The mod never writes here at runtime. It reads `best.json` when
   `UseNeuralBrain=true`: at world start (`ModApi.OnGameStartDone`) and on
   demand via `bot neural on|reload [path]` or the web API's `neural` action.
 
 ## How to promote a new champion
 
-After a validated run (`docs/research/04` §8):
+Promotion is automatic, not manual: a non-dry `evolve.py` run rewrites
+`evolved/best.json` in place when its held-out probe (seed 999, 40 matches)
+scores at least as high as the incumbent recomputed from the committed weights.
+A `--dry-run` never promotes, and a failed probe scores `-inf` and loses to any
+incumbent. A `--activation relu` run never promotes: it writes
+`runs/<ts>/best_relu.json` instead, which the mod cannot load.
+
+So the manual step is review and commit whatever the run wrote:
 
 ```bash
-cp evolved/runs/<ts>/best.json evolved/best.json
-cp evolved/runs/<ts>/best.meta.json evolved/best.meta.json
 git add evolved/best.json evolved/best.meta.json
 git commit -m "evolved: promote gen <N> fit <x>"
 git push

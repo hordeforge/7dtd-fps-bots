@@ -40,6 +40,23 @@ fails on drift between them.
   records without `strict=True`, the one `zip()` the B905 entry under Added
   claimed was covered. A truncated run compared unequal lengths silently
   instead of raising.
+- A champion trained with `evolve.py --activation relu` could be promoted into
+  `evolved/best.json`, which the mod's tanh-only forward pass then evaluated
+  with the wrong hidden activation: the file loaded, every output was wrong,
+  and no surface reported a reason. `activation` is now part of the artifact
+  (`ga.save_best` writes it, `best.meta.json` carries it),
+  `BotNeuralBrain.TryLoad` rejects any value but `tanh`, and a relu run writes
+  `runs/<ts>/best_relu.json` instead of touching the shipped slot. An artifact
+  written before the field existed reads as `tanh`.
+- `ModApi.PersistConfigField` wrote the same config file twice on any install
+  where the assembly sits under `/mods/BotMod`, because the hardcoded server
+  path and `DefaultPathBesideAssembly()` resolve to the same file. The second
+  pass staged the first pass's output as the `.bak`, so the last-known-good
+  recovery copy no longer predated the live value. Candidate paths are now
+  de-duplicated by normalized full path.
+- `IdempotencyLedger`'s hard-cap eviction sink swallowed a throwing sink
+  silently. It now reports through a `Warn` sink wired to `ModApi.Warn`, the
+  same contract as the other engine-free layers.
 - `tools/ga/report.py`'s `weight_hist` and `best_net` were annotated
   `-> str | None` while returning PNG bytes, so every caller that embedded the
   result in an `<img>` was mistyped. Both now say `bytes | None`.

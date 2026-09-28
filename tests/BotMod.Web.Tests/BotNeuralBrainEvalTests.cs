@@ -223,6 +223,24 @@ static class BotNeuralBrainEvalTests
             }
         }
 
+        // 5. Activation gate: the forward pass is tanh-only, so a champion
+        //    trained under a relu hidden pass (evolve.py --activation relu)
+        //    must be refused rather than evaluated with the wrong activation.
+        //    An artifact carrying no activation predates the field and is the
+        //    tanh pass, so the shipped one still loads.
+        {
+            string reason;
+            string tanhJson = WeightsJson(0, new float[Outputs * Hidden]);
+            Check("artifact without an activation field still loads (tanh)",
+                Load(tanhJson, out reason));
+            Check("declared tanh activation loads",
+                Load(tanhJson.Replace("\"weights\"", "\"activation\":\"tanh\",\"weights\""), out reason));
+            bool rejected = !Load(
+                tanhJson.Replace("\"weights\"", "\"activation\":\"relu\",\"weights\""), out reason);
+            Check("relu-trained champion is rejected, naming the activation",
+                rejected && reason.Contains("relu"));
+        }
+
         if (_failures == 0) { Console.WriteLine("all bot neural eval tests passed"); return 0; }
         Console.WriteLine(_failures + " bot neural eval test(s) FAILED");
         return 1;

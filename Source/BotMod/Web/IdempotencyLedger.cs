@@ -54,6 +54,11 @@ namespace BotMod.Web
 
         static Action<int> _capacityEvicted;
 
+        /// <summary>Warning sink for a throwing eviction sink. Wired to
+        /// ModApi.Warn by ModApi.InitMod; the default keeps the failure visible
+        /// in headless runs.</summary>
+        internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
+
         /// <summary>Monotonic elapsed-time source for retention/pruning
         /// decisions. Retention is a pure duration, so it must not ride the
         /// wall clock: an NTP step or manual change forward by more than the
@@ -175,10 +180,13 @@ namespace BotMod.Web
                 evicted++;
             }
             // Surface dedup loss: a retry with an evicted key re-executes. The
-            // sink is host-wired (server log); swallow sink faults so pruning
-            // itself can never throw into TryBegin's caller.
+            // sink is host-wired (server log); a throwing sink must not take
+            // PruneLocked's caller (TryBegin) down with it, so report the
+            // failure through Warn, the same contract as the rest of the
+            // config/web layers (wired to ModApi.Warn in InitMod).
             if (evicted > 0 && CapacityEvicted != null)
-                try { CapacityEvicted(evicted); } catch (Exception) { }
+                try { CapacityEvicted(evicted); }
+                catch (Exception ex) { Warn("idempotency capacity-eviction sink failed after evicting " + evicted + " entry(ies): " + ex.Message); }
         }
     }
 }

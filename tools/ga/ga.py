@@ -171,9 +171,16 @@ def gen_ckpt_key(path: Path) -> int:
 
 def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
+    # activation is part of the artifact, not just the run config: the hidden
+    # pass differs (combat_sim._forward vs _forward_relu) and the same flat
+    # weights score differently under each, so a champion saved without it is
+    # not reproducible by a reader. The mod's forward pass is tanh-only, and
+    # BotNeuralBrain.TryLoad rejects any other value rather than evaluating
+    # relu-trained weights as tanh.
     payload = {
         "version": 1,
         "inputs": INPUTS, "hidden": HIDDEN, "outputs": OUTPUTS,
+        "activation": str(config.get("activation", "tanh")),
         "weights": w.astype(float).tolist(),
         "configHash": config_hash(config),
         "fitness": float(fitness),
@@ -185,5 +192,6 @@ def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config
     atomic_write_text(path, json.dumps(payload, indent=2))
     atomic_write_text(path.parent / "best.meta.json", json.dumps({
         "generation": generation, "fitness": float(fitness),
+        "activation": payload["activation"],
         "configHash": config_hash(config),
     }, indent=2))

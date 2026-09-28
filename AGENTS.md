@@ -41,19 +41,20 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 
 Recorded so they stay visible instead of being rediscovered as "someone forgot".
 
-- **Empty `catch` blocks: 87 sites** (`BotSpawner.cs` 31, `BotBrain.cs` 18,
-  `Bot.cs` 17, `BotCombat.cs` 13, `BotPatches.cs` 4, and 4 in the engine-free
-  layers: `MainThreadDispatch.cs` 2, `IdempotencyLedger.cs` 1,
-  `BotConsoleCommands.cs` 1). They guard
+- **Empty `catch` blocks: 87 sites**, counted by
+  `rg -U 'catch\s*(\(Exception\))?\s*\{\s*\}' Source/BotMod`
+  (`BotSpawner.cs` 32, `BotBrain.cs` 18, `Bot.cs` 17, `BotCombat.cs` 13,
+  `BotPatches.cs` 4, and 3 in the engine-free layers: `MainThreadDispatch.cs`
+  2, `BotConsoleCommands.cs` 1). They guard
   7DTD/Unity calls whose failure must not abort a bot tick or a spawn attempt.
   The root rule wants each one to name what it swallows and to wrap exactly one
   statement; most name nothing, and many wrap a whole loop. Fix them where a
   swallow can hide a defect, starting with the engine-free sites `make test`
-  compiles (`IdempotencyLedger`, `MainThreadDispatch`;
-  `BotConsoleCommands` is not covered), one file per change, never as a sweep:
-  a bare `catch` removed from the tick path is a behavior change, not a
-  comment change. `AtomicTextFile.cs` is done: both sites report through its
-  `Warn` sink, wired to `ModApi.Warn` in `InitMod`.
+  compiles (`MainThreadDispatch`; `BotConsoleCommands` is not covered), one file
+  per change, never as a sweep: a bare `catch` removed from the tick path is a
+  behavior change, not a comment change. `AtomicTextFile.cs` and
+  `IdempotencyLedger.cs` are done: every site reports through a `Warn` sink,
+  wired to `ModApi.Warn` in `InitMod`.
 - **Inline tuning constants** in the AI and spawner code (distances, score
   weights, timings) sit at their use site with a comment rather than as named
   constants. `BotCombat.cs` and `BotSpawner.cs` declare none at all. Promote

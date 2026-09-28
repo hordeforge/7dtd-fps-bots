@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BotMod.Config;
@@ -33,6 +34,7 @@ namespace BotMod
                 // Config-layer warnings route through the same WARN log line.
                 BotConfig.Warn = Warn;
                 AtomicTextFile.Warn = Warn;
+                Web.IdempotencyLedger.Warn = Warn;
                 ModPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
                 // Neural weight-path resolution anchors on the mod root (see
                 // BotNeuralBrain.ModRoot); wired before any TryLoad call.
@@ -205,12 +207,40 @@ namespace BotMod
         // other locks around it, so there is no ordering hazard.
         static readonly object PersistGate = new object();
 
+        // Candidate config locations, de-duplicated by normalized full path.
+        // A dedi install places the assembly under /mods/BotMod, so the
+        // hardcoded server path and DefaultPathBesideAssembly() routinely name
+        // the same file. Writing it twice is not merely wasted work:
+        // AtomicTextFile stages the previous content into <path>.bak, so the
+        // second pass would back up the content the first pass just wrote and
+        // the last-known-good would no longer predate the live value. That is
+        // exactly the recovery copy BotConfig.Load reaches for when the next
+        // write is interrupted, so each distinct file must be written once.
+        static List<string> ConfigWritePaths()
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var paths = new List<string>(2);
+            foreach (string candidate in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
+            {
+                if (string.IsNullOrEmpty(candidate)) continue;
+                // GetFullPath is what makes "./Config/botmod.json" and
+                // "/mods/BotMod/Config/botmod.json" compare equal; the raw
+                // strings do not. Exceptions here (malformed path) fall
+                // through as distinct entries and the write is attempted.
+                string full;
+                try { full = Path.GetFullPath(candidate); }
+                catch (Exception) { full = candidate; }
+                if (seen.Add(full)) paths.Add(candidate);
+            }
+            return paths;
+        }
+
         public static void PersistConfigField(string key, object value)
         {
             lock (PersistGate)
             {
                 bool wrote = false;
-                foreach (string path in new[] { "/mods/BotMod/Config/botmod.json", BotConfig.DefaultPathBesideAssembly() })
+                foreach (string path in ConfigWritePaths())
                 {
                     try
                     {

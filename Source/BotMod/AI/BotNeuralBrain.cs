@@ -27,6 +27,9 @@ namespace BotMod.AI
         // slots left over from the previous model; more heads would silently
         // ignore them. Same rejection contract as the inputs pin above.
         const int kOutputs = 5;
+        // Only hidden activation the forward pass below can reproduce (tanh).
+        // Trainer counterpart: harness.ACTIVATION / tools/ga/ga.py save_best.
+        const string kActivation = "tanh";
         static bool _loaded;
         static string _loadedPath = "";
         static string _loadedHash = "";
@@ -224,6 +227,20 @@ namespace BotMod.AI
                 if (outputs != kOutputs)
                 {
                     reason = "unsupported outputs=" + outputs + " (v" + kVersion + " exposes " + kOutputs + " action heads)";
+                    _lastReason = reason; return false;
+                }
+                // The forward pass is tanh-only, and the trainer can emit a
+                // relu-hidden champion (evolve.py --activation relu). The two
+                // hidden passes score the same flat weights differently, so a
+                // relu champion that loads here would drive bot behavior from
+                // numbers the trainer never produced. Reject on the declared
+                // value; an artifact written before the field existed carries
+                // no activation and is the tanh forward pass.
+                string activation = obj.Value<string>("activation") ?? kActivation;
+                if (activation != kActivation)
+                {
+                    reason = "unsupported activation='" + activation + "' (v" + kVersion
+                        + " forward pass is " + kActivation + "-only)";
                     _lastReason = reason; return false;
                 }
                 var arr = obj["weights"] as Newtonsoft.Json.Linq.JArray;

@@ -378,6 +378,18 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             print("dry-run: synthetic fitness only - evolved/best.json untouched")
             return
         best_path = Path("evolved/best.json")
+        # evolved/best.json is the slot the mod loads, and its forward pass is
+        # tanh-only (BotNeuralBrain.TryLoad). A relu-hidden champion scores
+        # higher under this run's harness but the server cannot evaluate it, so
+        # promoting one would swap a working champion for a file the mod
+        # rejects at load and silently falls back to the heuristic. Keep the
+        # sweep's output in the run directory instead.
+        if activation != "tanh":
+            alt = run_dir / f"best_{activation}.json"
+            ga.save_best(alt, best_w, generation=gens - 1, fitness=best_f, config=config)
+            print(f"best -> {alt}  gen {gens-1}  train {best_f:+.4f}  (activation={activation}; "
+                  f"{best_path} left alone, the mod's forward pass is tanh-only)")
+            return
         candidate_held = _held_probe(best_w)
         current_held = float("-inf")
         if best_path.exists():
