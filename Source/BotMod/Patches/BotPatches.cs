@@ -11,6 +11,11 @@ namespace BotMod.Patches
     [HarmonyPatch(typeof(Platform.Steam.AuthenticationServer), "AuthenticateUser")]
     public static class Patch_SteamAuthServer_SyntheticBypass
     {
+        // The block LAN synthetic clients are issued. Fixed on purpose: it is the
+        // set of ids the bypass recognizes, not a value derived from a client.
+        internal const ulong SyntheticIdMin = 76561199000000000UL;
+        internal const ulong SyntheticIdMax = 76561199000010000UL;
+
         static bool Prefix(ClientInfo _cInfo, ref Platform.EBeginUserAuthenticationResult __result)
         {
             try
@@ -22,9 +27,15 @@ namespace BotMod.Patches
                 ulong sid = 0;
                 try { sid = pid.SteamId; } catch { return true; }
                 // Our synthetic range
-                if (sid < 76561199000000000UL || sid > 76561199000010000UL) return true;
+                if (sid < SyntheticIdMin || sid > SyntheticIdMax) return true;
                 __result = Platform.EBeginUserAuthenticationResult.Ok;
-                BotMod.ModApi.Log("synthetic auth bypass for SteamId=" + sid + " ip=" + (_cInfo.ip ?? "?"));
+                // Audit line names the connection's in-world entityId only. The
+                // SteamId that got here is one of SyntheticIdMin..Max, a fixed
+                // block, so its value carries no diagnostic information; the
+                // client ip is personal data. Neither is needed to correlate the
+                // bypassed join with the rest of the session: entityId is the key
+                // `lp`, listplayers and every other log line already use.
+                BotMod.ModApi.Log("synthetic auth bypass for client entityId=" + _cInfo.entityId);
                 return false;
             }
             // A failure here silently reverts to vanilla auth: synthetic

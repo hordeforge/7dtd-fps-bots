@@ -92,6 +92,29 @@ recorded response instead of executing twice; a concurrent duplicate gets
 not be active). Failures return a generic `500 ERROR` envelope; detail goes
 to the server log only.
 
+### Player data
+
+Clanker holds no player records of its own. The only personal data it touches is
+what the game already holds for connected players, and only on an admin surface:
+
+- **Read**: online player display name + entity id, read live from the world
+  for the dashboard's spawn-near target list, for `bot player <name|id>`, and
+  for the kill feed. Both surfaces are permission level 0.
+- **Not stored**: nothing player-derived is written to disk.
+  `config/botmod.json` holds bot names, team assignments and tuning only.
+- **Not transferred**: the panel is served same-origin, keeps nothing in
+  `localStorage`/`sessionStorage`, and loads no third-party script. The mod
+  makes no outbound request.
+- **In the server log**: player-chosen names appear where gameplay needs them
+  (kill feed, spawn-near, admin mutations) and pass through `LogSanitizer`
+  (`Source/BotMod/Config/LogSanitizer.cs`) so they cannot forge log lines. The
+  synthetic-auth bypass (`AllowSyntheticAuthBypass`, off by default) logs the
+  connection's entity id only, not the Steam id or client IP
+  (`Source/BotMod/Patches/BotPatches.cs`).
+- **In memory**: the idempotency ledger caches response bodies, which for
+  `spawnNear` include a player name, for at most `Retention` (10 min) and 256
+  keys (`Source/BotMod/Web/IdempotencyLedger.cs`).
+
 ## Console commands
 
 ```
