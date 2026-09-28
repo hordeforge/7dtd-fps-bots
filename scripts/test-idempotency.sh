@@ -110,6 +110,7 @@ character_src=(
 
 run_suite idempotency \
   "$root/Source/BotMod/Web/IdempotencyLedger.cs" \
+  "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/IdempotencyLedgerTests.cs"
 
 run_suite atomictextfile \
@@ -119,6 +120,7 @@ run_suite atomictextfile \
 # Differential model fuzzer over the untrusted requestId surface.
 run_suite idempotencyfuzz \
   "$root/Source/BotMod/Web/IdempotencyLedger.cs" \
+  "$root/Source/BotMod/Config/BotText.cs" \
   "$root/tests/BotMod.Web.Tests/IdempotencyLedgerFuzzTests.cs"
 
 # Web -> main-thread dispatch lifecycle: wait handle released on every exit

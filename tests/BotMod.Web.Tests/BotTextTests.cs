@@ -64,6 +64,8 @@ static class BotTextTests
         Check("BOM stripped from key", BotText.BaseName("\ufeffGrunt") == "Grunt");
         Check("control characters stripped from key", BotText.IdentityKey("Gru\r\n\tnt") == "Grunt");
         Check("C1 control stripped from key", BotText.IdentityKey("G\u009frunt") == "Grunt");
+        Check("line/paragraph separators stripped from key",
+            BotText.IdentityKey("Gru\u2028nt\u2029") == "Grunt");
         Check("ZWSP-pasted assignment hits clean lookup",
             BotText.BaseName("Grunt\u200b") == "Grunt" && BotText.IdentityKey("Grunt\u200b") == BotText.IdentityKey("Grunt"));
         Check("visible non-ASCII preserved in key", BotText.IdentityKey("K\u00edra\u2603") == "K\u00edra\u2603");

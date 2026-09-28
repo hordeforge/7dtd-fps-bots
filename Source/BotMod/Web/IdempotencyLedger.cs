@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using BotMod.Config;
 
 namespace BotMod.Web
 {
@@ -31,7 +32,10 @@ namespace BotMod.Web
         internal enum BeginResult { Fresh, InProgress, Replay, Mismatched }
 
         internal const int Capacity = 256;
-        internal const int MaxKeyLength = 128;
+        /// <summary>Key limit in characters, not UTF-16 code units: a key of
+        /// 100 emoji is 100 characters and must not be rejected for being 200
+        /// code units long (BotText.CharCount does the counting).</summary>
+        internal const int MaxKeyChars = 128;
 
         /// <summary>Replay window. Must exceed the retry horizon callers use.</summary>
         internal static TimeSpan Retention = TimeSpan.FromMinutes(10);
@@ -98,7 +102,7 @@ namespace BotMod.Web
 
         public static bool IsValidKey(string key)
         {
-            return !string.IsNullOrEmpty(key) && key.Length <= MaxKeyLength;
+            return !string.IsNullOrEmpty(key) && BotText.CharCount(key) <= MaxKeyChars;
         }
 
         /// <summary>Claim a key for one specific request. Fresh: caller

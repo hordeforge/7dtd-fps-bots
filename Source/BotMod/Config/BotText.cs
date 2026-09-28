@@ -29,19 +29,43 @@ namespace BotMod.Config
             return s.IsNormalized(NormalizationForm.FormC) ? s : s.Normalize(NormalizationForm.FormC);
         }
 
+        /// <summary>Length of s in characters (Unicode scalar values), not in
+        /// UTF-16 code units: string.Length counts a surrogate pair twice, so a
+        /// key of 100 emoji measures 200 and is rejected by a 128 limit meant
+        /// for 128 characters. Unpaired surrogates cannot be decoded to a
+        /// scalar and count as one each, so a malformed string still has a
+        /// length. For every limit expressed in characters, this is the unit;
+        /// the two differ only above the BMP.</summary>
+        public static int CharCount(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int n = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1])) i++;
+                n++;
+            }
+            return n;
+        }
+
         // Control characters (C0, DEL, C1) and invisible formatting characters
-        // (zero-width + LRM/RLM, bidi embedding/override controls, word
-        // joiner + invisible operators, BOM, variation selectors): none of
-        // them carry meaning in a stored identifier, but a value pasted from a
-        // web page can carry them silently, and a key like "Grunt" + U+200B
-        // never equals "Grunt", so the assignment it stores would silently
-        // never apply. Single source of truth: LogSanitizer.Clean delegates
-        // here for its log-line scrub of the same ranges.
+        // (zero-width + LRM/RLM, bidi embedding/override controls, line and
+        // paragraph separators, word joiner + invisible operators, BOM,
+        // variation selectors): none of them carry meaning in a stored
+        // identifier, but a value pasted from a web page can carry them
+        // silently, and a key like "Grunt" + U+200B never equals "Grunt", so
+        // the assignment it stores would silently never apply. U+2028/U+2029
+        // are the two that survive char.IsControl (they are separators, not
+        // controls) while still ending a line in log and JSON consumers, so a
+        // requestId carrying one would still be able to forge a second log
+        // line. Single source of truth: LogSanitizer.Clean delegates here for
+        // its log-line scrub of the same ranges.
         internal static bool IsInvisible(char c)
         {
             return c < ' ' || (c >= '\x7f' && c <= '\x9f')
                 || (c >= '\u200b' && c <= '\u200f')   // zero-width + LRM/RLM (+U+200D ZWJ)
                 || (c >= '\u202a' && c <= '\u202e')   // bidi embedding/override controls
+                || c == '\u2028' || c == '\u2029'     // line/paragraph separators
                 || (c >= '\u2060' && c <= '\u2064')   // word joiner + invisible operators
                 || c == '\ufeff'                      // BOM / zero-width no-break space
                 || (c >= '\ufe00' && c <= '\ufe0f');  // variation selectors

@@ -116,6 +116,37 @@ static class RequestFieldsTests
         RequestFields.RequireBool(d, "on", out r2a); RequestFields.RequireBool(d, "on", out r2b);
         Check("repeated reads are deterministic", r1a == r1b && r2a == r2b);
 
+        // OptString: free-text fields, converted the same invariant way as the
+        // typed readers. Under a host culture that spells decimals with a
+        // comma, Convert.ToString(v) would hand the ledger a requestId of
+        // "1234,5" for the JSON number 1234.5, so a retry of the same request
+        // carrying "1234.5" would miss the entry it claims.
+        {
+            var prev = System.Threading.Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+                Check("OptString absent key is null",
+                    RequestFields.OptString(Body("a", 1), "ident") == null);
+                Check("OptString JSON null is null",
+                    RequestFields.OptString(Body("ident", null), "ident") == null);
+                Check("OptString null body is null",
+                    RequestFields.OptString(null, "ident") == null);
+                Check("OptString text passes through",
+                    RequestFields.OptString(Body("ident", "K\u00edra"), "ident") == "K\u00edra");
+                Check("OptString number is invariant under a comma-decimal host culture",
+                    RequestFields.OptString(Body("requestId", 1234.5d), "requestId") == "1234.5");
+                Check("OptString negative number keeps the invariant sign",
+                    RequestFields.OptString(Body("requestId", -7d), "requestId") == "-7");
+                Check("OptString boolean is invariant under any host culture",
+                    RequestFields.OptString(Body("on", true), "on") == "True");
+            }
+            finally
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = prev;
+            }
+        }
+
         // Fingerprint: the canonical text an idempotency key is bound to. It
         // must ignore field order and the key itself, and must change when any
         // other field changes, or a retry of a different request would replay

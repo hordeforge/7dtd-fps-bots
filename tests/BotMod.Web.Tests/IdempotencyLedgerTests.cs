@@ -5,6 +5,7 @@
 //
 //   bash scripts/test-idempotency.sh
 using System;
+using System.Text;
 using BotMod.Web;
 
 static class IdempotencyLedgerTests
@@ -89,15 +90,25 @@ static class IdempotencyLedgerTests
         }
 
         // 4. Key validation, including the exact boundary: max length is the
-        //    last accepted length, one past it is rejected.
+        //    last accepted length, one past it is rejected. The unit is
+        //    characters, so an astral-plane key of half the limit in code
+        //    units is still accepted.
         {
-            string maxKey = new string('k', IdempotencyLedger.MaxKeyLength);
-            string longKey = new string('k', IdempotencyLedger.MaxKeyLength + 1);
+            string maxKey = new string('k', IdempotencyLedger.MaxKeyChars);
+            string longKey = new string('k', IdempotencyLedger.MaxKeyChars + 1);
             Check("empty/null keys rejected",
                 !IdempotencyLedger.IsValidKey(null) && !IdempotencyLedger.IsValidKey(""));
-            Check("key at exactly MaxKeyLength accepted", IdempotencyLedger.IsValidKey(maxKey));
-            Check("key one past MaxKeyLength rejected", !IdempotencyLedger.IsValidKey(longKey));
+            Check("key at exactly MaxKeyChars accepted", IdempotencyLedger.IsValidKey(maxKey));
+            Check("key one past MaxKeyChars rejected", !IdempotencyLedger.IsValidKey(longKey));
             Check("ordinary key accepted", IdempotencyLedger.IsValidKey("ok"));
+            var emoji = new StringBuilder();
+            for (int i = 0; i < IdempotencyLedger.MaxKeyChars; i++) emoji.Append("\uD83D\uDE00");
+            string emojiKey = emoji.ToString();
+            Check("emoji key at exactly MaxKeyChars accepted (128 chars, 256 code units)",
+                emojiKey.Length == IdempotencyLedger.MaxKeyChars * 2
+                && IdempotencyLedger.IsValidKey(emojiKey));
+            Check("emoji key one past MaxKeyChars rejected",
+                !IdempotencyLedger.IsValidKey(emojiKey + "\uD83D\uDE00"));
         }
 
         // 5. Bounded state: capacity cap holds under more keys than Capacity,

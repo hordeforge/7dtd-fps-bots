@@ -63,7 +63,7 @@ def main(argv: list[str]) -> int:
         return 2
     out, filt, xmls = argv[1], argv[2], argv[3:]
     pct = rate(xmls, filt)
-    Path(out).write_text(badge(pct, colour(pct)))
+    Path(out).write_text(badge(pct, colour(pct)), encoding="utf-8")
     return 0
 
 

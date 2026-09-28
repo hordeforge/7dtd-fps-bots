@@ -86,6 +86,11 @@ static class LogSanitizerTests
             Check("bidi/zero-width chars replaced", v == "admin?name? ok?end?");
             Check("sweep preserves length after invisible scrub", v.Length == "admin\u202ename\u200b ok\u2060end\ufeff".Length);
         }
+        // Line/paragraph separators end a line for log and JSON consumers even
+        // though char.IsControl does not cover them, so a requestId carrying
+        // one could still split an audit entry.
+        Check("U+2028/U+2029 replaced", LogSanitizer.Clean("a\u2028b\u2029c") == "a?b?c");
+
         // Legit non-ASCII spacing/printables adjacent to that range survive.
         Check("em dash and nbsp survive", LogSanitizer.Clean("a\u2014b\u00a0c") == "a\u2014b\u00a0c");
 

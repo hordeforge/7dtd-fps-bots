@@ -84,6 +84,21 @@ fails on drift between them.
   `BotText.IdentityKey` while `SetTeamAssignment` stored under
   `BotText.BaseName`, so a full spawned name (`[Bot] Grunt_42`) missed the
   entry the write had created. Both sides now derive the key the same way.
+- The `requestId` limit (documented as 128 chars) was enforced in UTF-16 code
+  units, so a key of 100 emoji measured 200 and was rejected
+  `400 INVALID_REQUEST_ID`. `IdempotencyLedger.IsValidKey` now counts
+  characters (a surrogate pair is one) via the new `BotText.CharCount`.
+- Text fields read from a POST body (`action`, `requestId`, `player`,
+  `weapon`, `target`, `name`) were converted with `Convert.ToString` under the
+  host culture, so a de-DE server turned the JSON number 1234.5 into the
+  ledger key `"1234,5"`. They go through the invariant
+  `RequestFields.OptString` the other body readers already use.
+- U+2028/U+2029 (line and paragraph separator) are not control characters, so
+  a requestId or name carrying one passed the log scrub intact and could still
+  split a single-line audit entry. Both are now in the shared invisible set
+  (`BotText.IsInvisible`), so identity keys drop them too.
+- `scripts/coverage_badge.py` wrote its SVG through the platform default
+  encoding, the one Python text boundary in the repo without an explicit one.
 - `tools/ga/determinism_check.py`'s determinism check zipped its two run
   records without `strict=True`, the one `zip()` the B905 entry under Added
   claimed was covered. A truncated run compared unequal lengths silently

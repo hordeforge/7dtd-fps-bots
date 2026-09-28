@@ -74,6 +74,17 @@ namespace BotMod.Web
             return FieldRead.Ok;
         }
 
+        /// <summary>Free-text field, or null when absent. Like every reader
+        /// here, the conversion is invariant: a client that sends a JSON number
+        /// where a name belongs gets the token it sent, never the host
+        /// culture's spelling of it (a de-DE server would otherwise hand the
+        /// ledger key "1234,5" for 1234.5, and the same request re-sent as
+        /// "1234.5" would miss the entry it claims).</summary>
+        public static string OptString(IDictionary<string, object> body, string key)
+        {
+            return Raw(body, key);
+        }
+
         /// <summary>Canonical text of the whole request body, used to bind an
         /// idempotency key to the operation it was issued for. Keys are sorted
         /// ordinal so field order in the JSON text does not change the result

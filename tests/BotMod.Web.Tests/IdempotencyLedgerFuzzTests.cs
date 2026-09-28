@@ -12,6 +12,8 @@
 //   bash scripts/test-idempotency.sh
 using System;
 using System.Collections.Generic;
+using System.Text;
+using BotMod.Config;
 using BotMod.Web;
 
 static class IdempotencyLedgerFuzzTests
@@ -100,14 +102,26 @@ static class IdempotencyLedgerFuzzTests
 
     // ---- adversarial input generation ----
 
+    /// <summary>text repeated count times (an astral-plane key is a
+    /// surrogate pair per character, so it cannot be built with new
+    /// string(char, int)).</summary>
+    static string Repeat(string text, int count)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < count; i++) sb.Append(text);
+        return sb.ToString();
+    }
+
     static string[] KeyPool()
     {
         return new[]
         {
             "replay-1",
             "",                                             // invalid: empty
-            new string('k', IdempotencyLedger.MaxKeyLength),        // boundary: exactly max
-            new string('k', IdempotencyLedger.MaxKeyLength + 1),    // invalid: one past max
+            new string('k', IdempotencyLedger.MaxKeyChars),        // boundary: exactly max
+            new string('k', IdempotencyLedger.MaxKeyChars + 1),    // invalid: one past max
+            Repeat("\uD83D\uDE00", IdempotencyLedger.MaxKeyChars),      // boundary in characters,
+            Repeat("\uD83D\uDE00", IdempotencyLedger.MaxKeyChars + 1),  // code units, 2x the limit
             "ключ-\u00e9\u4e2d\u6587",                      // unicode
             "\u0000ctl\u0001\u001f",                        // control characters
             "\uD83D\uDE00-astral",                          // surrogate pair
@@ -200,7 +214,7 @@ static class IdempotencyLedgerFuzzTests
 
                 // IsValidKey is the web layer's gate: its verdict must follow
                 // the documented rule for every input shape generated here.
-                Check(IdempotencyLedger.IsValidKey(key) == (!string.IsNullOrEmpty(key) && key.Length <= IdempotencyLedger.MaxKeyLength),
+                Check(IdempotencyLedger.IsValidKey(key) == (!string.IsNullOrEmpty(key) && BotText.CharCount(key) <= IdempotencyLedger.MaxKeyChars),
                     "seed=" + seed + " op=" + op + " IsValidKey disagrees with rule for " + Show(key));
 
                 // Op 0 must be a Begin: only TryBegin prunes, and pruning is

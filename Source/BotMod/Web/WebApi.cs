@@ -476,10 +476,14 @@ namespace BotMod.Web
                 TimeSpan.FromSeconds(15), op);
         }
 
-        /// <summary>Optional string field of the POST body; null when absent.</summary>
+        /// <summary>Optional string field of the POST body; null when absent.
+        /// Invariant conversion, shared with the typed readers: the body is
+        /// protocol, so a value that is not already a string is rendered the
+        /// same way on every host, and a de-DE server cannot hand the ledger a
+        /// requestId spelled "1234,5" for the number 1234.5.</summary>
         static string GetString(IDictionary<string, object> body, string key)
         {
-            return body != null && body.TryGetValue(key, out object v) && v != null ? Convert.ToString(v) : null;
+            return RequestFields.OptString(body, key);
         }
 
         /// <summary>Spawn-count field: absent means 1, present-but-malformed is
