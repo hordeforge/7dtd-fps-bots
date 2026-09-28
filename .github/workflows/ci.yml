@@ -14,19 +14,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      # actions/checkout v4.2.2
+      # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      # actions/cache v4.3.0: npx downloads (vnu-jar, typescript, terser,
-      # oxlint, tsgolint) and lint-webui.sh's tool cache are additive caches
-      # keyed by the pinned versions in scripts/*.sh; restore-keys keeps old
-      # entries so a version bump only fetches the delta.
+      # actions/cache v4.3.0: bunx downloads (vnu-jar, typescript, terser,
+      # oxlint, tsgolint, oxlint-standards) land in bun's package cache, and
+      # lint-webui.sh's own tool cache is ~/.cache/clanker. Both are additive
+      # caches keyed by the pinned versions in scripts/*.sh; restore-keys keeps
+      # old entries so a version bump only fetches the delta. (~/.npm/_npx is
+      # npx's cache and this repo has no npm step, so caching it saved nothing.)
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
-            ~/.npm/_npx
+            ~/.bun/install/cache
             ~/.cache/clanker
-          key: npx-${{ hashFiles('scripts/*.sh') }}
-          restore-keys: npx-
+          key: bunx-${{ hashFiles('scripts/*.sh') }}
+          restore-keys: bunx-
       # Python and workflow analysis gates: lint-python (ruff.toml) and
       # lint-yaml (.yamllint.yml) are both part of `make check`, so the pinned
       # analyzers must be on PATH first. Pins sourced from

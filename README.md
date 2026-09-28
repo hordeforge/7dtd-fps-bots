@@ -267,6 +267,7 @@ make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zi
 make verify-reproducible  # build and package twice, then compare bytes
 make check         # what CI runs (shellcheck, yamllint, vnu HTML lint, tsc/oxlint/bundle freshness, ruff)
 make ci            # the full local gate: make check then make test
+make coverage      # line coverage of the pure-BCL suites (needs the dotnet SDK + dotnet-coverage)
 ```
 
 `make test` with no `SUITE=` runs every C# suite (~1 minute, longer with a game

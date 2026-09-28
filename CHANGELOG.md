@@ -73,6 +73,11 @@ of them removes a config key or a console command.
 
 ### Added
 
+- `make coverage` runs `scripts/coverage-cs.sh` (line coverage of the
+  pure-BCL suites into `coverage.cobertura.xml`). The script and its badge
+  renderer were committed with no entry point and no documentation; it needs
+  the dotnet SDK plus `dotnet-coverage` and self-skips with a message when
+  either is missing.
 - `BOTMOD_CONFIG` overrides the config path for both the read and the persist
   side, so a deployment that mounts `botmod.json` outside the mod directory
   (a container config map, a read-only image with a writable copy elsewhere)
@@ -185,6 +190,19 @@ of them removes a config key or a console command.
 - `make preflight` did not name `curl`, which `make lint-webui` needs to fetch
   the pinned anti-slop archive, so a host without it failed mid-gate instead
   of at preflight.
+- The CI cache in `.github/workflows/ci.yml` saved `~/.npm/_npx`, which is
+  npx's cache. Nothing in this repo runs npm, so every `make check` re-fetched
+  typescript, terser, oxlint, tsgolint, oxlint-standards and vnu-jar from the
+  registry. The path is now bun's package cache (`~/.bun/install/cache`), where
+  bunx actually puts them.
+- `scripts/verify-reproducible.sh` hashed `dist/BotMod-*.zip`, so with a zip
+  from an earlier release still in `dist/` the two sides of the comparison were
+  multi-line strings and the digest it reported was not the archive's. It now
+  hashes the one archive `scripts/package.sh` wrote, named from
+  `BotModVersion.Number` the same way.
+- The `actions/checkout` pin in `ci.yml` was commented `v4.2.2` while
+  `release.yml` commented the same commit `v7.0.1`. The commit is the v7.0.1
+  release prep, so `ci.yml` was wrong.
 - The `mixed` weapon literal was matched case-sensitively in
   `WeaponProfile.ForGun` and `BotSpawner.PickWeapon` while every surface that
   accepts it (`BotArgParser.LooksLikeWeapon`, `bot weapon`, the web `spawnNear`

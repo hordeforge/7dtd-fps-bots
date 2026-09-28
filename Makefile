@@ -1,7 +1,7 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot test-recovery clean lint-html lint-webui lint-shell lint-python lint-yaml check preflight
+.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot test-recovery clean coverage lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -16,6 +16,7 @@ Targets:
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make verify-reproducible  build the payload twice (second time from another path) and package twice, then compare bytes
   make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness + backup/restore drill
+  make coverage     line coverage of the pure-BCL suites into coverage.cobertura.xml (needs the dotnet SDK + dotnet-coverage; self-skips without them)
   make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff, curl)
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
@@ -76,6 +77,8 @@ preflight:
 	  exit 1; \
 	fi
 check: preflight lint-shell lint-yaml lint-html lint-webui lint-python test-recovery
+coverage:
+	bash "$(SCRIPTS)/coverage-cs.sh"
 install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:
