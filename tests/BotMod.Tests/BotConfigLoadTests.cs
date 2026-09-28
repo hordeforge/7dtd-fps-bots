@@ -49,6 +49,16 @@ static class BotConfigLoadTests
         if (!ok) _failures++;
     }
 
+    // True when any collected warning contains the exact fragment. A fragment
+    // that names a key, its value and the file it came from is what an
+    // operator acts on, so that whole shape is what the cases below assert.
+    static bool Mentions(List<string> warnings, string fragment)
+    {
+        foreach (string w in warnings)
+            if (w.Contains(fragment)) return true;
+        return false;
+    }
+
     // Per-process scratch root. The pid is in the name so a leaked directory
     // names the run that left it, and so a second instance of this suite never
     // shares a path with the first. Only this run's directories are cleaned
@@ -397,6 +407,46 @@ static class BotConfigLoadTests
             foreach (string w in warnings)
                 if (w.Contains("AllowSyntheticAuthBypass")) flagged = true;
             Check("a config that leaves the bypass off is not warned about", !flagged);
+        }
+
+        // Item-id settings reach the game unresolved: an unknown gun id is
+        // classified into the pistol combat profile, a missing item logs a
+        // rate-limited spawn-time warn and the bot appears without a gun, and
+        // an unknown entity class falls back through four classes. The console
+        // and web surfaces reject a malformed id where it is typed, so
+        // botmod.json is the one entry point where the typo survives to load,
+        // and the load is the only place that can name the offending file.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"BotWeapon\": \"ak47\", \"LoadoutPool\": [\"gunMGT1AK47\", \"rifle\"],"
+                + " \"BotAmmo\": \"762mm\", \"BotEntityClass\": \"\" }");
+            var warnings = new List<string>();
+            Action<string> prev = WarnCapture.Set(msg => warnings.Add(msg));
+            BotConfig cfg;
+            try { cfg = BotConfig.Load(path); }
+            finally { WarnCapture.Set(prev); }
+            Check("a malformed item id is kept verbatim, not rewritten", cfg.BotWeapon == "ak47");
+            Check("a well-formed gun id is not warned about",
+                !Mentions(warnings, "gunMGT1AK47"));
+            Check("malformed BotWeapon is reported, naming key, value and file",
+                Mentions(warnings, "BotWeapon 'ak47'") && Mentions(warnings, path));
+            Check("malformed LoadoutPool entry is reported by index",
+                Mentions(warnings, "LoadoutPool[1] 'rifle'"));
+            Check("malformed BotAmmo is reported", Mentions(warnings, "BotAmmo '762mm'"));
+            Check("empty BotEntityClass is reported", Mentions(warnings, "BotEntityClass is empty"));
+        }
+        {
+            // "mixed" is the documented sentinel, not a typo, on both fields.
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"BotWeapon\": \"mixed\", \"BotAmmo\": \"ammo762mmBulletBall\","
+                + " \"BotEntityClass\": \"zombieSoldier\", \"LoadoutPool\": [\"gunMGT1AK47\"] }");
+            var warnings = new List<string>();
+            Action<string> prev = WarnCapture.Set(msg => warnings.Add(msg));
+            try { BotConfig.Load(path); }
+            finally { WarnCapture.Set(prev); }
+            Check("the shipped id shapes produce no item-id warning",
+                !Mentions(warnings, "BotWeapon") && !Mentions(warnings, "LoadoutPool")
+                && !Mentions(warnings, "BotAmmo") && !Mentions(warnings, "BotEntityClass"));
         }
 
         // Config path resolution: BOTMOD_CONFIG names the one file that owns

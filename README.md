@@ -236,6 +236,53 @@ read plus the effective values, and the same dump is logged at startup and on
 `bot reload`. That dump is post-clamp: it shows values `Normalize` corrected
 and the difficulty preset moved, which the file on disk does not.
 
+Every numeric key is clamped by `BotConfig.Normalize` on load, so an
+out-of-range value never reaches the sim: it is corrected and the effective
+dump is the only place the correction shows. Accepted range and the value the
+shipped `config/botmod.json` carries:
+
+| Key | Accepted range | Shipped |
+|---|---|---|
+| `TargetBotCount` | 0-64 | 6 |
+| `MaxBots` | `TargetBotCount`-64 | 16 |
+| `BotAmmoCount` | 0-10000 | 300 |
+| `BotHealth` | 10-10000 | 50 |
+| `Difficulty` | 0-4 | 4 |
+| `VisionRange` | 8-300 | 70 |
+| `LoseTargetRange` | `VisionRange`-400 | 85 |
+| `AttackRange` | 3-`VisionRange` | 45 |
+| `HeadshotChance` | 0-1 | 0.08 |
+| `HeadshotMultiplier` | 1-10 | 2.0 |
+| `ReactionTimeSec` | 0-1.5 | 0.28 |
+| `BotTeamCount` | 0-8 | 2 |
+| `PathRecalcIntervalSec` | 0.08-5 | 0.45 |
+| `StuckTimeoutSec` | 0.5-20 | 2.0 |
+| `SpawnRadius` | 2-500 | 25 |
+| `SpawnNearPlayerChance` | 0-1 | 0.35 |
+| `StrafeChance` | 0-1 | 0.9 |
+| `DodgeOnHitChance` | 0-1 | 0.75 |
+| `VisionAngle` | finite | 190 |
+| `LoseTargetTimeSec` | finite | 4.5 |
+| `RandomWanderRadius` | finite | 60 |
+| `RandomWanderIntervalSec` | finite | 5 |
+| `SpawnProtectionSec` | finite | 1.2 |
+| `Seed` | any int | 12648430 |
+
+`Difficulty` then moves four of them again: at 3 or above it lifts
+`VisionRange` to `80 + 10 * Difficulty` and `AttackRange` to at least 50, at 0
+or 1 it caps `HeadshotChance` at 0.04, and at 3 or above it raises it to
+`0.1 + 0.02 * Difficulty`. `ReactionTimeSec` is authored by the preset
+(`0.42 - 0.09 * Difficulty`) unless the file pins a non-stock value.
+
+`BotEntityClass`, `BotWeapon`, each `LoadoutPool` entry and `BotAmmo` are
+resolved against the game's item classes at spawn time, which the config layer
+cannot do, so their id shape is what load checks: a value that is neither
+`mixed` nor a `gun...` / `ammo...` item id, and an empty `BotEntityClass`, each
+log a WARN naming the key, the value and the file. A well-formed id the game
+does not define is still only caught at spawn: the gun is classified into the
+pistol combat profile and a missing item logs a rate-limited WARN while the bot
+appears without one.
+
 - `Difficulty` 0-4 drives `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`), and lerps each character's aim, aggression and alertness (see `BotCharacterDB.Load`). A `bot skill` change recomputes them from the values your `botmod.json` carried, so it always moves the whole way: `bot skill 0` then `bot skill 2` really does return to the normal reaction time. Setting `ReactionTimeSec` to something other than the stock value in `botmod.json` pins it and drops it out of the preset. The next spawn picks up the new lerp; bots already up keep the traits they were minted with.
 - Combat feel: `HeadshotChance/HeadshotMultiplier`, plus per-weapon burst shape, spread, damage and magazine pacing in `WeaponProfile` (classified from the gun id, no config key) and per-character aim in `characters.json`.
 - Retired: `AimJitterDegrees`, `BurstMin`, `BurstMax` and `BurstPauseSec` were config keys no code path read (aim came from the character's `AimAccuracy`, burst shape from the weapon profile). A `botmod.json` still carrying them logs an unknown-key warning on load and the value is ignored.
@@ -245,7 +292,7 @@ and the difficulty preset moved, which the file on disk does not.
   `BotAmmo`/`BotAmmoCount`, `BotHealth`.
 - `DedicatedOnly` (load on a dedicated server only, default `true`).
 - `BotVsBot/BotVsZombie/BotVsPlayer` (which classes bots shoot; `bot vs <t> <on|off>`), `BotTeam` (squad mode; `bot team <on|off>`).
-- `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight.
+- `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight. The map is capped at 256 entries with 64 characters per key (the map is written whole into `botmod.json` on every assignment and read on every damage event); a hand-edited file over the cap keeps the first 256 keys in ordinal order and logs which entries were dropped.
 - `VisionRange/VisionAngle/LoseTargetRange/LoseTargetTimeSec`, `AttackRange` per
   weapon, `StrafeChance/DodgeOnHitChance`.
 - `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/RandomWanderIntervalSec`,

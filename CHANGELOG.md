@@ -75,6 +75,18 @@ Under the 0.x policy above, these change what an existing consumer sees.
 - `make restore SNAPSHOT=...` now snapshots the live config before it
   overwrites it (same `backup-state.sh` path, same `BOTMOD_STATE_BACKUP_DIR`),
   so a restore that fails part way does not destroy the state it was replacing.
+- Loading `botmod.json` now reports an item id that cannot name a game item:
+  `BotWeapon`, each `LoadoutPool` entry and `BotAmmo` that are neither
+  `mixed` nor a `gun...` / `ammo...` id, and an empty `BotEntityClass`, each
+  log a WARN naming the key, the value and the file, next to the existing
+  unknown-key and auth-bypass warnings. The console and web surfaces already
+  reject a malformed id where it is typed, so a hand-edited config was the one
+  path where the typo survived to spawn, where an unknown gun is classified
+  into the pistol combat profile and a missing item only produces a
+  rate-limited warn per spawn. Values are reported, never rewritten, and
+  whether the game defines the id stays a spawn-time question. The README now
+  also lists the accepted range and shipped value of every numeric key
+  `Normalize` clamps.
 - `combat_sim.lcg01` and `combat_sim.loadout_pick` dropped their leading
   underscore. `determinism_check.py` already called both as a second consumer
   (the loadout draw exists to be checked outside the kernel), and the SLF

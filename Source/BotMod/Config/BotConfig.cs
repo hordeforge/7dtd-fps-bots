@@ -351,6 +351,7 @@ namespace BotMod.Config
                     if (source != candidate)
                         Warn("BotConfig restored from backup " + source + " (" + candidate + " was unreadable)");
                     WarnUnsafe(loaded, source);
+                    WarnMalformedItemIds(loaded, source);
                     return loaded;
                 }
                 catch (Exception ex) { Warn("BotConfig parse failed (" + source + "): " + ex.Message); }
@@ -380,6 +381,46 @@ namespace BotMod.Config
             if (loaded.AllowSyntheticAuthBypass)
                 Warn("AllowSyntheticAuthBypass is on in " + source
                     + ": any client can connect with a synthetic Steam id in the reserved range and is treated as authenticated");
+        }
+
+        /// <summary>Report an item-id-shaped setting that cannot name a game
+        /// item. BotWeapon, LoadoutPool, BotAmmo and BotEntityClass are ids
+        /// resolved against the game's item classes at spawn time, well after
+        /// load, and an unresolved one degrades quietly: an unknown gun id is
+        /// classified into the pistol combat profile (WeaponProfile.ForGun),
+        /// a missing item logs a rate-limited WARN per spawn and the bot
+        /// appears anyway without a gun, and an unknown entity class falls back
+        /// through zombieSoldier, zombieBoe, npcTraderJoel, npcSurvivorRanged.
+        /// The console and web surfaces reject a malformed id at the point it
+        /// is typed (BotArgParser.LooksLikeWeapon), so botmod.json is the one
+        /// entry point where a typo reaches the game. The item name itself
+        /// cannot be checked here: the mod config layer holds no reference to
+        /// the game's item classes, so only the id shape is verified and a
+        /// well-formed id that the game does not define stays a spawn-time
+        /// warn. Reports the value, never rewrites it: the fallback chain above
+        /// decides what a bot actually spawns as.</summary>
+        static void WarnMalformedItemIds(BotConfig loaded, string source)
+        {
+            WarnMalformedItemId("BotWeapon", loaded.BotWeapon, "gun", source);
+            if (loaded.LoadoutPool != null)
+                for (int i = 0; i < loaded.LoadoutPool.Length; i++)
+                    WarnMalformedItemId("LoadoutPool[" + i + "]", loaded.LoadoutPool[i], "gun", source);
+            WarnMalformedItemId("BotAmmo", loaded.BotAmmo, "ammo", source);
+            if (string.IsNullOrEmpty(loaded.BotEntityClass))
+                Warn("BotEntityClass is empty in " + source
+                    + ": bots fall back to zombieSoldier, then zombieBoe, npcTraderJoel, npcSurvivorRanged");
+        }
+
+        /// <summary>Warn about one id that is neither "mixed" nor shaped like
+        /// the item class it must name. <paramref name="prefix"/> is the item
+        /// name prefix the game's class names carry (gun..., ammo...).</summary>
+        static void WarnMalformedItemId(string key, string value, string prefix, string source)
+        {
+            if (string.IsNullOrEmpty(value)) { Warn(key + " is empty in " + source); return; }
+            if (string.Equals(value, "mixed", StringComparison.OrdinalIgnoreCase)) return;
+            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return;
+            Warn(key + " '" + value + "' in " + source + " is not a " + prefix
+                + " item id and does not resolve against the game's item classes");
         }
 
         /// <summary>Top-level JSON keys in <paramref name="json"/> that bind no
