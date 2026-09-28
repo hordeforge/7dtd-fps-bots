@@ -16,6 +16,11 @@ const modId = "BotMod";
 
 const POLL_INTERVAL_MS = 5000;
 const ARM_TIMEOUT_MS = 4000;
+// The spawn count range the two number inputs declare (min/max) and the server
+// clamps to (WebApi.OptCount). Kept in one place so the input, the posted
+// value, and the "Spawn N bots: done" result line cannot disagree.
+const SPAWN_COUNT_MIN = 1;
+const SPAWN_COUNT_MAX = 16;
 
 // Dashboard-injected props (kl wrapper passes the stock React, an axios-ish
 // HTTP client, and the react-query useQuery hook). The payload is untyped
@@ -153,12 +158,15 @@ function optNum(v: number | undefined): string {
   return String(v);
 }
 
+// Clamp into SPAWN_COUNT_MIN..SPAWN_COUNT_MAX rather than only guarding the
+// low end: the server clamps a posted count the same way, so an unclamped
+// send would spawn 16 while the result line announced the number typed.
 function toCount(v: string): number {
   const n = Number.parseInt(v, 10);
-  if (!Number.isFinite(n) || n <= 0) {
-    return 1;
+  if (!Number.isFinite(n) || n < SPAWN_COUNT_MIN) {
+    return SPAWN_COUNT_MIN;
   }
-  return n;
+  return Math.min(n, SPAWN_COUNT_MAX);
 }
 
 // One idempotency key per logical command (per click): the server records the
@@ -285,7 +293,10 @@ function makeArmedBtn(h: CreateElement, armed: string, setArmed: (v: string | ((
       className: `botmod-btn${cls === undefined ? "" : ` ${cls}`}${isArmed ? " botmod-armed" : ""}`,
       disabled: busy !== "",
       onClick: (): void => armOrRun({ armed, setArmed, label, say, onConfirm: (): void => post(body) })
-    }, isArmed ? "Confirm?" : label);
+    // The armed label repeats the action it confirms: a bare "Confirm?" left
+    // the user reading a question, with the destructive verb off screen, right
+    // above buttons that also disarm on a second click.
+    }, isArmed ? `Confirm ${label}?` : label);
   };
 }
 
@@ -385,7 +396,7 @@ function renderSpawnRow(h: CreateElement, enabled: boolean, busy: string, spawnC
       enabled ? "botmod-danger" : "botmod-primary"),
     armedBtn("Remove all", { action: "remove" }, "botmod-danger"),
     h("input", {
-      className: "botmod-num", type: "number", min: 1, max: 16, value: spawnCount,
+      className: "botmod-num", type: "number", min: SPAWN_COUNT_MIN, max: SPAWN_COUNT_MAX, value: spawnCount,
       "aria-label": "Bots to spawn",
       onChange: (e: { target: { value: string } }): void => setSpawnCount(e.target.value)
     }),
@@ -423,7 +434,7 @@ function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPl
           onChange: (e: { target: { value: string } }): void => setNearPlayer(e.target.value)
         }, onlinePlayers.map((p): unknown => h("option", { key: p.entityId, value: p.name }, p.name))),
     h("input", {
-      className: "botmod-num", type: "number", min: 1, max: 16, value: nearCount, disabled: noPlayers,
+      className: "botmod-num", type: "number", min: SPAWN_COUNT_MIN, max: SPAWN_COUNT_MAX, value: nearCount, disabled: noPlayers,
       "aria-label": "Bots to spawn near player",
       onChange: (e: { target: { value: string } }): void => setNearCount(e.target.value)
     }),
@@ -688,6 +699,18 @@ function renderQueryError(h: CreateElement, errStatus: number, onRetry: () => vo
       : h("button", { className: "botmod-btn", onClick: onRetry }, "Retry now"));
 }
 
+// First paint, before the first /api/bot response lands. The panel used to
+// render from the empty snapshot the absent payload unwraps to, which read as
+// a real reading: DISABLED, alive 0/0, "no players online", and an empty
+// scoreboard telling the user to spawn bots. Say the reading has not arrived
+// yet instead of inventing one.
+function renderLoading(h: CreateElement): unknown {
+  return h("div", { className: "botmod-panel", role: "status" },
+    h("h2", null, "Bot Control"),
+    h("span", { className: "botmod-pill botmod-off" }, "LOADING"),
+    h("p", { className: "botmod-empty" }, "Reading bot status from the server..."));
+}
+
 function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
   const h = React.createElement;
 
@@ -722,6 +745,10 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
 
   if (query.isError === true) {
     return renderQueryError(h, num(query.error?.response?.status), (): void => { setBlocked(false); void refetch(); });
+  }
+
+  if (query.data === undefined) {
+    return renderLoading(h);
   }
 
   const s = unwrapSnap(query.data);
