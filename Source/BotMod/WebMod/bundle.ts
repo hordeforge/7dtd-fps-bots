@@ -260,7 +260,7 @@ function actionLabel(body: BotAction): string {
     case "disable":
       return "Disable bots";
     case "skill":
-      return `Skill ${numOr(body.level, 0)}`;
+      return `Skill ${num(body.level)}`;
     case "neural":
       return body.on === true ? "GA brain on" : "GA brain off";
     case "team":
@@ -270,7 +270,7 @@ function actionLabel(body: BotAction): string {
     case "setTeam":
       return `${strOrEmpty(body.name)} to ${teamLabel(body.team)}`;
     case "teamCount":
-      return `Teams: ${numOr(body.count, 0)}`;
+      return `Teams: ${num(body.count)}`;
     case "clearTeams":
       return "Clear teams";
     default:
@@ -625,7 +625,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
       team: t,
       label: teamLabel(t),
       color: teamColor(t),
-      members: bots.filter((b): boolean => numOr(b.team, 0) === t)
+      members: bots.filter((b): boolean => num(b.team) === t)
     });
   }
   return h("div", { className: `${ROW} botmod-brain botmod-teams` },
@@ -759,7 +759,7 @@ function botRow(h: CreateElement, b: BotStat, busy: boolean, post: (body: BotAct
     h("td", null, fmtCell(b.level)),
     h("td", { dir: "auto" }, nearLabel(b)),
     h("td", { dir: "auto" }, h("select", {
-      className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy,
+      className: "botmod-teamsel", value: String(num(b.team)), disabled: busy,
       "aria-label": `Team for ${b.name}`,
       onChange: (e: { target: { value: string } }): void => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
     }, teamOptions)),
@@ -777,7 +777,7 @@ function botRow(h: CreateElement, b: BotStat, busy: boolean, post: (body: BotAct
 // Churn visibility: signature of the per-bot fields that change during play.
 // Compared against the previous poll so changed rows flash (see botRow).
 function rowSig(b: BotStat): string {
-  return `${numOr(b.health, -1)}|${b.status}|${numOr(b.team, 0)}|${numOr(b.players, 0)}|${numOr(b.zombies, 0)}|${numOr(b.deaths, 0)}|${numOr(b.score, 0)}|${numOr(b.level, 0)}`;
+  return `${numOr(b.health, -1)}|${b.status}|${num(b.team)}|${num(b.players)}|${num(b.zombies)}|${num(b.deaths)}|${num(b.score)}|${num(b.level)}`;
 }
 
 let prevRowSigs: Map<number, string> = new Map();
@@ -878,7 +878,7 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
       setBlocked(true);
     }
   }, [query.isError, query.error]);
-  const [busy, setBusy] = React.useState(false);
+  const [busy, setBusy] = React.useState(false); // a command is in flight; every control that posts one is disabled
   const [spawnCount, setSpawnCount] = React.useState("2");
   const [nearPlayer, setNearPlayer] = React.useState("");
   const [nearCount, setNearCount] = React.useState("1");

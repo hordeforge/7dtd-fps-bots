@@ -47,3 +47,24 @@ jobs:
       - name: Install mono for the C# warning gate
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mono-mcs mono-runtime
       - run: bash scripts/test-idempotency.sh
+  # macOS leg. The shell scripts carry explicit BSD branches (shasum in
+  # digest.sh, date -r in package.sh, no sha256sum --quiet in install.sh), and
+  # a branch nothing runs is a branch that rots: the Ubuntu job cannot catch a
+  # BSD-only regression in any of them. It runs the lanes that need no game
+  # install and no Linux-only tool. The C# gate is absent on purpose:
+  # scripts/test-idempotency.sh needs mcs + mono, which the macOS runners do
+  # not ship, and every suite it would run there self-skips anyway.
+  shell-macos:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report the bash floor the scripts must stay inside
+        run: bash --version
+      # Homebrew is preinstalled on the macOS runners, so this needs no
+      # pinned action; the pin convention exists for third-party actions, not
+      # for the runner image's own package manager.
+      - name: Install shellcheck
+        run: brew install shellcheck
+      - run: make lint-shell
+      - run: make test-recovery

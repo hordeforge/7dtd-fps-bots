@@ -345,8 +345,11 @@ else
   fi
   if $have_all && [[ -n "$harmony" ]]; then
     # LC_ALL=C sort, newline-delimited: sort -z is a GNU extension and the
-    # mod tree holds no file whose name carries a newline.
-    mapfile -t mod_sources < <(find "$root/Source/BotMod" -type f -name '*.cs' | LC_ALL=C sort)
+    # mod tree holds no file whose name carries a newline. Collected with a
+    # read loop, not mapfile: mapfile needs bash 4 and macOS ships 3.2.
+    mod_sources=()
+    while IFS= read -r src; do mod_sources+=("$src"); done \
+      < <(find "$root/Source/BotMod" -type f -name '*.cs' | LC_ALL=C sort)
     mod_refs=()
     for dll in "${need_refs[@]}"; do mod_refs+=(-r:"$managed/$dll"); done
     mod_refs+=(-r:"$managed/mscorlib.dll" -r:"$managed/System.dll" -r:"$managed/System.Core.dll" -r:"$harmony")

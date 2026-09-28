@@ -142,7 +142,11 @@ refs=(
 # LC_ALL=C sort: deterministic compile order regardless of readdir order.
 # A newline-delimited list, not find -print0 | sort -z: sort -z is a GNU
 # extension, and the payload ships no file whose name holds a newline.
-mapfile -t sources < <(find "$SRC" -type f -name '*.cs' | LC_ALL=C sort)
+# Collected with a read loop, not mapfile: mapfile needs bash 4 and macOS
+# ships 3.2.
+sources=()
+while IFS= read -r source; do sources+=("$source"); done \
+  < <(find "$SRC" -type f -name '*.cs' | LC_ALL=C sort)
 # -warnaserror: the tree compiles warning-free; keep it that way.
 mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 -warnaserror \
   -out:"$OUT/BotMod.dll" "${refs[@]}" "${sources[@]}"

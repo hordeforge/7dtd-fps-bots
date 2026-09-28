@@ -12,7 +12,11 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/tool-versions.sh"
 
-mapfile -t -d '' html_files < <(git -C "$root" ls-files -z '*.html')
+# Collected with a read loop, not mapfile: mapfile and its -d delimiter need
+# bash 4 and macOS ships 3.2.
+html_files=()
+while IFS= read -r -d '' f; do html_files+=("$f"); done \
+  < <(git -C "$root" ls-files -z '*.html')
 
 if [ "${#html_files[@]}" -eq 0 ]; then
   echo "clanker: lint-html: no tracked HTML files under $root" >&2

@@ -1,8 +1,12 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 # Every script in scripts/ is bash, so recipes get bash rather than the
-# /bin/sh a distro may point at dash.
-SHELL := /bin/bash
+# /bin/sh a distro may point at dash. Resolved through PATH, not hardcoded:
+# /bin/bash is absent where bash is installed under a prefix (Nix, Homebrew,
+# some conda and distro layouts). An empty result fails the first recipe with
+# a missing-shell error, which is the honest outcome when no bash is
+# installed: every script here needs one anyway.
+SHELL := $(shell command -v bash)
 .DEFAULT_GOAL := help
 .PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot test-recovery clean coverage lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 

@@ -76,8 +76,11 @@ cp -r "$SRC" "$STAGE/BotMod"
   cd "$STAGE/BotMod"
   # LC_ALL=C sort, newline-delimited: sort -z is a GNU extension and the
   # payload holds no file whose name carries a newline (the whitespace guard
-  # below refuses the zip step on one).
-  mapfile -t files < <(find . -type f ! -name MANIFEST.sha256 | LC_ALL=C sort)
+  # below refuses the zip step on one). Collected with a read loop, not
+  # mapfile: mapfile needs bash 4 and macOS ships 3.2.
+  files=()
+  while IFS= read -r f; do files+=("$f"); done \
+    < <(find . -type f ! -name MANIFEST.sha256 | LC_ALL=C sort)
   : > MANIFEST.sha256
   for f in "${files[@]}"; do
     "${SHA[@]}" "${f#./}" >> MANIFEST.sha256

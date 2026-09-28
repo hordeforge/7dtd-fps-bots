@@ -77,6 +77,31 @@ Under the 0.x policy above, these change what an existing consumer sees.
   three JSON config fuzzers into `tests/BotMod.Tests/MutantBytes.cs`, wired
   into the `neuralfuzz`, `configfuzz` and `charfuzz` compiles. The three
   copies had already drifted (one used a named local where two inlined it).
+- The build, package, test and HTML-lint scripts collect their file lists with
+  a `while read` loop instead of `mapfile`. `mapfile` needs bash 4, and macOS
+  ships 3.2, so `make build`, `make package`, `make lint-html` and
+  `make test` all failed there with `mapfile: command not found` even though
+  the scripts carry deliberate BSD branches (`shasum` in `digest.sh`, `date -r`
+  in `package.sh`). No output changes: both forms split on newlines only, and
+  the lists hold no filename with a newline in it.
+- `Makefile` resolves its recipe shell through `PATH` (`command -v bash`)
+  rather than hardcoding `/bin/bash`, which is absent wherever bash is
+  installed under a prefix (Nix, Homebrew, some conda layouts). Every script
+  here is bash, so a host with no bash still fails, now with make's own
+  missing-shell error rather than a wrong-shell one.
+- CI gained a `macos-15` leg running `make lint-shell` and `make test-recovery`.
+  Those BSD branches existed but no job ran them, so a BSD-only regression in
+  the digest, install or backup paths could not be caught. The C# suites are
+  left out of the leg: they need mcs and mono, which the macOS runners do not
+  ship, and every suite they would run there self-skips.
+- The dashboard's in-flight state is a boolean rather than a composed label
+  string that nothing displayed; every consumer only ever tested it for
+  emptiness. The composed label and its `optNum` helper are gone, and
+  `aria-busy` now gets the boolean the ARIA attribute is defined to take.
+  Alongside it, the `numOr(x, 0)` calls that duplicated the existing `num`
+  helper read as `num(x)`. Together these brought `WebMod/bundle.js` from
+  14489 bytes to 14307, back under the 14336 wire budget the freshness gate
+  enforces; at 14489 `make check` was failing on every run.
 - The canonical body text an idempotency `requestId` is bound to is now
   length-prefixed per field instead of `key=value` lines. A value containing
   the separator could spell a second body exactly (`{"player":"b\nc=d"}`
