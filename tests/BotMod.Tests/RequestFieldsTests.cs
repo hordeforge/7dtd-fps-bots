@@ -8,10 +8,14 @@
 //   - Ok for JSON numbers and invariant digit text (int fields) and for
 //     booleans plus case-insensitive true/false text (bool fields),
 //   - Invalid for anything else, value output neutralized,
-//   - determinism under repeated reads, never throwing on any shape (fuzz).
+//   - determinism under repeated reads, never throwing on any shape (fuzz),
+//   - Fingerprint round-trips and never merges two different bodies (fuzz).
 // Pure BCL: compiles with just RequestFields.cs, like the ledger suite.
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using BotMod.Foundation;
 using BotMod.Web;
 
 static class RequestFieldsTests
@@ -29,6 +33,356 @@ static class RequestFieldsTests
         var d = new Dictionary<string, object>();
         for (int i = 0; i + 1 < kv.Length; i += 2) d[(string)kv[i]] = kv[i + 1];
         return d;
+    }
+
+    // ---- Fingerprint collision fuzz ----
+    //
+    // Fingerprint is the trust boundary the idempotency ledger compares: a
+    // retry whose fingerprint matches a live key replays that entry's recorded
+    // response instead of executing. A collision there does not merely look
+    // odd, it answers one operation with another operation's result. The
+    // fixed vectors above pin a handful of shapes by hand; this fuzzes the
+    // property the encoding rests on, over bodies built from the characters
+    // that reopen it (the '='/':' delimiters, NUL and C0 controls, lone
+    // surrogates, combining marks that Canon composes, invariant-decimal
+    // numbers that must read as their digit text):
+    //
+    //   round-trip: the emitted text parses back, with a parser written here
+    //     rather than shared with the writer, to exactly the canonical
+    //     key/value pairs that went in. This is the strong property: a writer
+    //     that drops, truncates, reorders or merges a field cannot also parse
+    //     back to the input, so one check covers all of them. A writer/reader
+    //     disagreement, a length counted in the wrong unit, or a field
+    //     shortened behind its own length prefix surfaces here as a parse
+    //     mismatch rather than as a silent merge,
+    //   equivalence: over a pool of distinct bodies, two fingerprints are
+    //     equal exactly when the model says the pair lists are equal, in both
+    //     directions. Exact round-trip already implies this, so the pool is
+    //     the cheap backstop that names the offending pair of bodies instead
+    //     of just the first mismatching text, and it is what a future change
+    //     that loosens the round-trip check would fall back to,
+    //   totality: no shape throws and every answer is deterministic.
+    //
+    // A body carries the invariant text of each value alongside the boxed
+    // object, so the model never has to re-derive RequestFields' own
+    // conversion; the conversion itself is pinned separately, below, by
+    // comparing the table against what OptString reports.
+
+    static void Fail(string detail)
+    {
+        _failures++;
+        Console.WriteLine("FAIL " + detail);
+    }
+
+    /// <summary>One boxed JSON value and the invariant text RequestFields.Raw
+    /// is specified to render it as. Null text marks a JSON null, which Raw
+    /// reports as absent and Fingerprint spells "null".</summary>
+    sealed class FuzzValue
+    {
+        public readonly object Obj;
+        public readonly string Text;
+
+        public FuzzValue(object obj, string text)
+        {
+            Obj = obj;
+            Text = text;
+        }
+    }
+
+    sealed class FuzzBody
+    {
+        public readonly List<string> Order = new List<string>();
+        public readonly Dictionary<string, object> Raw = new Dictionary<string, object>();
+        public readonly Dictionary<string, string> Text = new Dictionary<string, string>();
+    }
+
+    static readonly FuzzValue[] FuzzValues =
+    {
+        new FuzzValue(null, null),
+        new FuzzValue("", ""),
+        new FuzzValue("spawn", "spawn"),
+        new FuzzValue("true", "true"),
+        new FuzzValue("2", "2"),
+        new FuzzValue("16", "16"),
+        new FuzzValue("abc", "abc"),
+        // Values that spell a second pair under a naive "key=value" format.
+        new FuzzValue("b\nc=d", "b\nc=d"),
+        new FuzzValue("=;", "=;"),
+        new FuzzValue("1:a=1:b", "1:a=1:b"),
+        new FuzzValue("a=b;c", "a=b;c"),
+        new FuzzValue("a\0b", "a\0b"),
+        new FuzzValue("a\tb", "a\tb"),
+        // Normalization: Canon composes the NFD spelling, so both must
+        // fingerprint alike and must not collapse a third, distinct name.
+        new FuzzValue("K\u00edra", "K\u00edra"),
+        new FuzzValue("Ki\u0301ra", "Ki\u0301ra"),
+        new FuzzValue("K\u00e1ra", "K\u00e1ra"),
+        // Malformed UTF-16 a JSON decoder can hand over: Canon must stay
+        // total rather than taking the request down.
+        new FuzzValue("a\ud800b", "a\ud800b"),
+        new FuzzValue("\udfff\ud800", "\udfff\ud800"),
+        new FuzzValue(true, "True"),
+        new FuzzValue(false, "False"),
+        new FuzzValue(0, "0"),
+        new FuzzValue(7, "7"),
+        new FuzzValue(-7, "-7"),
+        new FuzzValue(16, "16"),
+        new FuzzValue(7L, "7"),
+        new FuzzValue(4d, "4"),
+        new FuzzValue(2.5d, "2.5"),
+    };
+
+    static readonly string[] FuzzKeys =
+    {
+        "action", "count", "on", "player", "requestId", "a", "b", "c",
+        "a\nc", "a=b", "a:b", "=;", "1:a", "0", "", " ", "On", "on",
+        "K\u00ed", "K\u0069\u0301", "\u0000k", "count ",
+    };
+
+    /// <summary>Independent decoder for the length-prefixed pair text. Written
+    /// from the format description, not from the writer, so the two can
+    /// disagree. The text is a run of "len:key=value" fields with nothing
+    /// between them, so each field's declared length is the only thing that
+    /// says where the next one starts; that is exactly the assumption worth
+    /// checking, and a length counted in the wrong unit breaks it.</summary>
+    static bool RefParse(string fp, out List<string[]> pairs)
+    {
+        pairs = new List<string[]>();
+        int i = 0;
+        while (i < fp.Length)
+        {
+            string key, value;
+            if (!RefField(fp, ref i, out key)) return false;
+            if (i >= fp.Length || fp[i] != '=') return false;
+            i++;
+            if (!RefField(fp, ref i, out value)) return false;
+            pairs.Add(new[] { key, value });
+        }
+        return true;
+    }
+
+    /// <summary>Reads one "len:text" field at <paramref name="i"/>, leaving
+    /// the index on the first character past the field.</summary>
+    static bool RefField(string s, ref int i, out string field)
+    {
+        field = null;
+        int colon = s.IndexOf(':', i);
+        if (colon < 0) return false;
+        int len;
+        // NumberStyles.None: the count is a bare run of digits. A sign or
+        // surrounding space here would be a format the writer never emits.
+        if (!int.TryParse(s.Substring(i, colon - i), NumberStyles.None, CultureInfo.InvariantCulture, out len)
+            || len < 0)
+            return false;
+        int start = colon + 1;
+        if (start + len > s.Length) return false;
+        field = s.Substring(start, len);
+        i = start + len;
+        return true;
+    }
+
+    /// <summary>The pairs the fingerprint must carry: every non-excluded key
+    /// of the body, ordered the way the writer orders them, each name and
+    /// value in its canonical form. Built from the dictionary rather than the
+    /// generator's insertion order, because that dictionary is the key set the
+    /// writer actually enumerates; reading a different one would compare the
+    /// model against a body the writer never saw.</summary>
+    static List<string[]> ModelPairs(FuzzBody b, string excludeKey)
+    {
+        var keys = new List<string>();
+        foreach (string k in b.Raw.Keys)
+            if (k != excludeKey) keys.Add(k);
+        keys.Sort(StringComparer.Ordinal);
+        var pairs = new List<string[]>();
+        for (int i = 0; i < keys.Count; i++)
+        {
+            pairs.Add(new[]
+            {
+                BotText.Canon(keys[i]),
+                BotText.Canon(b.Text[keys[i]] ?? "null"),
+            });
+        }
+        return pairs;
+    }
+
+    static bool SamePairs(List<string[]> a, List<string[]> c)
+    {
+        if (a.Count != c.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+            if (a[i][0] != c[i][0] || a[i][1] != c[i][1]) return false;
+        return true;
+    }
+
+    static FuzzBody RandomBody(Random rng)
+    {
+        var b = new FuzzBody();
+        int n = rng.Next(0, 5);
+        var pool = new List<string>(FuzzKeys);
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            string tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+        }
+        for (int i = 0; i < n && i < pool.Count; i++)
+        {
+            FuzzValue v = FuzzValues[rng.Next(FuzzValues.Length)];
+            b.Order.Add(pool[i]);
+            b.Raw[pool[i]] = v.Obj;
+            b.Text[pool[i]] = v.Text;
+        }
+        return b;
+    }
+
+    static FuzzBody Reordered(FuzzBody b, Random rng)
+    {
+        var r = new FuzzBody();
+        var order = new List<string>(b.Order);
+        for (int i = order.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            string tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+        }
+        foreach (string k in order)
+        {
+            r.Order.Add(k);
+            r.Raw[k] = b.Raw[k];
+            r.Text[k] = b.Text[k];
+        }
+        return r;
+    }
+
+    /// <summary>Failure-message rendering. Iterates the dictionary's keys, the
+    /// same set the writer sees, sorted so the message is stable.</summary>
+    static string Show(FuzzBody b)
+    {
+        var keys = new List<string>(b.Raw.Keys);
+        keys.Sort(StringComparer.Ordinal);
+        var sb = new StringBuilder("{");
+        for (int i = 0; i < keys.Count; i++)
+        {
+            if (i > 0) sb.Append(' ');
+            sb.Append('<');
+            foreach (char c in keys[i])
+                sb.Append(c < 0x20 || c > 0x7e ? "\\x" + ((int)c).ToString("x4") : c.ToString());
+            sb.Append('=');
+            string t = b.Text[keys[i]];
+            if (t == null) sb.Append("null");
+            else
+                foreach (char c in t)
+                    sb.Append(c < 0x20 || c > 0x7e ? "\\x" + ((int)c).ToString("x4") : c.ToString());
+            sb.Append('>');
+        }
+        return sb.Append('}').ToString();
+    }
+
+    static int FingerprintFuzz()
+    {
+        var rng = new Random(0x66697072); // fixed seed: failures are reproducible
+        var pool = new List<FuzzBody>();
+        var poolFp = new List<string>();
+        var poolModel = new List<List<string[]>>();
+        const int PoolSize = 12;
+        long roundTrips = 0;
+        long comparisons = 0;
+
+        for (int iter = 0; iter < 20000; iter++)
+        {
+            FuzzBody b = RandomBody(rng);
+            List<string[]> model = ModelPairs(b, "requestId");
+
+            string fp;
+            try
+            {
+                fp = RequestFields.Fingerprint(b.Raw, "requestId");
+            }
+            catch (Exception ex)
+            {
+                Fail("fingerprint fuzz threw " + ex.GetType().Name + " on " + Show(b));
+                break;
+            }
+            if (fp == null)
+            {
+                Fail("fingerprint fuzz returned null on " + Show(b));
+                break;
+            }
+
+            // Round-trip through the independent decoder.
+            List<string[]> parsed;
+            if (!RefParse(fp, out parsed))
+            {
+                Fail("fingerprint text does not parse: <" + fp + "> for " + Show(b));
+                break;
+            }
+            if (!SamePairs(parsed, model))
+            {
+                Fail("fingerprint round-trip mismatch: <" + fp + "> for " + Show(b));
+                break;
+            }
+            roundTrips++;
+
+            // Deterministic, order-independent, and blind to the ledger key.
+            if (fp != RequestFields.Fingerprint(b.Raw, "requestId"))
+                Fail("fingerprint not deterministic on " + Show(b));
+            if (fp != RequestFields.Fingerprint(Reordered(b, rng).Raw, "requestId"))
+                Fail("fingerprint depends on field order for " + Show(b));
+            FuzzBody keyed = Reordered(b, rng);
+            keyed.Order.Add("requestId");
+            keyed.Raw["requestId"] = "k" + iter;
+            keyed.Text["requestId"] = "k" + iter;
+            if (fp != RequestFields.Fingerprint(keyed.Raw, "requestId"))
+                Fail("fingerprint depends on the excluded key for " + Show(b));
+
+            // Injectivity against the model, in both directions.
+            for (int p = 0; p < pool.Count; p++)
+            {
+                bool fpEqual = string.Equals(fp, poolFp[p], StringComparison.Ordinal);
+                bool modelEqual = SamePairs(model, poolModel[p]);
+                if (fpEqual && !modelEqual)
+                    Fail("fingerprint collision: " + Show(b) + " and " + Show(pool[p])
+                        + " both fingerprint to <" + fp + ">");
+                if (!fpEqual && modelEqual)
+                    Fail("fingerprint split: " + Show(b) + " and " + Show(pool[p])
+                        + " are one request but read as <" + fp + "> and <" + poolFp[p] + ">");
+                comparisons++;
+            }
+            if (_failures > 0) break;
+
+            pool.Add(b);
+            poolFp.Add(fp);
+            poolModel.Add(model);
+            if (pool.Count > PoolSize)
+            {
+                pool.RemoveAt(0);
+                poolFp.RemoveAt(0);
+                poolModel.RemoveAt(0);
+            }
+        }
+
+        // The loop breaks on the first failure, so reaching here means nothing
+        // tripped. What it does not prove on its own is that it compared
+        // anything: a generator that stopped emitting fields, or a pool that
+        // never filled, would report green. Assert the exact lower bounds.
+        Check("fuzz: " + roundTrips + " fingerprints round-tripped through the independent decoder",
+            roundTrips == 20000L);
+        Check("fuzz: " + comparisons + " distinct-body fingerprint comparisons, no collision and no split",
+            comparisons >= 20000L * (PoolSize - 1));
+
+        // The invariant conversion the model leans on is pinned against the
+        // table, so a change to the spelling of a value (a comma-decimal
+        // host culture, a round-trip double format) fails here rather than
+        // quietly widening the set of bodies the fuzz considers equal.
+        int renderings = 0;
+        foreach (FuzzValue v in FuzzValues)
+        {
+            if (v.Obj == null) continue;
+            renderings++;
+            string got = RequestFields.OptString(Body("f", v.Obj), "f");
+            if (!string.Equals(got, v.Text, StringComparison.Ordinal))
+                Fail("invariant rendering of <" + v.Text + "> is <" + got + ">");
+        }
+        Check("fuzz: " + renderings + " invariant value renderings match the table", renderings > 0);
+
+        return 0;
     }
 
     static int Main()
@@ -270,6 +624,8 @@ static class RequestFieldsTests
         // of reporting a green "0 adversarial field reads".
         Check("fuzz: " + reads + " adversarial field reads without throw or nondeterminism",
             reads == 20000L * keys.Length);
+
+        FingerprintFuzz();
 
         return Finish();
     }
