@@ -50,17 +50,14 @@ if ! diff -r "$work/first" "$mirror/dist/BotMod" > "$work/diff.txt" 2>&1; then
 fi
 
 echo "verify-reproducible: leg 3/3, package twice and compare the archives"
-# Name the archive the same way package.sh does. A glob over dist/BotMod-*.zip
-# would hash every versioned zip left behind by earlier releases, so the two
-# sides would be multi-line strings that still compare equal and the reported
-# digest would not be the archive's.
-VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)";/\1/p' \
-  "$root/Source/BotMod/Core/BotModVersion.cs")"
-if [ -z "$VERSION" ]; then
-  echo "ERROR: could not parse version from Source/BotMod/Core/BotModVersion.cs" >&2
-  exit 1
-fi
-OUT="$root/dist/BotMod-$VERSION.zip"
+# Name the archive the same way package.sh does, from the same parse, so the
+# two can never address different files. A glob over dist/BotMod-*.zip would
+# hash every versioned zip left behind by earlier releases, so the two sides
+# would be multi-line strings that still compare equal and the reported digest
+# would not be the archive's.
+# shellcheck source=scripts/mod-version.sh
+source "$root/scripts/mod-version.sh"
+OUT="$root/dist/BotMod-$MOD_VERSION.zip"
 bash "$root/scripts/package.sh" > /dev/null
 first_zip="$("${SHA[@]}" "$OUT" | cut -d' ' -f1)"
 bash "$root/scripts/package.sh" > /dev/null

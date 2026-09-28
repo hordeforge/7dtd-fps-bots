@@ -66,11 +66,17 @@ not C#; `scripts/build.sh` compiles it into the shipped `Mods/BotMod/WebMod/`.
   `shasum -a 256` on macOS) behind every MANIFEST writer and verifier:
   `backup-state.sh`, `restore-state.sh`, `package.sh`,
   `verify-reproducible.sh`, `install.sh`. Source it instead of probing again.
+  Three more values are sourced rather than recomputed at each call site, so
+  no two scripts can name a different one: `scripts/tool-versions.sh` (the
+  pinned external tool versions), `scripts/mod-version.sh` (`$MOD_VERSION`,
+  the anchored parse of `BotModVersion.cs` behind `build.sh`, `package.sh` and
+  `verify-reproducible.sh`), and `scripts/required-payload.sh`
+  (`$REQUIRED_PAYLOAD`, the files `make package` refuses to archive and
+  `make install` refuses to deploy).
   `make install` refuses to deploy without the TFP Harmony mod
   (`Mods/0_TFP_Harmony/0Harmony.dll`, a runtime dependency the mod does not
-  bundle), without the files the mod cannot run without (`ModInfo.xml`,
-  `Config/botmod.json`, `WebMod/bundle.js`), or when an extracted release zip
-  fails its `MANIFEST.sha256`.
+  bundle), without the files the mod cannot run without (`$REQUIRED_PAYLOAD`),
+  or when an extracted release zip fails its `MANIFEST.sha256`.
 
 ## Known deviations from the root rules
 
