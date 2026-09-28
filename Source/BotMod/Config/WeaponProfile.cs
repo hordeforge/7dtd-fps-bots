@@ -1,3 +1,5 @@
+using System;
+
 namespace BotMod.Config
 {
     /// <summary>
@@ -18,17 +20,33 @@ namespace BotMod.Config
         public int MagSize; // rounds per magazine (zdtd_bot ammo pacing parity)
         public float ReloadSec; // reload pause on empty (zdtd_bot parity)
         static Lcg _pickCtr = Lcg.Seeded(0x5A17B243u);
+        /// <summary>Literal that selects a random LoadoutPool entry. Matched
+        /// case-insensitively: every surface that accepts it (BotArgParser
+        /// .LooksLikeWeapon, `bot weapon`, the web spawnNear weapon field) is
+        /// case-insensitive, so a spelled "Mixed" used to fall through to the
+        /// pistol default with GunId="Mixed" - an item that does not exist, so
+        /// the bot held no gun while running pistol stats.</summary>
+        public const string Mixed = "mixed";
+        /// <summary>Gun used when the pool is empty; also BotConfig.Normalize's
+        /// documented LoadoutPool fallback.</summary>
+        public const string DefaultGun = "gunMGT1AK47";
         public static WeaponProfile ForGun(string gunId, BotConfig cfg)
         {
-            if (string.IsNullOrEmpty(gunId) || gunId == "mixed")
+            return ForGun(gunId, cfg != null ? cfg.LoadoutPool : null);
+        }
+        /// <summary>Profile for one gun id, with the "mixed" literal expanded
+        /// against <paramref name="loadoutPool"/>.</summary>
+        public static WeaponProfile ForGun(string gunId, string[] loadoutPool)
+        {
+            if (string.IsNullOrEmpty(gunId) || gunId.Equals(Mixed, StringComparison.OrdinalIgnoreCase))
             {
-                if (cfg.LoadoutPool != null && cfg.LoadoutPool.Length > 0)
+                if (loadoutPool != null && loadoutPool.Length > 0)
                 {
                     // Deterministic per-call LCG counter (zdtd parity: no wall-clock noise)
                     // so mixed spawns in the same tick still pick distinct entries.
-                    gunId = cfg.LoadoutPool[_pickCtr.Index(cfg.LoadoutPool.Length)];
+                    gunId = loadoutPool[_pickCtr.Index(loadoutPool.Length)];
                 }
-                else gunId = "gunMGT1AK47";
+                else gunId = DefaultGun;
             }
             string g = gunId.ToLowerInvariant();
             if (g.Contains("shotgun"))

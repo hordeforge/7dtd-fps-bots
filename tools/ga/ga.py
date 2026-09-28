@@ -150,6 +150,27 @@ def config_hash(obj: dict) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def load_best(path: Path) -> tuple[np.ndarray, dict]:
+    """Read a best.json into its float32 genome and metadata: the one reading
+    of the artifact for every consumer (promotion gate, eval, replay, viz,
+    dashboard).
+
+    float32, not float64, because that is the dtype the genomes, the njit
+    kernels and the mod's forward pass all use. A float64 array runs a second
+    numba specialization whose tanh rounds differently, so the same champion
+    would score differently depending on which reader produced it, and the
+    promotion gate's incumbent score would not come from the stick the
+    candidate is measured on.
+
+    Raises ValueError naming what the file must look like; the caller decides
+    what that means (SystemExit for a CLI, an unmatched gate for promotion)."""
+    obj = json.loads(path.read_text(encoding="utf-8"))
+    w = np.array(obj["weights"], dtype=np.float32)
+    if w.size != W:
+        raise ValueError(f"weights size {w.size} != want {W}")
+    return w, obj
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     """Replace `path` with `text` via temp file + os.replace so a crash
     mid-write can never tear the file: readers see either the old or the new

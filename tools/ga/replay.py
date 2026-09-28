@@ -545,12 +545,10 @@ exit status:
     if not best_path.is_file():
         raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")
     try:
-        w = np.array(json.loads(best_path.read_text(encoding="utf-8"))["weights"], dtype=float)
+        w, _ = ga.load_best(best_path)
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
-        raise SystemExit(f"{best_path} is not a best.json: {ex.__class__.__name__}: {ex} "
+        raise SystemExit(f"{best_path} is not a best.json: {ex} "
                          f"(expected a JSON object with a 'weights' array)") from None
-    if w.size != ga.W:
-        raise SystemExit(f"{best_path}: weights size {w.size} != want {ga.W}")
     summary, frames = record_match(w, args.seed, args.n_bots, args.n_zombies, args.max_ticks,
                                    args.skill, args.weapon, args.env)
     walls = WALLS[args.env if args.env is not None else args.seed % 5]

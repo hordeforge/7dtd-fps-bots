@@ -48,10 +48,10 @@ namespace BotMod.Core
         public static WeaponProfile PickWeapon(BotConfig cfg, string gunOverride)
         {
             string pick = gunOverride ?? cfg.BotWeapon;
-            if (!string.IsNullOrEmpty(pick) && pick != "mixed")
-                return WeaponProfile.ForGun(pick, cfg);
+            if (!string.IsNullOrEmpty(pick) && !pick.Equals(WeaponProfile.Mixed, StringComparison.OrdinalIgnoreCase))
+                return WeaponProfile.ForGun(pick, cfg.LoadoutPool);
             string gun = cfg.LoadoutPool[RngPick(cfg.LoadoutPool.Length)];
-            return WeaponProfile.ForGun(gun, cfg);
+            return WeaponProfile.ForGun(gun, cfg.LoadoutPool);
         }
 
         // Spawn near a specific player: FPS-like, out-of-sight preferred. DM

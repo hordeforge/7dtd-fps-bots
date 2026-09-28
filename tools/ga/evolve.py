@@ -394,8 +394,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
         current_held = float("-inf")
         if best_path.exists():
             try:
-                current = json.loads(best_path.read_text(encoding="utf-8"))
-                current_held = _held_probe(np.array(current["weights"], dtype=float))
+                current_held = _held_probe(ga.load_best(best_path)[0])
             except Exception as ex:
                 print(f"current champion (evolved/best.json) unreadable or unevaluable "
                       f"({ex.__class__.__name__}: {ex}); promotion gate treats it as unmatched",
@@ -420,15 +419,12 @@ def _load_best(best: str):
     if not best_path.is_file():
         raise SystemExit(f"best.json not found: {best_path} (e.g. evolved/best.json)")
     try:
-        obj = json.loads(best_path.read_text(encoding="utf-8"))
-        w = np.array(obj["weights"], dtype=np.float32)
+        w, obj = ga.load_best(best_path)
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as ex:
         # Without this the caller gets a KeyError traceback naming numpy
         # internals, not the file it passed and how to fix it.
-        raise SystemExit(f"{best_path} is not a best.json: {ex.__class__.__name__}: {ex} "
+        raise SystemExit(f"{best_path} is not a best.json: {ex} "
                          f"(expected a JSON object with a 'weights' array, e.g. evolved/best.json)") from None
-    if w.size != ga.W:
-        raise SystemExit(f"weights size {w.size} != want {ga.W}")
     return w, obj
 
 

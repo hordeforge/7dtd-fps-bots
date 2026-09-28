@@ -40,6 +40,7 @@ import sys as _sys  # noqa: E402 -- sibling modules resolve only after the sys.p
 _sys.path.insert(0, str(TOOLS))
 from replay import WALLS, record_match, render_html  # noqa: E402 -- same bootstrap
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
+import ga  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
 
 REPO = TOOLS.parent.parent                         # repo root (TOOLS is already repo/tools/ga)
@@ -174,8 +175,7 @@ def held_strip_b64(runs):
 
 
 def best_net_b64():
-    best = json.loads((RUNS_DIR / "best.json").read_text(encoding="utf-8"))
-    w = np.array(best["weights"], dtype=float)
+    w, best = ga.load_best(RUNS_DIR / "best.json")
     hidden = int(best.get("hidden", 16))
     png = RUNS_DIR / "sweeps" / "viz_champion_dashboard.png"
     png.parent.mkdir(parents=True, exist_ok=True)
@@ -334,7 +334,7 @@ exit status:
 
     replays = {}
     if args.replays:
-        w = np.array(json.loads((RUNS_DIR / "best.json").read_text(encoding="utf-8"))["weights"], dtype=float)
+        w, _ = ga.load_best(RUNS_DIR / "best.json")
         # Scratch replay HTML lives only long enough to be read back into the
         # dashboard string; the temp dir is removed on success and on failure.
         with tempfile.TemporaryDirectory(prefix="ga-dashboard-replay-") as tmp:

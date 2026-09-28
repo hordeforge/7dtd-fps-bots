@@ -318,7 +318,7 @@ namespace BotMod.Config
             BotNames = WithoutEmptyEntries(BotNames);
             if (BotNames.Length == 0) BotNames = new[] { "Bot" };
             LoadoutPool = WithoutEmptyEntries(LoadoutPool);
-            if (LoadoutPool.Length == 0) LoadoutPool = new[] { "gunMGT1AK47" };
+            if (LoadoutPool.Length == 0) LoadoutPool = new[] { WeaponProfile.DefaultGun };
             // Apply difficulty preset over tunables that weren't hand-tweaked far from defaults
             ApplyDifficulty();
             // The preset can raise VisionRange after the relational clamps

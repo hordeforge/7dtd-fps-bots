@@ -201,9 +201,9 @@ run_game_suite() { # <name> <sources...>   (references: Newtonsoft from the game
   mono "$work/$name.exe" "$root"
 }
 
-# Team-map concurrency hammer: BotConfig pulls ModApi -> engine types, so these
-# compile the FULL mod source against the game DLLs (same reference set as
-# scripts/build.sh) and are skipped without a game install. Harmony lives in
+# Team-map concurrency hammer: BotConfig pulls ModApi -> engine types, so this
+# compiles the FULL mod source against the game DLLs (same reference set as
+# scripts/build.sh) and is skipped without a game install. Harmony lives in
 # the server's (or client's) Mods dir, where build.sh finds it too.
 run_mod_suite() { # <name> <sources...>   (references: the full mod + game DLLs)
   local name="$1"

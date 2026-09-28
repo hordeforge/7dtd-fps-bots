@@ -38,8 +38,7 @@ except ImportError:
 
 
 def load_best(path: Path):
-    obj = json.loads(path.read_text(encoding="utf-8"))
-    w = np.array(obj["weights"], dtype=float)
+    w, obj = ga.load_best(path)
     hidden = int(obj.get("hidden", 16))
     inputs = int(obj.get("inputs", 14))
     return w, hidden, inputs, obj

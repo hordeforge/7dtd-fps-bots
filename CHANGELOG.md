@@ -43,6 +43,24 @@ fails on drift between them.
 
 ### Fixed
 
+- The `mixed` weapon literal was matched case-sensitively in
+  `WeaponProfile.ForGun` and `BotSpawner.PickWeapon` while every surface that
+  accepts it (`BotArgParser.LooksLikeWeapon`, `bot weapon`, the web `spawnNear`
+  weapon field) matches case-insensitively. `bot weapon MIXED` persisted a
+  value that then resolved to the pistol default with `GunId="MIXED"`: no such
+  item, so later bots held no gun while running pistol stats. Both spellings
+  now expand to a `LoadoutPool` entry, and
+  `tests/BotMod.Web.Tests/WeaponProfileTests.cs` pins it.
+- Every `best.json` reader in `tools/ga` rebuilt the weights array with its
+  own dtype: `evolve.py eval` used float32, while the promotion gate,
+  `replay.py`, `viz.py` and `dashboard.py` used float64. A float64 array runs
+  a second numba specialization of `combat_sim._forward` whose `tanh` rounds
+  differently, so the incumbent champion in the promotion gate was scored on
+  a stick the candidate was never measured on. `ga.load_best` is now the one
+  reader (float32, size-checked) and all five call sites go through it; a
+  wrong-size `best.json` fails verification there instead of failing inside
+  the sim, being caught as an evaluation error, and being scored `-inf` so any
+  candidate promoted over it.
 - `tools/ga/determinism_check.py`'s determinism check zipped its two run
   records without `strict=True`, the one `zip()` the B905 entry under Added
   claimed was covered. A truncated run compared unequal lengths silently
