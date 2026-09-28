@@ -231,7 +231,7 @@ static class BotCharacterFuzzTests
             case 5: // Name field goes hostile
                 obj[entryName]["Name"] = AsToken(new object[] { null, 42, "", "\u0000\u202egrunted", new string('n', 4096) }[rng.Next(5)]);
                 break;
-            case 6: // bool-typed ChallengeAim gets junk
+            case 6: // an unknown trait name carrying junk (the ignored-key path)
                 obj[entryName]["ChallengeAim"] = AsToken(MutantBytes.ExtremeValues[rng.Next(MutantBytes.ExtremeValues.Length)]);
                 break;
             default: // whole-document shape attacks

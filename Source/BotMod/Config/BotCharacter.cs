@@ -39,7 +39,6 @@ namespace BotMod.Config
         public float Alertness { get; set; } = 0.5f;
         public float FireThrottle { get; set; } = 0.7f;
         public float ChatInsult { get; set; } = 0.3f;
-        public bool ChallengeAim { get; set; } = false; // Q3 bot_challenge cvar parity, carried for the characters.json layout; no code path reads it
 
         public static BotCharacter Defaults(string name) => new BotCharacter { Name = name };
 

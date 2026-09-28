@@ -26,7 +26,9 @@ See `chars.h`, `ai_main.c:BotChangeViewAngles/BotAimAtEnemy/BotCheckAttack`,
 
 - **View angles (BotChangeViewAngles)**: challenge mode is clamped smooth
   (`factor*diff`), normal is under-damped spring (`viewanglespeed += speed-diff`,
-  damped `0.45*(1-factor)`), ported as `ChallengeAim` toggle.
+  damped `0.45*(1-factor)`). The challenge-mode half is not ported: the aim
+  smoothing here is the under-damped spring only, so `bot_challenge` has no
+  toggle in `characters.json`.
 
 - **Movement / AAS**: Q3 `TFL_*` flags (WALK/JUMP/CROUCH/LADDER/SWIM/TELEPORT)
   mapped onto 7DTD `Block`/`Chunk` checks; Doom3 `AAS.FindCover/OutOfRange/
