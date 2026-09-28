@@ -108,7 +108,10 @@ python tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40
 ```
 
 `python tools/ga/evolve.py --resume evolved/runs/<ts>` replays from the last
-generation's checkpoint deterministically (see Determinism above).
+generation's checkpoint deterministically (see Determinism above). The
+checkpoint records the stick its scores were measured on (`activation`,
+`curriculum`, `seed`, `fitMix`); resuming it under a different one exits 2
+rather than merging numbers from two scales into one run.
 The `eval` subcommand re-evaluates a single best.json on the held-out pool; the
 `static-vs-neural` subcommand is the canonical promotion gate (champion vs
 static baseline, prints GOAL MET). Both share the one canonical measuring stick
@@ -123,7 +126,7 @@ All six CLIs follow the same convention, and each one documents it under
 |---|---|
 | 0 | the command ran and did what it says |
 | 1 | the command understood its arguments but could not finish: a missing or malformed `best.json`, a missing run dir, a failed promotion gate, a sweep with no usable curve |
-| 2 | bad command line: unknown flag, missing required argument, or a value outside its documented range |
+| 2 | bad command line: unknown flag, missing required argument, a value outside its documented range, or a `--resume` of a checkpoint measured on a different stick |
 
 Data (scores, ranking tables, output paths) goes to stdout; diagnostics and
 failures go to stderr, so `evolve.py static-vs-neural | tee gate.txt` stays

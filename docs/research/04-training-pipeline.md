@@ -43,8 +43,9 @@ evolved/
   best.meta.json            # { generation, fitness, configHash } (as written by ga.save_best)
   runs/<ts>/                # one dir per training run, never overwritten
     config.json             # full hyperparam table (03 §4) + run_seed
-    gen_000.json            # state gen 000 ends in: top-3 + fitness, the full pool
-                            # and the rng draw position, so --resume replays
+    gen_000.json            # state gen 000 ends in: top-3 + fitness, the full pool,
+                            # the rng draw position and the measuring stick it was
+                            # scored on, so --resume replays or refuses
                             # (`nextGen` is the generation the pool belongs to)
     gen_001.json ...
     fitness.csv             # per-gen best/mean/median/q25/q75/held-probe, append-only
@@ -113,6 +114,17 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
   from the last checkpoint reproduces the interrupted run's `fitness.csv`
   row for row. Checkpoints predating that shape carry no `pop`/`rngState`,
   and `--resume` says so on stderr instead of pretending to replay.
+- A checkpoint also carries the stick its numbers mean anything under:
+  `activation`, `curriculum`, `seed` and `fitMix` (the scalarization).
+  `--resume` compares them with the command line's and exits 2 on a
+  mismatch. Carrying a tanh population into a relu run (or a run's own
+  `best_fitness` into a run with another mix) makes every later generation
+  compare scores from two different scales: `improved` never fires again, no
+  further checkpoint is written, and the pre-resume `fitness.csv` rows are
+  plotted against scores that were never on that axis. A checkpoint that
+  carries none of the four (written before the fields existed) is not a
+  mismatch and is carried with a warning. Islands are not compared: a resume
+  flattens the loaded pool to one island by design.
 - `tools/ga/determinism_check.py` runs the operators, the match kernel and the
   threaded harness twice from one seed and diffs the results; it is the
   executable form of this section.

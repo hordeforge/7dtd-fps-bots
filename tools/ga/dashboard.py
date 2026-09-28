@@ -196,13 +196,35 @@ def best_net_b64():
     return base64.b64encode(_report.quantized_png_bytes(png.read_bytes())).decode()
 
 
+def champion() -> tuple[dict, object]:
+    """(best.json's own record, the run seed that produced it or None).
+
+    best.json is the champion and the only authoritative read of it; the
+    generation, fitness and config hash shown in the header all come from that
+    file. best.meta.json is a second file ga.save_best writes right after it,
+    and it exists only to carry the run seed (the other three fields are
+    already in best.json). The pair is written as two atomic replacements, so
+    a crash between them can leave the meta describing the previous champion;
+    its configHash is what says which of the two files is older, and a meta
+    that does not match best.json contributes nothing but a wrong highlight."""
+    _, obj = ga.load_best(RUNS_DIR / "best.json")
+    seed = None
+    try:
+        meta = json.loads((RUNS_DIR / "best.meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        meta = None
+    if meta is not None and meta.get("configHash") == obj.get("configHash"):
+        seed = meta.get("seed")
+    return obj, seed
+
+
 def build(runs, out: Path, replays):
-    best_meta = json.loads((RUNS_DIR / "best.meta.json").read_text(encoding="utf-8"))
+    best, best_seed = champion()
     best_run_name = None
     # best.run is the run hash; we mark whichever run we think produced best.json
     for run in runs:
         cfg = run_cfg(run)
-        if cfg.get("seed") == best_meta.get("seed"):
+        if best_seed is not None and cfg.get("seed") == best_seed:
             best_run_name = run.name
 
     chunks = []
@@ -221,16 +243,16 @@ def build(runs, out: Path, replays):
 </div>
 <dl class="meta">
 <dt>generation</dt><dd>""")
-    # best.meta.json travels via git (whitelisted in evolved/.gitignore), so
-    # its values are untrusted text from the dashboard's perspective: escape
+    # best.json travels via git (whitelisted in evolved/.gitignore), so its
+    # values are untrusted text from the dashboard's perspective: escape
     # before they land in the page.
-    chunks.append(html.escape(str(best_meta.get("generation", "?"))))
+    chunks.append(html.escape(str(best.get("generation", "?"))))
     chunks.append("""</dd>
 <dt>train fitness</dt><dd>""")
-    chunks.append(f"{best_meta.get('fitness',0):.1f}")
+    chunks.append(f"{best.get('fitness',0):.1f}")
     chunks.append("""</dd>
 <dt>config hash</dt><dd>""")
-    chunks.append(html.escape(str(best_meta.get("configHash", "?"))[:8]))
+    chunks.append(html.escape(str(best.get("configHash", "?"))[:8]))
     chunks.append("""</dd>
 </dl>
 </header>

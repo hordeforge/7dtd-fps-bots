@@ -179,6 +179,16 @@ static class RequestFieldsTests
             Check("fingerprint is case-sensitive in key names",
                 RequestFields.Fingerprint(Body("On", true), "requestId")
                 != RequestFields.Fingerprint(Body("on", true), "requestId"));
+            // A separator inside a value must not be able to spell a second
+            // body: {a:"b",c:"d"} and {a:"b\nc=d"} rendered identically under
+            // a "key=value" line format, and the ledger would have replayed
+            // one request's response for the other.
+            Check("fingerprint separates a value carrying the delimiter",
+                RequestFields.Fingerprint(Body("action", "spawn", "player", "b\nc=d"), "requestId")
+                != RequestFields.Fingerprint(Body("action", "spawn", "player", "b", "c", "d"), "requestId"));
+            Check("fingerprint separates a key carrying the delimiter",
+                RequestFields.Fingerprint(Body("a\nc", "d"), "requestId")
+                != RequestFields.Fingerprint(Body("a", "c=d"), "requestId"));
             // One logical request whose name arrives in two normalization forms
             // is one request. The ledger compares fingerprints ordinally, so
             // without Canon the retry below was answered 409

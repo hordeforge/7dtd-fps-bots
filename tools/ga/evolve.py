@@ -76,13 +76,64 @@ def _synthetic_fitness(w) -> float:
     return -1.0 + 2.0 * int.from_bytes(digest[:4], "little") / 0xFFFFFFFF
 
 
-def _load_resume(resume: str, seed: int, pop: int):
+def _check_resume_stick(ckpt: dict, stick: dict, path: Path) -> None:
+    """Refuse a resume whose checkpoint was measured on a different stick.
+
+    A checkpoint carries the population, the best fitness so far and the rng
+    position, and every one of those is only meaningful under the measuring
+    stick that produced it: the forward pass (activation), the arena mix
+    (curriculum), the scalarization (fitMix) and the arena seeds (seed). Carry
+    a tanh checkpoint into a relu run, or a run's own best_fitness into a run
+    with a different mix, and the run compares new numbers against old ones as
+    if they were one scale: `improved` goes false for good, no further
+    checkpoint is ever written, plateau grows into the stagnation path, and
+    the pre-resume generations the CSV carries are plotted on the same axis as
+    scores that came off another stick. None of it is wrong in a way a reader
+    can see, so it exits instead.
+
+    A dimension the checkpoint does not carry (an artifact written before the
+    field existed) is not a mismatch: the run cannot be proved wrong, so it
+    warns and continues. Islands are deliberately not compared: a resume
+    flattens the loaded pool to one island by construction, and a multi-island
+    checkpoint resumes as a single pool on purpose.
+
+    Exit 2 (bad command line), the code the exit table reserves for a request
+    the run cannot honor as asked."""
+    names = {"activation": "activation", "curriculum": "curriculum",
+             "seed": "seed", "fitMix": "scalarization mix"}
+    mismatched = []
+    unproven = []
+    for key, label in names.items():
+        if key not in ckpt:
+            unproven.append(label)
+            continue
+        if ckpt[key] != stick[key]:
+            mismatched.append(f"{label}: checkpoint {ckpt[key]!r}, this run {stick[key]!r}")
+    if unproven:
+        print(f"resume: {path.name} carries no {', '.join(unproven)}; the run "
+              f"continues on this command line's stick, which the checkpoint's "
+              f"fitness numbers were not produced under", file=sys.stderr)
+    if not mismatched:
+        return
+    print(f"resume: {path.name} was measured on a different stick than this "
+          f"command line, so its population, best fitness and fitness history "
+          f"cannot be carried into this run:", file=sys.stderr)
+    for line in mismatched:
+        print(f"  {line}", file=sys.stderr)
+    print("resume the run with the flags it was started with (see its "
+          "config.json), or start a new run instead.", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _load_resume(resume: str, seed: int, pop: int, stick: dict):
     """Prime (start_gen, population, best_weights, best_fitness, rng_state) from
     the newest gen_*.json checkpoint in `resume` (or the single file itself).
     Returns a fresh start (gen 0, None, None, -inf, None) when nothing usable is
     there. The rng_state is what makes a resumed run a replay: the population is
     restored, and the run's single draw stream resumes where the checkpoint left
-    it instead of replaying the draws the interrupted run already consumed."""
+    it instead of replaying the draws the interrupted run already consumed.
+    `stick` is this run's measuring stick (see _check_resume_stick): a
+    checkpoint taken under a different one is refused rather than merged."""
 
     def _fresh(reason: str):
         print(reason)
@@ -114,6 +165,7 @@ def _load_resume(resume: str, seed: int, pop: int):
                   f"({ex.__class__.__name__}: {ex})", file=sys.stderr)
     if top3 is None or ckpt is None or chosen is None:
         return _fresh(f"resume: no usable checkpoint in {resume}, starting fresh")
+    _check_resume_stick(ckpt, stick, chosen)
 
     # Prefer the checkpoint's full population: with it, the resumed run is a
     # replay of the interrupted one (same genomes, same rng state below).
@@ -236,6 +288,32 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     if islands > 1: tag += f"_is{islands}"
     if curriculum != "mixed": tag += f"_{curriculum}"
     if fitness: tag += "_fit-custom"
+    # Everything about this run that decides what a fitness number means. It
+    # goes into every checkpoint and is checked on resume, because a population
+    # and a best fitness are only readable under the stick that produced them.
+    stick = {"activation": activation, "curriculum": curriculum,
+             "seed": seed, "fitMix": mix}
+    # Loaded before the run dir is created: a checkpoint from another stick
+    # exits 2 (see _check_resume_stick), and a refused resume must not leave
+    # behind a run dir with a config.json and no generations in it.
+    if resume:
+        start_gen, resumed_pop, best_w, best_f, saved_rng = _load_resume(resume, seed, pop, stick)
+        if saved_rng is not None:
+            # Restored before the first draw: the population comes from the
+            # checkpoint, and every random choice after it (selection,
+            # crossover, mutation, ring migration) continues that run's stream.
+            rng.bit_generator.state = saved_rng
+        if resumed_pop is not None:
+            # A resumed pool continues as a single population: the checkpoint has
+            # no island layout, and splitting a primed pool would scatter the
+            # loaded elites.
+            islands = 1
+            pop_w = resumed_pop
+        else:
+            pop_w = None
+    else:
+        pop_w = None
+
     # UTC label: identical runs get identical names on every host/container
     # (a laptop in UTC+2 and a CI runner in UTC must not disagree), and the
     # fall-back hour cannot recur a label. Exclusive mkdir + numeric suffix:
@@ -260,23 +338,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     start_gen = 0
     best_w = None
     best_f = float("-inf")
-    if resume:
-        start_gen, resumed_pop, best_w, best_f, saved_rng = _load_resume(resume, seed, pop)
-        if saved_rng is not None:
-            # Restored before the first draw: the population comes from the
-            # checkpoint, and every random choice after it (selection,
-            # crossover, mutation, ring migration) continues that run's stream.
-            rng.bit_generator.state = saved_rng
-        if resumed_pop is not None:
-            # A resumed pool continues as a single population: the checkpoint has
-            # no island layout, and splitting a primed pool would scatter the
-            # loaded elites.
-            islands = 1
-            pop_w = resumed_pop
-        else:
-            pop_w = None
-    else:
-        pop_w = None
 
     # island split (ring migration)
     if islands == 1:
@@ -353,6 +414,12 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                     "activation": activation,
                     "curriculum": curriculum,
                     "islands": islands,
+                    # The stick, so a later --resume can refuse to carry these
+                    # numbers into a run that measures on a different one
+                    # (_check_resume_stick). "fitness" above is the per-genome
+                    # score list, not the scalarization, hence fitMix.
+                    "seed": seed,
+                    "fitMix": mix,
                 }
             else:
                 plateau += 1
@@ -555,7 +622,9 @@ def _add_train_flags(p):
                         "replay lands in a path the seed picks")
     p.add_argument("--dry-run", action="store_true", help="synthetic fitness stub (no sim)")
     p.add_argument("--resume", type=str, default=None,
-                   help="run dir or gen_NNN.json to resume from")
+                   help="run dir or gen_NNN.json to resume from; exits 2 when "
+                        "the checkpoint was measured on a different stick "
+                        "(activation, curriculum, seed, scalarization)")
     p.add_argument("--activation", type=str, default="tanh", choices=["tanh", "relu"],
                    help="hidden activation (default: %(default)s)")
     p.add_argument("--islands", type=int, default=1, help="island count 1..8 (ring migrate every 10 gens)")

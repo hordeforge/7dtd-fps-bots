@@ -51,6 +51,27 @@ of them removes a config key or a console command.
 
 ### Changed
 
+- The canonical body text an idempotency `requestId` is bound to is now
+  length-prefixed per field instead of `key=value` lines. A value containing
+  the separator could spell a second body exactly (`{"player":"b\nc=d"}`
+  rendered like `{"player":"b","c":"d"}`), and the ledger reads a matching
+  fingerprint as the same request, so the second body would have been
+  answered with the first one's recorded response.
+- `evolve.py --resume` now refuses a checkpoint that was measured on a
+  different stick (`activation`, `curriculum`, `seed`, scalarization mix) and
+  exits 2 instead of merging it. Checkpoints carry those four fields from now
+  on; a checkpoint predating them is carried with a warning. Before: a resumed
+  run compared its new fitness against a `best_fitness` from another
+  activation or mix, so `improved` never fired again (no further checkpoint,
+  a permanent stagnation plateau) and the carried pre-resume `fitness.csv` rows
+  were plotted on an axis they were never scored on. The stick is read before
+  the run dir is created, so a refused resume leaves nothing behind.
+- `tools/ga/dashboard.py` reads the champion's generation, fitness and config
+  hash from `evolved/best.json` instead of `evolved/best.meta.json`, and uses
+  the meta file only for the run seed, and only when its `configHash` matches
+  the champion's. Before: the two are written as two atomic replacements, so a
+  crash between them (or a meta left from an older promote) showed the
+  previous champion's numbers and highlighted the wrong run.
 - Developer path: `make test SUITE="lcg bottext"` (the form the README
   documented) failed with `No rule to make target 'bottext'`, because make
   read the second suite as a target. Recipes now run under bash explicitly, and

@@ -125,10 +125,22 @@ namespace BotMod.Web
             var sb = new StringBuilder();
             for (int i = 0; i < keys.Count; i++)
             {
-                if (i > 0) sb.Append('\n');
-                sb.Append(BotText.Canon(keys[i])).Append('=').Append(BotText.Canon(Raw(body, keys[i]) ?? "null"));
+                // Length-prefixed pairs, not "key=value" lines: a value may
+                // contain the separator, so {a:"b",c:"d"} and {a:"b\nc=d"}
+                // render the same text and would share a fingerprint. The
+                // ledger treats a matching fingerprint as the same request and
+                // replays the recorded response, so a collision here answers
+                // one operation with another operation's result.
+                Append(sb, BotText.Canon(keys[i]));
+                sb.Append('=');
+                Append(sb, BotText.Canon(Raw(body, keys[i]) ?? "null"));
             }
             return sb.ToString();
+        }
+
+        static void Append(StringBuilder sb, string field)
+        {
+            sb.Append(field.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(field);
         }
 
         /// <summary>Field as invariant text, or null when the key is missing or
