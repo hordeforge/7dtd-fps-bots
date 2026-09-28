@@ -177,6 +177,23 @@ of them removes a config key or a console command.
   context and predictable, so two clicks could land on the same key and a retry
   would replay a different command's response. It now draws 16 bytes from
   `crypto.getRandomValues`.
+- The difficulty preset and its bounds were recomputed from whatever the
+  previous `Normalize` had written, so the preset's own output was fed back in
+  as its input and every `bot skill` change was one-way. `bot skill 0` then
+  `bot skill 2` left the easy 0.42s reaction in place, `bot skill 4` then
+  `bot skill 2` never lifted the 0.04 headshot cap, and difficulty 4's 120m
+  vision survived the drop. `Normalize` now recomputes the five preset-driven
+  fields from the values the loaded `botmod.json` carried, so it is idempotent
+  and a difficulty change is reversible in both directions. Deciding whether
+  the operator tuned `ReactionTimeSec` or `AimJitterDegrees` also moved from a
+  proximity test against the live value to a comparison against the stock value
+  at load: a config that spells out the stock value (the shipped
+  `botmod.json` does) still follows `Difficulty`, and a tuned one is now left
+  alone consistently rather than only when it happened to sit far from stock.
+- `BotText.BaseName` reached its result through `Split('_')[0]`, which
+  allocates the whole string array behind the discarded tail. It runs on the
+  per-damage-event ally check and on every character lookup, so it now uses
+  `IndexOf` with the same result and no array.
 - `IdempotencyLedger.cs` and `IdempotencyLedgerFuzzTests.cs` imported
   `BotMod.Config` for the `BotText` character count they call, which lives in
   `BotMod.Foundation`. The suites compile a reduced source set without

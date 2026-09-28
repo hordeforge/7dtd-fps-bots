@@ -141,6 +141,55 @@ static class BotConfigLoadTests
                 cfg.VisionRange >= 80f && cfg.LoseTargetRange >= cfg.VisionRange);
         }
 
+        // The difficulty preset and its bounds must be a pure function of
+        // (loaded file, Difficulty), not a chain over previous Normalize runs.
+        // Each admin `bot skill` change re-normalizes the LIVE config, so a
+        // preset that read the live value fed its own output back as its
+        // input and every change became one-way: 0 -> 2 kept the easy 0.42s
+        // reaction, 4 -> 2 never lifted the 0.04 headshot cap or the 120m
+        // vision bump. Pinned here as: the value at a difficulty reached from
+        // below equals the value at that same difficulty reached from above.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"Difficulty\": 2 }");
+            BotConfig up = BotConfig.Load(path);
+            up.SetDifficulty(4);
+            float upHardReaction = up.ReactionTimeSec, upHardVision = up.VisionRange,
+                  upHardHeadshot = up.HeadshotChance;
+            BotConfig down = BotConfig.Load(path);
+            down.SetDifficulty(4);
+            down.SetDifficulty(2);
+            // 0.42 - 2*0.09: the reaction the difficulty-2 preset authors.
+            // Compared with a tolerance: it is computed in float, so the
+            // result is 0.23999999f, not the 0.24f literal.
+            Check("difficulty preset is reversible (reaction)",
+                down.ReactionTimeSec != upHardReaction && Math.Abs(down.ReactionTimeSec - 0.24f) < 1e-5f);
+            Check("difficulty preset is reversible (vision)",
+                down.VisionRange != upHardVision && down.VisionRange == BotConfig.StockVisionRange);
+            Check("difficulty preset is reversible (headshot)",
+                down.HeadshotChance != upHardHeadshot && down.HeadshotChance == BotConfig.StockHeadshotChance);
+            // Repeating the same level is a no-op, so a `bot teamCount` (which
+            // also re-normalizes) cannot drift a tuned preset either.
+            float before = down.ReactionTimeSec;
+            down.SetTeamCount(down.BotTeamCount);
+            down.SetDifficulty(2);
+            Check("re-normalize at the same difficulty is a no-op",
+                down.ReactionTimeSec == before);
+        }
+
+        // An operator value is the pristine value the preset composes with, so
+        // it must survive every difficulty change rather than being rewritten
+        // whenever it happens to sit near the stock value.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"Difficulty\": 2, \"ReactionTimeSec\": 1.2, \"AimJitterDegrees\": 9.5 }");
+            BotConfig cfg = BotConfig.Load(path);
+            cfg.SetDifficulty(4);
+            cfg.SetDifficulty(0);
+            Check("operator reaction override survives a difficulty change", cfg.ReactionTimeSec == 1.2f);
+            Check("operator aim-jitter override survives a difficulty change", cfg.AimJitterDegrees == 9.5f);
+        }
+
         // A JSON null TeamAssignments map must be repaired by Normalize: the
         // locked helpers index it directly, so a lingering null would make the
         // first admin assignment throw NullReferenceException on a web thread.

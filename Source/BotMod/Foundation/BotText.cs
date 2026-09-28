@@ -114,12 +114,20 @@ namespace BotMod.Foundation
         /// canonicalized through IdentityKey (NFC, no control/invisible
         /// characters). Spawned names look like "[Bot] Grunt_42" ->
         /// "Grunt"; this is the identity key shared by team assignments and
-        /// the character table.</summary>
+        /// the character table. The underscore is reserved in the name
+        /// grammar, so a configured name carrying one keys on what precedes
+        /// it (BotSpawner's default BotNames avoid it, "TankJr" not
+        /// "Tank_Jr").
+        ///
+        /// IndexOf rather than Split('_')[0]: this runs on the per-damage-event
+        /// ally check and on every character lookup, and Split allocates the
+        /// whole string array behind the discarded tail.</summary>
         public static string BaseName(string name)
         {
             string n = IdentityKey(name);
             if (n.StartsWith("[Bot] ", StringComparison.OrdinalIgnoreCase)) n = n.Substring(6);
-            return n.Split('_')[0];
+            int underscore = n.IndexOf('_');
+            return underscore < 0 ? n : n.Substring(0, underscore);
         }
 
         /// <summary>Case-insensitive, normalization-insensitive name match:

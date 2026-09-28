@@ -217,7 +217,7 @@ read plus the effective values, and the same dump is logged at startup and on
 `bot reload`. That dump is post-clamp: it shows values `Normalize` corrected
 and the difficulty preset moved, which the file on disk does not.
 
-- `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`).
+- `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`). A `bot skill` change recomputes them from the values your `botmod.json` carried, so it always moves the whole way: `bot skill 0` then `bot skill 2` really does return to the normal reaction time. Setting `ReactionTimeSec` or `AimJitterDegrees` to something other than the stock value in `botmod.json` pins it and drops it out of the preset.
 - Combat feel: `HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.
 - Announcements/loot: `AnnounceSpawns`, `BotAnnounceKillsInChat` (bot frags to chat), `DropLootOnDeath`.
 - `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.

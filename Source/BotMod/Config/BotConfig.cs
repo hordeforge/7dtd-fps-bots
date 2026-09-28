@@ -47,20 +47,29 @@ namespace BotMod.Config
         public string[] LoadoutPool { get; set; } = new[] { "gunHandgunT1Pistol", "gunShotgunT1DoubleBarrel", "gunMGT1AK47", "gunRifleT3SniperRifle", "gunShotgunT3AutoShotgun", "gunHandgunT3SMG5" };
         // 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare - like Q3 bot cvars
         public int Difficulty { get; set; } = 2;
-        public float VisionRange { get; set; } = 70f;
+        // The five Stock* constants below are the values the difficulty
+        // preset and its bounds drive from. Named so the pristine snapshot in
+        // RawTunables, the property initializers, and the "did the operator
+        // tune this" test all read the same definition.
+        public const float StockVisionRange = 70f;
+        public const float StockAttackRange = 45f;
+        public const float StockAimJitterDegrees = 2.0f;
+        public const float StockReactionTimeSec = 0.28f;
+        public const float StockHeadshotChance = 0.08f;
+        public float VisionRange { get; set; } = StockVisionRange;
         public float VisionAngle { get; set; } = 190f; // FPS bots look around, not narrow cone
         public float LoseTargetRange { get; set; } = 85f;
         public float LoseTargetTimeSec { get; set; } = 4.5f;
-        public float AttackRange { get; set; } = 45f;
+        public float AttackRange { get; set; } = StockAttackRange;
         // Per-weapon spread is in WeaponProfile; this is base fallback
-        public float AimJitterDegrees { get; set; } = 2.0f;
-        public float HeadshotChance { get; set; } = 0.08f;
+        public float AimJitterDegrees { get; set; } = StockAimJitterDegrees;
+        public float HeadshotChance { get; set; } = StockHeadshotChance;
         public float HeadshotMultiplier { get; set; } = 2.0f;
         // Burst fire - FPS feel. 0 = auto
         public int BurstMin { get; set; } = 2;
         public int BurstMax { get; set; } = 4;
         public float BurstPauseSec { get; set; } = 0.65f;
-        public float ReactionTimeSec { get; set; } = 0.28f; // see -> shoot delay
+        public float ReactionTimeSec { get; set; } = StockReactionTimeSec; // see -> shoot delay
         public bool BotVsBot { get; set; } = true;
         public bool BotVsZombie { get; set; } = true;
         public bool BotVsPlayer { get; set; } = true;
@@ -78,6 +87,71 @@ namespace BotMod.Config
         // concurrent read+write, so every mutation and lookup goes through the
         // locked helpers below; never touch the property directly at runtime.
         internal readonly object TeamGate = new object();
+
+        /// <summary>The values the loaded file actually carried, kept so
+        /// Normalize can always recompute from them instead of from whatever
+        /// the previous Normalize wrote. The difficulty preset and its bounds
+        /// overwrite these five fields in place, so recomputing from the live
+        /// value made every field's result depend on how many times Normalize
+        /// had run and on which difficulties it had seen: the preset's own
+        /// output was fed back in as its input, and a field only ever moved
+        /// further from stock. `bot skill 0` then `bot skill 2` left the easy
+        /// 0.42s reaction in place, `bot skill 4` then `bot skill 2` never
+        /// restored headshot chance off its 0.04 cap, and difficulty 4's 120m
+        /// vision survived the drop back to 2. Recomputing from the pristine
+        /// value makes Normalize idempotent and every difficulty change
+        /// reversible, and it still leaves an operator's own value alone
+        /// because that value is the pristine one.</summary>
+        struct RawTunables
+        {
+            public float ReactionTimeSec;
+            public float AimJitterDegrees;
+            public float VisionRange;
+            public float AttackRange;
+            public float HeadshotChance;
+            /// <summary>True when the file asked for something other than the
+            /// stock value, i.e. a real override rather than the preset's own
+            /// starting point. The shipped botmod.json spells both out at
+            /// stock, so it keeps following Difficulty; a tuned value does not
+            /// get overwritten because it happens to sit near stock.</summary>
+            public bool ReactionTimeSecOverridden;
+            public bool AimJitterDegreesOverridden;
+        }
+        RawTunables _raw = new RawTunables
+        {
+            ReactionTimeSec = StockReactionTimeSec,
+            AimJitterDegrees = StockAimJitterDegrees,
+            VisionRange = StockVisionRange,
+            AttackRange = StockAttackRange,
+            HeadshotChance = StockHeadshotChance
+        };
+
+        /// <summary>Record the loaded file's values for the preset-driven
+        /// fields. Called after deserialization and before the first
+        /// Normalize; a config that never came from a file (the built-in
+        /// defaults) is already pristine.</summary>
+        void CaptureRawTunables()
+        {
+            _raw.ReactionTimeSec = ReactionTimeSec;
+            _raw.AimJitterDegrees = AimJitterDegrees;
+            _raw.ReactionTimeSecOverridden = ReactionTimeSec != StockReactionTimeSec;
+            _raw.AimJitterDegreesOverridden = AimJitterDegrees != StockAimJitterDegrees;
+            _raw.VisionRange = VisionRange;
+            _raw.AttackRange = AttackRange;
+            _raw.HeadshotChance = HeadshotChance;
+        }
+
+        /// <summary>Put the preset-driven fields back to the loaded file's
+        /// values so the clamps and the difficulty preset below both see the
+        /// operator's input rather than the previous pass's output.</summary>
+        void RestoreRawTunables()
+        {
+            ReactionTimeSec = _raw.ReactionTimeSec;
+            AimJitterDegrees = _raw.AimJitterDegrees;
+            VisionRange = _raw.VisionRange;
+            AttackRange = _raw.AttackRange;
+            HeadshotChance = _raw.HeadshotChance;
+        }
 
         /// <summary>Set (team > 0) or clear (team <= 0) an assignment keyed by
         /// base bot name. Accepts a bare base name or a full spawned name
@@ -284,6 +358,7 @@ namespace BotMod.Config
                     // signal at all. Surface every unknown key instead.
                     foreach (string key in UnknownKeys(json))
                         Warn("Unknown config key '" + key + "' in " + source + " (typo? key ignored, built-in default applies)");
+                    loaded.CaptureRawTunables();
                     loaded.Normalize();
                     // The content may have come from TryRead's internal .bak
                     // fallback (primary missing or deleted, not merely torn)
@@ -323,6 +398,10 @@ namespace BotMod.Config
         }
         public void Normalize()
         {
+            // Preset-driven fields are recomputed from what the file carried,
+            // never from what the last Normalize left behind, so this method
+            // is idempotent and a difficulty change is exactly reversible.
+            RestoreRawTunables();
             TargetBotCount = Math.Max(0, Math.Min(64, TargetBotCount));
             MaxBots = Math.Max(TargetBotCount, Math.Min(64, MaxBots));
             BotAmmoCount = Math.Max(0, Math.Min(10000, BotAmmoCount));
@@ -444,9 +523,14 @@ namespace BotMod.Config
             // Higher diff = tighter aim, faster reaction, tighter bursts, wider engagement
             float aimScale = 1f - Difficulty * 0.18f; // 1.0,0.82,0.64,0.46,0.28
             float react = 0.42f - Difficulty * 0.09f; // 0.42,0.33,0.24,0.15,0.06
-            // Only nudge if user left defaults near stock
-            if (Math.Abs(ReactionTimeSec - 0.28f) < 0.08f) ReactionTimeSec = Math.Max(0.05f, react);
-            if (Math.Abs(AimJitterDegrees - 2.0f) < 1.5f) AimJitterDegrees = Math.Max(0.3f, 2.8f * aimScale);
+            // Presets: the difficulty authors these outright, from the file's
+            // own value, so an operator who tuned one keeps it and everyone
+            // else tracks Difficulty in both directions.
+            if (!_raw.ReactionTimeSecOverridden) ReactionTimeSec = Math.Max(0.05f, react);
+            if (!_raw.AimJitterDegreesOverridden) AimJitterDegrees = Math.Max(0.3f, 2.8f * aimScale);
+            // Bounds: these pull a value toward the difficulty's floor or
+            // ceiling instead of authoring one, so they compose with whatever
+            // the file asked for rather than replacing it.
             if (Difficulty >= 3 && VisionRange < 80f) VisionRange = 80f + Difficulty * 10f;
             if (Difficulty >= 3 && AttackRange < 50f) AttackRange = 50f;
             if (Difficulty <= 1) { HeadshotChance = Math.Min(HeadshotChance, 0.04f); }
