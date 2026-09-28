@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 from pathlib import Path
@@ -373,10 +374,15 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
     world = 80  # arena 0..80 units -> pixels
     scale = 8.0
     W = int(world * scale); H = int(world * scale)
-    js_frames = json.dumps(_round_floats(frames))
-    js_walls = json.dumps(walls)
+    # The two payloads land inside a <script> element, where "</script>" in a
+    # string value would end the element and turn the rest of the JSON into
+    # markup; escaping the slash keeps it a JS string.
+    js_frames = json.dumps(_round_floats(frames)).replace("</", "<\\/")
+    js_walls = json.dumps(walls).replace("</", "<\\/")
     # Build with token substitution (not an f-string) so the embedded JS/CSS braces are literal.
-    html = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+    # The template is a local named page, not html: the module name has to stay
+    # reachable for the escaping of the values substituted into it.
+    page = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>@TITLE@</title>
 <style>
  body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e2e8f0;margin:0}
@@ -472,8 +478,11 @@ if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').m
 setInterval(step, 80);
 draw(F[0]);
 </script></body></html>"""
-    html = (html
-            .replace("@TITLE@", str(title))
+    # The title is caller-supplied text (a run label from the dashboard build,
+    # a seed caption from the CLI), same trust level as the run-directory names
+    # report.py and dashboard.py escape, so it is escaped here too.
+    page = (page
+            .replace("@TITLE@", html.escape(str(title), quote=True))
             .replace("@KILLS@", str(summary["kills"]))
             .replace("@DEATHS@", str(summary["deaths"]))
             .replace("@SHOTS@", str(summary["shots"]))
@@ -485,7 +494,7 @@ draw(F[0]);
             .replace("@FRAMES@", js_frames)
             .replace("@WALLS@", js_walls))
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
+    out.write_text(page, encoding="utf-8")
     return out
 
 

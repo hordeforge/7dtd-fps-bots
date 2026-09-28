@@ -252,7 +252,8 @@ def build(runs, out: Path, replays):
         chunks.append('<div class="grid">')
         encoded = {label: base64.b64encode(html.encode()).decode() for label, html in replays.items()}
         for label in replays:
-            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{label}</div><iframe id="f{abs(hash(label))%9999}" title="Arena replay {label}" style="width:100%" height="430"></iframe></div>')
+            safe = html.escape(str(label), quote=True)
+            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{safe}</div><iframe id="f{abs(hash(label))%9999}" title="Arena replay {safe}" style="width:100%" height="430"></iframe></div>')
         chunks.append('</div>')
         # Set srcdoc via JS so large embedded HTML/payloads don't need escaping in attributes.
         chunks.append("<script>")
