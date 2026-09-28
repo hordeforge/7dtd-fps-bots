@@ -113,8 +113,10 @@ type WebModContract = {
 
 // The dashboard HTTP wrapper may hand us the axios response, the {data: ...}
 // envelope, or the bare payload; accept all three. The payload is untyped
-// runtime JSON, so the envelope unwrap is the boundary parse.
-function unwrapSnap(o: unknown): BotStatus {
+// runtime JSON, so the envelope unwrap is the boundary parse. One unwrap for
+// the polled status and the POST result, so the two cannot disagree on where
+// the server's fields live.
+function unwrapData(o: unknown): Record<string, unknown> {
   if (typeof o !== "object" || o === null) {
     return {};
   }
@@ -130,7 +132,8 @@ function unwrapSnap(o: unknown): BotStatus {
   if (typeof data2 !== "object" || data2 === null) {
     return inner;
   }
-  return data2;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped JSON payload boundary; SAFETY: typeof above proves the runtime value is an object
+  return data2 as Record<string, unknown>;
 }
 
 function numOr(v: unknown, fallback: number): number {
@@ -177,7 +180,7 @@ function newRequestId(): string {
   if (c !== undefined && typeof c.randomUUID === "function") {
     return c.randomUUID();
   }
-  return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4_294_967_296).toString(36)}`;
+  return `botmod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function botCount(count: number | undefined): string {
@@ -195,7 +198,7 @@ function actionLabel(body: BotAction): string {
     case "spawnNear":
       return `Spawn ${botCount(body.count)} near ${strOrEmpty(body.player) === "" ? "a player" : strOrEmpty(body.player)}`;
     case "remove":
-      return "Remove all bots";
+      return "Remove all";
     case "removeOne":
       return "Remove bot";
     case "enable":
@@ -203,17 +206,17 @@ function actionLabel(body: BotAction): string {
     case "disable":
       return "Disable bots";
     case "skill":
-      return `Set skill level ${numOr(body.level, 0)}`;
+      return `Skill ${numOr(body.level, 0)}`;
     case "neural":
-      return body.on === true ? "Switch to the GA brain" : "Switch to the static AI";
+      return body.on === true ? "GA brain on" : "GA brain off";
     case "team":
-      return body.on === true ? "Turn squad mode on" : "Turn squad mode off";
+      return body.on === true ? "Squad mode on" : "Squad mode off";
     case "vs":
       return `Shoot at ${strOrEmpty(body.target)}: ${body.on === true ? "on" : "off"}`;
     case "setTeam":
-      return `Move ${strOrEmpty(body.name)} to ${teamLabel(body.team)}`;
+      return `${strOrEmpty(body.name)} to ${teamLabel(body.team)}`;
     case "teamCount":
-      return `Set the number of teams to ${numOr(body.count, 0)}`;
+      return `Teams: ${numOr(body.count, 0)}`;
     case "clearTeams":
       return "Clear teams";
     default:
@@ -237,10 +240,45 @@ function rejectionCode(err: unknown): string {
   return strOrEmpty(cur);
 }
 
+// What the server actually did, for the actions that answer with a count or a
+// flag. A 200 is not a success by itself: `spawnNear` answers
+// {"spawned":0,"found":false} for a player who left between the poll and the
+// click, `spawn` answers {"spawned":0} once MaxBots is reached, `removeOne`
+// answers {"removed":false} for an id that is already gone, and `neural`
+// answers {"loaded":false,"reason":"..."} when the weights file did not load.
+// Announcing "done" for those told the operator the command worked when
+// nothing changed. The other actions answer with the value they applied and
+// carry none of these fields, so they fall through to the plain "done".
+function outcome(body: BotAction, label: string, response: unknown): { text: string; bad: boolean } | null {
+  const d = unwrapData(response);
+  if (body.action === "neural" && body.on === true && d.loaded === false) {
+    return { text: `${label}: failed, weights not loaded (${strOrEmpty(d.reason)}).`, bad: true };
+  }
+  let why = "";
+  if (d.found === false) {
+    why = "that player is offline";
+  } else if (d.removed === false) {
+    why = "that bot is gone";
+  } else if (d.spawned === 0) {
+    why = "the bot cap is reached";
+  } else if (d.spawned === undefined) {
+    return null;
+  }
+  if (why !== "") {
+    return { text: `${label}: failed, ${why}.`, bad: true };
+  }
+  const n = numOr(d.spawned, 0);
+  const want = numOr(body.count, 1);
+  return n < want
+    ? { text: `${label}: partial, ${n}/${want} spawned.`, bad: true }
+    : { text: `${label}: done, ${n} spawned.`, bad: false };
+}
+
 // Fire a bot command. The 5s poll shows the real state after the call, so the
 // result line carries the outcome: a rejected POST is reported instead of the
-// button silently springing back. The result line is its own live region, so
-// the outcome reaches assistive tech as well as sighted users.
+// button silently springing back, and a 200 that reports nothing done is too
+// (see outcome above). The result line is its own live region, so the outcome
+// reaches assistive tech as well as sighted users.
 function postAction(opts: {
   HTTP: PanelProps["HTTP"];
   busy: string;
@@ -261,8 +299,9 @@ function postAction(opts: {
   opts.setStatus({ text: `${label}: sending...`, bad: false });
   const body: BotAction = { ...opts.body, requestId: newRequestId() };
   void opts.HTTP.post("/api/bot", body)
-    .then((): void => {
-      opts.setStatus({ text: `${label}: done`, bad: false });
+    .then((response: unknown): void => {
+      const done = outcome(opts.body, label, response);
+      opts.setStatus(done ?? { text: `${label}: done`, bad: false });
       void opts.refetch();
     })
     .catch((error: unknown): void => {
@@ -343,10 +382,7 @@ function bySortKey(sort: SortState): (a: BotStat, b: BotStat) => number {
     if (av < bv) {
       return -sort.dir;
     }
-    if (av > bv) {
-      return sort.dir;
-    }
-    return 0;
+    return av > bv ? sort.dir : 0;
   };
 }
 
@@ -373,12 +409,25 @@ const TEAM_LABELS: ReadonlyArray<string> = [
   "FFA", "Team 1", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8"
 ];
 
+// Bucket count the panel renders, clamped to the 0..8 range the server holds
+// (BotConfig.SetTeamCount). One definition, so the buckets, the Team-column
+// options and the +/- buttons cannot drift on how many teams exist.
+const TEAM_MAX = 8;
+
+function teamCountOf(s: BotStatus): number {
+  return Math.max(0, Math.min(TEAM_MAX, numOr(s.teamCount, 2)));
+}
+
+function teamSlot(team: number | undefined): number {
+  return Math.min(Math.max(0, numOr(team, 0)), TEAM_MAX);
+}
+
 function teamColor(team: number | undefined): string {
-  return TEAM_COLORS[Math.min(numOr(team, 0), TEAM_COLORS.length - 1)];
+  return TEAM_COLORS[teamSlot(team)];
 }
 
 function teamLabel(team: number | undefined): string {
-  return TEAM_LABELS[Math.min(numOr(team, 0), TEAM_LABELS.length - 1)];
+  return TEAM_LABELS[teamSlot(team)];
 }
 
 function renderBotHeader(h: CreateElement, s: BotStatus, onlinePlayers: Array<BotPlayer>, pill: (on: boolean, onLabel: string, offLabel: string) => unknown): unknown {
@@ -499,7 +548,7 @@ function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: 
 }
 
 function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, busy: string, post: (body: BotAction) => void, armedBtn: (label: string, body: BotAction, cls?: string) => unknown, dragName: string | null, setDragName: (v: string | null) => void, dropOver: number | null, setDropOver: (v: number | null) => void): unknown {
-  const teamCount = Math.max(0, Math.min(8, numOr(s.teamCount, 2)));
+  const teamCount = teamCountOf(s);
   const buckets: Array<{ team: number; label: string; color: string; members: Array<BotStat> }> = [];
   for (let t = 0; t <= teamCount; t++) {
     buckets.push({
@@ -548,15 +597,14 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
               onDragEnd: (): void => setDragName(null)
             }, b.name)))),
     h("button", {
-      className: "botmod-btn", title: "Fewer teams", disabled: busy !== "" || teamCount <= 0,
+      className: "botmod-btn", disabled: busy !== "" || teamCount <= 0,
       onClick: (): void => post({ action: "teamCount", count: teamCount - 1 })
     }, "− teams"),
     h("button", {
-      className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= 8,
+      className: "botmod-btn", disabled: busy !== "" || teamCount >= TEAM_MAX,
       onClick: (): void => post({ action: "teamCount", count: teamCount + 1 })
     }, "+ teams"),
-    armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"),
-    h("span", { className: "botmod-window" }, "drag a bot onto a team, or use the Team column in the scoreboard · assignments are saved"));
+    armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"));
 }
 
 function renderConfigRow(h: CreateElement, s: BotStatus): unknown {
@@ -602,7 +650,6 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     key: String(b.entityId),
     draggable: true,
     className: rowClass,
-    title: "Drag onto a team bucket",
     onDragStart: (e: { dataTransfer: { setData: (t: string, v: string) => void; effectAllowed: string } }): void => {
       e.dataTransfer.setData("text/plain", b.name);
       e.dataTransfer.effectAllowed = "move";
@@ -634,8 +681,7 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     }, teamOptions)),
     h("td", { className: "botmod-state" }, b.status),
     h("td", null, h("button", {
-      className: "botmod-btn botmod-danger botmod-remove", title: "Remove bot",
-      "aria-label": `Remove bot ${b.name}`,
+      className: "botmod-btn botmod-danger botmod-remove", "aria-label": `Remove bot ${b.name}`,
       disabled: busy !== "", onClick: (): void => post({ action: "removeOne", entityId: b.entityId })
     }, "✕")));
 }
@@ -665,7 +711,7 @@ function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, 
         title: hint === undefined ? `Sort by ${label}` : `Sort by ${hint}`,
         onClick: (): void => setSort((srt: SortState): SortState => ({ key, dir: srt.key === key ? -srt.dir : -1 }))
       }, label, sortArrowNode(h, sort, key)));
-  const teamCount = Math.max(0, Math.min(8, numOr(s.teamCount, 2)));
+  const teamCount = teamCountOf(s);
   const teamOptions: Array<unknown> = [];
   for (let t = 0; t <= teamCount; t++) {
     teamOptions.push(h("option", { key: t, value: String(t) }, teamLabel(t)));
@@ -684,7 +730,7 @@ function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, 
   };
   prevRowSigs = sigs;
   return h("div", { className: "botmod-scoreboard" },
-    h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team or use the Team column`),
+    h("h3", null, `Scoreboard (${bots.length}) · drag a row onto a team`),
     bots.length === 0
       ? h("p", { className: "botmod-empty" }, "No bots alive. Set a count above and press Spawn to add some.")
       : h("div", { className: "botmod-tablescroll" },
@@ -709,7 +755,7 @@ function renderQueryError(h: CreateElement, errStatus: number, onRetry: () => vo
     h("h2", null, "Bot Control"),
     h("span", { className: `botmod-pill ${auth ? "botmod-bad" : "botmod-off"}`, role: "status" }, auth ? "AUTH REQUIRED" : "API ERROR"),
     h("p", { role: "alert" }, auth
-      ? "Authentication required: log in to the dashboard as an admin (permission level 0) to control bots."
+      ? "Authentication required: log in to the dashboard as an admin to control bots."
       : `The bot API is not responding (HTTP ${errStatus === 0 ? "error" : String(errStatus)}). The panel keeps retrying every ${POLL_INTERVAL_MS / 1000} seconds.`),
     auth
       ? h("button", { className: "botmod-btn", onClick: (): void => { location.href = "/"; } }, "Log in")
@@ -768,7 +814,7 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
     return renderLoading(h);
   }
 
-  const s = unwrapSnap(query.data);
+  const s: BotStatus = unwrapData(query.data);
   const enabled = s.enabled === true;
   const bots = listOrEmpty<BotStat>(s.bots);
   const onlinePlayers = listOrEmpty<BotPlayer>(s.players);

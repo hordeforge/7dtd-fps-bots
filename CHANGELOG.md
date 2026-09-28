@@ -142,6 +142,26 @@ of them removes a config key or a console command.
 
 ### Fixed
 
+- The web panel reported `done` for any 200, including the ones the API
+  answers when nothing happened: `spawn` and `spawnNear` return
+  `{"spawned":0}` at the bot cap (and `{"found":false}` when the named player
+  left between polls), `removeOne` returns `{"removed":false}` for an id that
+  is already gone, and `neural` returns `{"loaded":false,"reason":...}` when
+  the weights file did not load. The result line now names each outcome
+  (failed, partial, or the count that spawned) instead of claiming success.
+- The dashboard's envelope unwrap is shared with the POST path rather than
+  duplicated, and the team-bucket clamp is defined once (`teamCountOf`,
+  `teamSlot`) instead of repeated in the teams card and the scoreboard.
+- `evolve.py` exited 1 for a flag value outside its documented range
+  (`--islands`, `--activation`, `--curriculum`, `--resume auto`). The exit
+  table in `tools/ga/README.md` and the CLI epilog reserve 2 for a bad
+  command line and 1 for a run that started and could not finish, so a typo
+  read as a training failure to any caller branching on the code. The range
+  checks now print to stderr and exit 2.
+- The GA dashboard never highlighted the champion run: `ga.save_best` wrote
+  `best.meta.json` without the run `seed` that `dashboard.build` matches
+  against each run's `config.json`, so the comparison was `None == <int>` for
+  every real run. The seed now travels with the champion.
 - `IdempotencyLedger.cs` and `IdempotencyLedgerFuzzTests.cs` imported
   `BotMod.Config` for the `BotText` character count they call, which lives in
   `BotMod.Foundation`. The suites compile a reduced source set without

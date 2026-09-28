@@ -227,4 +227,10 @@ def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config
         "generation": generation, "fitness": float(fitness),
         "activation": payload["activation"],
         "configHash": config_hash(config),
+        # The run seed travels with the champion: dashboard.build matches it
+        # against each run's config.json to highlight the run that produced
+        # best.json. Without it the comparison is None == <int> for every run,
+        # so the champion was never highlighted (it only ever matched a run
+        # whose config.json was unreadable, where both sides are None).
+        "seed": config.get("seed"),
     }, indent=2))

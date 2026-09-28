@@ -203,6 +203,16 @@ def _held_probe(weights) -> float:
         return float("-inf")
 
 
+def _bad_arg(message: str) -> None:
+    """Exit 2 with a diagnostic on stderr: every caller is a value outside its
+    documented range, which the exit-code table (README, epilog) classifies as
+    a bad command line. `raise SystemExit(msg)` exits 1, the code reserved for
+    a run that started and could not finish, so a typo read as a training
+    failure. Returns None so callers read as plain statements."""
+    print(message, file=sys.stderr)
+    raise SystemExit(2)
+
+
 def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | None = None, activation: str = "tanh", islands: int = 1, curriculum: str = "mixed", fitness: dict | None = None, label: str | None = None):
     # Repo root anchors every relative output path below (evolved/runs/...,
     # evolved/best.json). If the chdir fails the run must stop here with the
@@ -213,11 +223,13 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
     rng = np.random.default_rng(seed)
 
     if activation not in ("tanh", "relu"):
-        raise SystemExit(f"activation must be tanh or relu, got {activation}")
+        _bad_arg(f"activation must be tanh or relu, got {activation}")
     if curriculum not in ("mixed", "pvp_first", "horde_first"):
-        raise SystemExit(f"curriculum must be mixed/pvp_first/horde_first, got {curriculum}")
+        _bad_arg(f"curriculum must be mixed/pvp_first/horde_first, got {curriculum}")
+    if islands < 1 or islands > 8:
+        _bad_arg(f"islands must be 1..8, got {islands}")
     if resume == "auto":
-        raise SystemExit("--resume needs a run dir (e.g. evolved/runs/<ts>); 'auto' is not supported")
+        _bad_arg("--resume needs a run dir (e.g. evolved/runs/<ts>); 'auto' is not supported")
     harness.ACTIVATION = 1 if activation == "relu" else 0
 
     tag = f"_{activation}" if activation != "tanh" else ""
