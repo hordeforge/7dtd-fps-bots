@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using BotMod.Config;
 using BotMod.Foundation;
 using UnityEngine;
@@ -369,8 +370,14 @@ namespace BotMod.Core
                     // no http:// SSRF, no entity-expansion DoS) and drops
                     // non-finite coordinates. A malformed document throws and
                     // is reported by the catch below, which leaves the memoized
-                    // list untouched.
-                    var points = SpawnPointXml.Parse(File.ReadAllText(path));
+                    // list untouched. Explicit UTF-8: the parameterless
+                    // File.ReadAllText decodes with the process ANSI codepage
+                    // (cp1252 on a default Windows host), so a world file carrying
+                    // a non-ASCII comment or attribute name decodes to mojibake,
+                    // and a byte sequence that is not valid in that codepage
+                    // becomes U+FFFD instead of being rejected. Every other file
+                    // boundary in the mod names Encoding.UTF8 for the same reason.
+                    var points = SpawnPointXml.Parse(File.ReadAllText(path, Encoding.UTF8));
                     var list = new List<Vector3>(points.Count);
                     foreach (var p in points) list.Add(new Vector3(p.X, p.Y, p.Z));
                     if (list.Count > 0) { _dmSpawns = list; _dmSpawnsWorld = worldName; ModApi.Log($"DM spawns: {list.Count} from {path} (world={worldName})"); return list; }
