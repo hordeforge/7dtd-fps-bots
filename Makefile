@@ -1,7 +1,7 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot clean lint-html lint-webui lint-shell lint-python lint-yaml check preflight
+.PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot test-recovery clean lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -15,7 +15,7 @@ Targets:
   make ci           everything CI runs: make check then make test
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make verify-reproducible  build the payload twice (second time from another path) and package twice, then compare bytes
-  make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness
+  make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness + backup/restore drill
   make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff, curl)
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
@@ -26,6 +26,7 @@ Targets:
   make uninstall    remove Mods/BotMod from the server (snapshots operator config first)
   make backup       snapshot operator config + champion weights into backups/<utc>/
   make verify-snapshot SNAPSHOT=backups/<utc>  check a snapshot's digests, write nothing
+  make test-recovery  drive backup, verify, restore and their failure paths on scratch trees
   make restore SNAPSHOT=backups/<utc>  verify the snapshot, then put the config back
   make clean        remove dist/ and C# obj/bin intermediates
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
@@ -74,7 +75,7 @@ preflight:
 	  echo "Pinned versions for the fetched ones live in scripts/tool-versions.sh" >&2; \
 	  exit 1; \
 	fi
-check: preflight lint-shell lint-yaml lint-html lint-webui lint-python
+check: preflight lint-shell lint-yaml lint-html lint-webui lint-python test-recovery
 install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:
@@ -87,5 +88,7 @@ restore:
 verify-snapshot:
 	@test -n "$(SNAPSHOT)" || { echo "usage: make verify-snapshot SNAPSHOT=backups/<utc-stamp>" >&2; exit 1; }
 	bash "$(SCRIPTS)/restore-state.sh" "$(SNAPSHOT)"
+test-recovery:
+	bash "$(SCRIPTS)/test-state-recovery.sh"
 clean:
 	rm -rf "$(ROOT)/dist" "$(ROOT)/Source/BotMod/bin" "$(ROOT)/Source/BotMod/obj"

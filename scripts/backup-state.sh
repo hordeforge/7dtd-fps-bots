@@ -4,7 +4,8 @@
 #
 # What is mutable and host-local: the deployed operator config
 # (<server>/Mods/BotMod/Config/botmod.json + .bak, or the file BOTMOD_CONFIG
-# names when the deployment mounts its config elsewhere) and the champion
+# names when the deployment mounts its config elsewhere, or the container
+# path ModApi.PersistConfigField writes to when it exists) and the champion
 # weights in evolved/. Everything else the mod writes is process memory (see
 # docs/recovery.md), so this is the whole recovery surface.
 #
@@ -72,10 +73,24 @@ if [[ -n "$CONFIG_PATH" ]]; then
   copy_state "$CONFIG_PATH.bak" "botmod.config-path.json.bak"
 fi
 
+# The container deployment writes here too: ModApi.ConfigWritePaths lists
+# /mods/BotMod/Config/botmod.json alongside the mod-dir copy whenever the
+# file exists, so in that deployment this is where the admin decisions live.
+# Omitting it from the snapshot would leave the one config that can be written
+# outside the server root unbacked. The mod drops this candidate when
+# BOTMOD_CONFIG is set, so the snapshot drops it too. BOTMOD_CONTAINER_CONFIG
+# overrides the path for a mount somewhere else; absent file, nothing copied.
+CONTAINER_CONFIG="${BOTMOD_CONTAINER_CONFIG:-/mods/BotMod/Config}"
+if [[ -z "$CONFIG_PATH" && -n "$CONTAINER_CONFIG" ]]; then
+  copy_state "$CONTAINER_CONFIG/botmod.json" "botmod.container.json"
+  copy_state "$CONTAINER_CONFIG/botmod.json.bak" "botmod.container.json.bak"
+fi
+
 if [[ "$copied" == 0 ]]; then
   rmdir "$SNAP/evolved" "$SNAP" 2>/dev/null || true
   echo "ERROR: no BotMod state found to back up" >&2
   echo "  server config: $DS/Mods/BotMod/Config/botmod.json (is the mod installed?)" >&2
+  echo "  container config: $CONTAINER_CONFIG/botmod.json (set BOTMOD_CONTAINER_CONFIG if mounted elsewhere)" >&2
   echo "  champions:     $ROOT/evolved/best.json" >&2
   echo "Set SEVENDTD_DS_DIR to the server install root and retry." >&2
   exit 1
@@ -88,6 +103,9 @@ fi
   echo "# BotMod state snapshot $STAMP"
   echo "# server=$DS"
   if [[ -n "$CONFIG_PATH" ]]; then echo "# config-path=$CONFIG_PATH"; fi
+  if [[ -z "$CONFIG_PATH" && ( -f "$SNAP/botmod.container.json" || -f "$SNAP/botmod.container.json.bak" ) ]]; then
+    echo "# container-config=$CONTAINER_CONFIG"
+  fi
   echo "# restore: bash scripts/restore-state.sh '$SNAP'"
   (cd "$SNAP" && find . -type f ! -name MANIFEST | sed 's|^\./||' | sort | xargs "${SHA[@]}")
 } > "$SNAP/MANIFEST"

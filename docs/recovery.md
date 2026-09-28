@@ -9,7 +9,7 @@ back. Everything here is derived from code and scripts in this repo
 
 | State | Lives where | Mutable at runtime? | Survives |
 |---|---|---|---|
-| Operator config | `<dedi>/Mods/BotMod/Config/botmod.json` (+ `.bak`), or the file `BOTMOD_CONFIG` names | yes: dashboard actions and console persists write it live (`ModApi.PersistConfigField`: `Enabled`, `TargetBotCount`, `Difficulty`, `BotWeapon`, `UseNeuralBrain`, `BotVsBot/Zombie/Player`, `BotTeam`, `BotTeamCount`, `TeamAssignments`) | reinstalls (install.sh preserves the mod-dir copy; a `BOTMOD_CONFIG` file lives outside it and is never touched), torn/corrupt writes (.bak fallback in `BotConfig.Load`), `make uninstall` (snapshot first). Does NOT survive instance/disk loss unless snapshots are written off-host. `make backup` snapshots whichever file is live: set `BOTMOD_CONFIG` on the backup host too, and `make restore` refuses a `BOTMOD_CONFIG` snapshot without it. |
+| Operator config | `<dedi>/Mods/BotMod/Config/botmod.json` (+ `.bak`), or the file `BOTMOD_CONFIG` names, or `/mods/BotMod/Config/botmod.json` when a container deployment has it | yes: dashboard actions and console persists write it live (`ModApi.PersistConfigField`: `Enabled`, `TargetBotCount`, `Difficulty`, `BotWeapon`, `UseNeuralBrain`, `BotVsBot/Zombie/Player`, `BotTeam`, `BotTeamCount`, `TeamAssignments`) | reinstalls (install.sh preserves the mod-dir copy; a `BOTMOD_CONFIG` file lives outside it and is never touched), torn/corrupt writes (.bak fallback in `BotConfig.Load`), `make uninstall` (snapshot first). Does NOT survive instance/disk loss unless snapshots are written off-host. `make backup` snapshots whichever file is live: set `BOTMOD_CONFIG` on the backup host too, and `make restore` refuses a `BOTMOD_CONFIG` snapshot without it. The container path is snapshotted as `botmod.container.json` (override with `BOTMOD_CONTAINER_CONFIG`), and `make restore` writes it only where that mount exists, refusing a container-only snapshot on a host that lacks it. |
 | Champion weights | `evolved/best.json` + `best.meta.json` | no (mod reads only; promotion is a git commit per `evolved/README.md`) | anything short of losing git remote + all clones |
 | Default config template | repo `config/botmod.json`, shipped fresh on every build/install | no | git |
 | Training-run artifacts | `evolved/runs/<ts>/` | written by tools/ga during training | nothing (git-ignored by design); reproducible only by re-running training (seeds are in the dir names; runs cost up to days, see docs/research REPORTs). Mitigate by promoting champions to git. |
@@ -44,7 +44,8 @@ host and the operator, not by the mod.
 
 `scripts/backup-state.sh` snapshots the whole recovery surface (deployed
 `botmod.json` + `.bak`, or the `BOTMOD_CONFIG` file when the deployment mounts
-its config elsewhere, plus the champion weights) into
+its config elsewhere, or the container config `ModApi.PersistConfigField` also
+writes, plus the champion weights) into
 `$BOTMOD_STATE_BACKUP_DIR/<utc-timestamp>/`, git-ignored by default at
 `backups/`. `scripts/restore-state.sh` verifies the snapshot against its
 `MANIFEST` (sha256 per file, plus a check that no unlisted file is present)
@@ -110,11 +111,16 @@ that, and then the state is gone.
 
 ## Drill
 
-Prove the above without touching production: point `SEVENDTD_DS_DIR` at a
-scratch dedicated-server install, run steps 2-5 there once after any change to
-config handling, and confirm the expected startup log lines.
-
-The snapshot path drills on its own, with no game install needed:
+The snapshot path is drilled automatically: `make test-recovery`
+(`scripts/test-state-recovery.sh`, also run by `make check` in CI) builds
+scratch server roots, snapshots them, verifies, restores onto a second root,
+and asserts the restored config is byte-identical to the original. It drives
+the failure paths too, so a green run means verification can actually fail: a
+tampered file, a listed file missing, an unlisted file added, a missing
+MANIFEST, a snapshot with no config in it, a `BOTMOD_CONFIG` snapshot restored
+without the override, and a container-only snapshot restored onto a host
+without that mount. The rest of the runbook needs the game install, so it
+stays manual:
 
 ```bash
 make backup
@@ -122,14 +128,17 @@ make verify-snapshot SNAPSHOT=backups/<stamp>
 SEVENDTD_DS_DIR=<scratch-ds-dir> make restore SNAPSHOT=backups/<stamp>
 ```
 
-Tamper with a snapshot file and re-run `make verify-snapshot`: it must report
-`CORRUPT` and exit non-zero, proving verification can actually fail.
+Then, to prove the mod itself reads a restored config, point `SEVENDTD_DS_DIR`
+at a scratch dedicated-server install, run the restore onto it, start the
+server, and confirm the expected startup log lines.
 
 ## Open questions (not answerable from this repo)
 
-- Is `/mods/BotMod/Config/botmod.json` a separate host mount in your container
-  deployment? PersistConfigField also writes there when present; if mounted,
-  operator config survives even a wiped image layer.
 - Off-host backup of the dedi host is owned by whoever operates the machine;
   nothing in this repo can protect host-local files from disk loss beyond
   whatever `BOTMOD_STATE_BACKUP_DIR` points at.
+- Whether `/mods/BotMod/Config/botmod.json` is a persistent mount in your
+  container deployment, and whether `/mods` is where `make restore` should put
+  it back. The snapshot and restore scripts handle the path when it exists on
+  the host running them (`BOTMOD_CONTAINER_CONFIG` moves it); whether that
+  host is the same one that lost the data is an operator decision.

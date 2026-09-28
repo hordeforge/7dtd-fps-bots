@@ -29,12 +29,14 @@ if [[ ! -d "$DST" ]]; then
 fi
 
 # Operator state is the config the server actually reads: the mod dir's own
-# Config/botmod.json, or the file BOTMOD_CONFIG names when the deployment
-# mounts its config elsewhere. The override is passed to backup-state.sh as
-# part of the environment, so the snapshot covers whichever file holds the
-# admin decisions.
+# Config/botmod.json, the file BOTMOD_CONFIG names when the deployment mounts
+# its config elsewhere, or the container path ModApi.PersistConfigField writes
+# to when it exists. The override is passed to backup-state.sh as part of the
+# environment, so the snapshot covers whichever file holds the admin decisions.
+CONTAINER_CONFIG="${BOTMOD_CONTAINER_CONFIG:-/mods/BotMod/Config}"
 if [[ ! -f "$DST/Config/botmod.json" && ! -f "$DST/Config/botmod.json.bak" \
-      && ! -f "${BOTMOD_CONFIG:-}" ]]; then
+      && ! -f "${BOTMOD_CONFIG:-}" \
+      && ! -f "$CONTAINER_CONFIG/botmod.json" && ! -f "$CONTAINER_CONFIG/botmod.json.bak" ]]; then
   echo "No operator config in $DST/Config; nothing to snapshot."
 elif [[ "${BOTMOD_SKIP_BACKUP:-0}" == 1 ]]; then
   echo "WARNING: BOTMOD_SKIP_BACKUP=1, deleting the operator config unrecoverably" >&2

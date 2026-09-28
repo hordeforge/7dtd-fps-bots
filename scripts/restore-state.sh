@@ -11,7 +11,8 @@
 #
 # Restored config lands in <server>/Mods/BotMod/Config/ (created if the mod
 # is not installed), or in the file BOTMOD_CONFIG names when this snapshot was
-# taken from such a deployment. Champion weights are printed, not copied: they
+# taken from such a deployment, or in the container path it was taken from
+# when that path exists here. Champion weights are printed, not copied: they
 # are committed in the repo, so a restore of weights means a git checkout, and
 # this script's job is to say what the snapshot holds.
 set -euo pipefail
@@ -130,6 +131,33 @@ if [[ -f "$SNAP/botmod.config-path.json" || -f "$SNAP/botmod.config-path.json.ba
     restored=$((restored + 1))
   done
 fi
+
+# Same rule for the container path the mod writes when it exists: restoring it
+# anywhere the server does not read is a success message over a no-op, so the
+# target has to exist before anything is copied.
+CONTAINER_CONFIG="${BOTMOD_CONTAINER_CONFIG:-/mods/BotMod/Config}"
+if [[ -f "$SNAP/botmod.container.json" || -f "$SNAP/botmod.container.json.bak" ]]; then
+  if [[ ! -d "$CONTAINER_CONFIG" ]]; then
+    if [[ -f "$SNAP/botmod.json" || -f "$SNAP/botmod.json.bak" || -f "$SNAP/botmod.config-path.json" || -f "$SNAP/botmod.config-path.json.bak" ]]; then
+      echo "WARNING: skipping the container config, '$CONTAINER_CONFIG' does not exist on this host." >&2
+      echo "  (backup host path: $(sed -n 's/^# container-config=//p' "$MANIFEST"))" >&2
+      echo "  Restore it on the host that mounts that path; the other snapshot configs are still restored." >&2
+    else
+      echo "ERROR: this snapshot holds only the container config, and '$CONTAINER_CONFIG' does not exist here." >&2
+      echo "  (backup host path: $(sed -n 's/^# container-config=//p' "$MANIFEST"))" >&2
+      echo "  Set BOTMOD_CONTAINER_CONFIG to that mount and retry, or restore onto the host that has it." >&2
+      exit 1
+    fi
+  else
+    for f in botmod.container.json botmod.container.json.bak; do
+      [[ -f "$SNAP/$f" ]] || continue
+      cp "$SNAP/$f" "$CONTAINER_CONFIG/${f#botmod.container.json}"
+      echo "Restored -> $CONTAINER_CONFIG/${f#botmod.container.json}"
+      restored=$((restored + 1))
+    done
+  fi
+fi
+
 for f in botmod.json botmod.json.bak; do
   [[ -f "$SNAP/$f" ]] || continue
   mkdir -p "$DS/Mods/BotMod/Config"

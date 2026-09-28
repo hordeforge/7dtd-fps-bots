@@ -40,7 +40,9 @@ not C#; `scripts/build.sh` compiles it into the shipped `Mods/BotMod/WebMod/`.
 ## Commands
 
 - `make check` is what CI runs: shellcheck, yamllint, vnu HTML lint, tsc + oxlint +
-  committed-bundle freshness, ruff. `make preflight` names the tools it needs;
+  committed-bundle freshness, ruff, and `make test-recovery` (the backup/verify/
+  restore drill in `scripts/test-state-recovery.sh`, no game install needed).
+  `make preflight` names the tools it needs;
   `make ci` is `make check` plus `make test`, the full local gate.
 - `make test` is not part of `make check`. CI installs mono and runs
   `bash scripts/test-idempotency.sh` separately. `make test SUITE=<name>` (names
