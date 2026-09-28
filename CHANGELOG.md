@@ -25,6 +25,10 @@ fails on drift between them.
 
 ### Fixed
 
+- `tools/ga/determinism_check.py`'s determinism check zipped its two run
+  records without `strict=True`, the one `zip()` the B905 entry under Added
+  claimed was covered. A truncated run compared unequal lengths silently
+  instead of raising.
 - `tools/ga/report.py`'s `weight_hist` and `best_net` were annotated
   `-> str | None` while returning PNG bytes, so every caller that embedded the
   result in an `<img>` was mistyped. Both now say `bytes | None`.
@@ -58,6 +62,19 @@ fails on drift between them.
 
 ### Changed
 
+- `scripts/lint-webui.sh` verifies the vendored dmmulroy/anti-slop source
+  archive against a pinned SHA-256 (`ANTI_SLOP_SHA256` in
+  `scripts/tool-versions.sh`) on fetch and on every cached run, so the one
+  fetched dependency with no registry behind it cannot be swapped or tampered
+  with unnoticed. The npm pins it installs alongside resolve through the
+  registry's own per-version integrity fields and are unchanged.
+- `tools/ga/requirements.txt` caps numpy below 2.0. NumPy 2 moved the
+  `Generator` bit streams the trainer is seeded from, so an install that
+  resolved to 2.x reproduced neither the committed `evolved/best.json` nor the
+  byte-identical seeded runs `tools/ga/README.md` promises. Pillow is now a
+  declared, capped entry instead of a comment: `report.py` and `dashboard.py`
+  import it for the palette-PNG optimization, and the code is correct without
+  it.
 - Every `tools/ga` CLI (`evolve.py`, `sweep.py`, `report.py`, `dashboard.py`,
   `viz.py`, `replay.py`) now has a `description`, per-flag help, worked examples
   and an exit-status section in `--help`, all following the same 0/1/2

@@ -31,8 +31,9 @@ webmod_dir="$root/Source/BotMod/WebMod"
 bunx -p "typescript@$TSC_VERSION" tsc -p "$webmod_dir/tsconfig.json" --noEmit
 
 # 2. Lint the source with oxlint. The @rikalabs plugin, the vendored
-#    dmmulroy/anti-slop plugin source (pinned by ANTI_SLOP_SHA; the project is
-#    vendored source, not an npm package), and oxlint-tsgolint (the type-aware
+#    dmmulroy/anti-slop plugin source (pinned by ANTI_SLOP_SHA and checked
+#    against ANTI_SLOP_SHA256; the project is vendored source, not an npm
+#    package), and oxlint-tsgolint (the type-aware
 #    backend, see options.typeAware in .oxlintrc.jsonc) are fetched into the
 #    cache (no-op when the pinned versions are already present) and oxlint runs
 #    next to them because jsPlugins resolve relative to the config file's
@@ -42,10 +43,42 @@ bunx -p "typescript@$TSC_VERSION" tsc -p "$webmod_dir/tsconfig.json" --noEmit
 #    installed. @oxlint/plugins is the plugin API the anti-slop source
 #    imports; without it the plugin cannot load.
 mkdir -p "$cache_dir"
+archive="$cache_dir/anti-slop.tar.gz"
+# The archive is the one fetched dependency with no registry behind it, so the
+# commit pin is checked against a digest (ANTI_SLOP_SHA256, tool-versions.sh).
+# Verified on fetch and on every later run that still has the archive cached, so
+# a tampered cache fails the gate too rather than linting against whatever is
+# on disk.
+archive_digest() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+verify_archive() {
+  local actual
+  actual="$(archive_digest "$1")"
+  if [ "$actual" != "$ANTI_SLOP_SHA256" ]; then
+    echo "BotMod: lint-webui: anti-slop archive sha256 mismatch, refusing to lint against unverified plugin source" >&2
+    echo "  file:     $1" >&2
+    echo "  expected: $ANTI_SLOP_SHA256 (anti-slop commit $ANTI_SLOP_SHA)" >&2
+    echo "  actual:   $actual" >&2
+    echo "  Delete the file to re-fetch, or re-pin ANTI_SLOP_SHA256 in scripts/tool-versions.sh once the bytes match the pinned commit." >&2
+    return 1
+  fi
+}
 if [ ! -d "$cache_dir/anti-slop-src" ]; then
-  curl -fsSL "https://github.com/dmmulroy/anti-slop/archive/$ANTI_SLOP_SHA.tar.gz" -o "$cache_dir/anti-slop.tar.gz"
+  curl -fsSL "https://github.com/dmmulroy/anti-slop/archive/$ANTI_SLOP_SHA.tar.gz" -o "$archive.part"
+  if ! verify_archive "$archive.part"; then
+    rm -f "$archive.part"
+    exit 1
+  fi
+  mv "$archive.part" "$archive"
   mkdir -p "$cache_dir/anti-slop-src"
-  tar xzf "$cache_dir/anti-slop.tar.gz" -C "$cache_dir/anti-slop-src" --strip-components=2 "anti-slop-$ANTI_SLOP_SHA/src"
+  tar xzf "$archive" -C "$cache_dir/anti-slop-src" --strip-components=2 "anti-slop-$ANTI_SLOP_SHA/src"
+elif [ -f "$archive" ]; then
+  verify_archive "$archive" || exit 1
 fi
 # type module: the vendored anti-slop plugin source is ESM; without the field
 # node reparses it with a MODULE_TYPELESS_PACKAGE_JSON warning.

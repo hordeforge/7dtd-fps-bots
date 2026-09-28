@@ -69,13 +69,16 @@ regenerating the committed dashboard must keep it warning-clean.
 
 ## How to run
 
-Requires Python 3 with NumPy, numba and matplotlib. Pillow is optional
-(report.py/dashboard.py use it, when present, to shrink embedded PNGs ~3-4x).
-Use a project-local virtualenv so nothing leaks into your system Python:
+Requires Python 3 with NumPy, numba and matplotlib. Pillow is declared in
+`requirements.txt` but only ever an optimization: report.py/dashboard.py use
+it, when present, to shrink embedded PNGs ~3-4x, and fall back to plain RGBA
+without it. The numpy cap in that file is below 2.0 on purpose (NumPy 2 moved
+the Generator streams these runs are seeded from). Use a project-local
+virtualenv so nothing leaks into your system Python:
 
 ```bash
 uv venv .venv && . .venv/bin/activate
-uv pip install -r tools/ga/requirements.txt   # numpy, numba, matplotlib
+uv pip install -r tools/ga/requirements.txt   # numpy, numba, matplotlib, Pillow
 ```
 
 `evolve.py` imports `combat_sim.py`, which compiles its hot loops with

@@ -1,7 +1,28 @@
-# Floor excludes EOL branches; cap excludes untested majors.
-numpy>=1.24,<3
+# Offline GA tooling (tools/ga). Not a CI gate: `make check` runs ruff via
+# uv tool install, and no workflow installs this file. Install into a
+# project-local venv (tools/ga/README.md "How to run").
+#
+# Ranges, not exact pins, and there is no lockfile: these tools run a trainer
+# offline on one maintainer's machine, and a hash-pinned lock nobody refreshes
+# is a stale lock. What the ranges must still guarantee is set below.
+
+# Floor excludes EOL branches; cap excludes untested majors. The cap is 2, not
+# 3, on purpose: NumPy 2 changed the Generator bit streams, so an install that
+# resolved to 2.x reproduces neither the committed evolved/best.json nor the
+# sweeps/ figures, and a seeded run stops being byte-identical across machines
+# (tools/ga/README.md "Determinism"). Raise it only together with a re-run of
+# the promotion gate.
+numpy>=1.24,<2
+
+# numba caps numpy through its own metadata; the floors above keep the two
+# resolvable together.
 numba>=0.58,<1
+
 matplotlib>=3.8,<4
 
-# Optional (report.py/dashboard.py): Pillow shrinks the embedded report PNGs
-# ~3-4x when installed; without it they fall back to plain RGBA PNGs.
+# Optional: report.py and dashboard.py import PIL to quantize the embedded
+# report PNGs (~3-4x smaller than matplotlib's default RGBA). Without it they
+# fall back to plain RGBA PNGs, so a Pillow-free install is correct, just
+# heavier. Declared with a cap like the rest because the import is real, not
+# hypothetical.
+Pillow>=10.0,<13
