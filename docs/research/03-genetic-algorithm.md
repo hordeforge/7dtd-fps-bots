@@ -134,4 +134,4 @@ best = pop[argmax(fitness)]
 write("evolved/best.json", best)
 ```
 
-Deterministic if the per-generation RNG is the same LCG (`2654435761`) seeded from `run_seed + g`.
+Deterministic: one `numpy.random.Generator` per run (`np.random.default_rng(seed)`) drives selection, crossover, mutation, migration and HOF injection, so a run replays exactly from its seed.

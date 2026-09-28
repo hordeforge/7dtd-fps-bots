@@ -61,14 +61,15 @@ namespace BotMod.AI
         public static int Outputs => _outputs;
         public static int WeightCount => _weights != null ? _weights.Length : 0;
 
-        // 5 advisory outputs matching docs/research/01 §3:
-        // 0 campLogit → wantCamp, 1 retreatLogit → wantRetreat,
-        // 2 aimBiasYaw (tanh-scaled), 3 fireGate (sigmoid), 4 strafeDir (sigmoid)
+        // 5 advisory outputs matching docs/research/01 §3, all stored
+        // post-activation: 0 camp (sigmoid) → wantCamp, 1 retreat (sigmoid) →
+        // wantRetreat, 2 aimBiasYaw (tanh, [-1,1]), 3 fireGate (sigmoid),
+        // 4 strafeDir (sigmoid)
         public struct NeuralOutputs
         {
             public bool WantCamp;
             public bool WantRetreat;
-            public float AimBiasYaw; // radians, already clamped to ±0.45*(1-acc) window by caller
+            public float AimBiasYaw; // radians, raw tanh in [-1,1]; the caller scales it by the 0.45*(1-acc) window
             public bool ShouldFire;  // still ANDed with reaction/burst/reload/magazine in TryShootBurst; the caller gates LOS and range
             public int StrafeDir;    // -1 or 1
             public float CampLogit;
@@ -95,7 +96,7 @@ namespace BotMod.AI
             // Rounds-left fraction [0,1] (trainer: ammo+reserve over the pool).
             public float AmmoLeftFrac;
             public float StuckFrac;
-            // ctor packs in order for Forward; keeps call sites greppable
+            // Field order matches the packing order in TryEval.
         }
 
         static float Sigmoid(float x)

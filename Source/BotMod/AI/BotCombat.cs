@@ -114,7 +114,7 @@ namespace BotMod.AI
             {
                 var gm = GameManager.Instance;
                 if (gm == null) return;
-                // Prefer ChatMessageServer(int?) constructor chain; wrap as few assumptions as possible.
+                // Prefer the cached GameManager.GameMessage method; wrap as few assumptions as possible.
                 // The overload is resolved once per process: Type.GetMethods()
                 // walks the whole method table and materializes a MethodInfo per
                 // entry, and this runs on every bot kill, where a busy free-for-all

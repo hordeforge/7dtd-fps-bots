@@ -97,8 +97,8 @@ If we want *gradient-free but smoother* than GA, OpenAI-ES (Salimans et al. 2017
 
 ## 5. Determinism contract
 
-- Net forward pass is pure math (no RNG). RNG only touches **genetic operators** and falls back to the existing per-bot LCG (`Config.Lcg`, held as `Bot._rng`) if we ever randomize inside the brain.
-- Evaluation harness seeds every match from `generation × genomeIdx × matchIdx` via the same LCG tap (`2654435761 / 1103515245`). Same genome → same record → same fitness. This is what makes evolution stable and debuggable.
+- Net forward pass is pure math (no RNG). RNG only touches **genetic operators** and falls back to the existing per-bot LCG (`Foundation.Lcg`, held as `Bot._rng`) if we ever randomize inside the brain.
+- Evaluation harness seeds every match as `sha256(run_seed:generation:genomeIdx:matchIdx)` (`harness._seed_for`). The `2654435761 / 1103515245` pair is the in-game `Lcg` / `Bot._rng` fallback, a separate stream. Same genome → same record → same fitness. This is what makes evolution stable and debuggable.
 
 ## 6. Warm-start (behavioral cloning from heuristic)
 

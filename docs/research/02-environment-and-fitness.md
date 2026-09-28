@@ -49,15 +49,17 @@ We use a scalarized multi-objective so GA selection stays simple. Weights are co
 
 ```
 elo = kills - deaths * 1.0                // raw K/D
-econ = damageDealt / max(1, max(1, damageReceived))
+econ = damageDealt / damageReceived       // damageDealt / 10 when nothing was received
       - 0.05 * shotsFired/(hits + 1)       // aim efficiency, anti-spam
 survival = mean(timeAlive / matchDuration)
 
-fitness = 0.55 * norm(elo) + 0.25 * norm(econ) + 0.15 * survival
+fitness = 0.55 * elo + 0.25 * econ + 0.15 * survival
         - 0.05 * stuckFrac                 // penalty, not a head
         - 1.0 * campPen                    // camper with no kills (combat_sim camp_pen: 1.6 flat)
 
-norm(x) is rank-normalized per generation (see §3.2).
+That raw scalar is what the harness logs and the checkpoints record. Selection
+rank-normalizes the pool per generation instead (see §3.2), so the ranking is
+population-relative while the score itself is absolute.
 ```
 
 Headshot rate is reported but not directly scored: it is a diagnostic for aim-bias drift. We score *damage dealt* instead so the GA cannot game headshot RNG on low-HP targets.

@@ -1,6 +1,6 @@
 # Quake 3 / Doom 3 inspiration for 7DTD bots
 
-Derived from GPL sources `/tmp/ioq3` (ioquake3) and `/tmp/d3` (DOOM 3).
+Derived from GPL sources ioquake3 and DOOM 3 (checked out outside this repo; nothing under `/tmp`, which is RAM-backed scratch).
 See `chars.h`, `ai_main.c:BotChangeViewAngles/BotAimAtEnemy/BotCheckAttack`,
 `ai_dmq3.c` goals, `botlib/be_aas*`, `botlib/botlib.h` constraints, and
 `d3/neo/game/ai/AAS.*`.
@@ -41,10 +41,10 @@ selection and the AAS shims (`FindCover`, voxel LOS).
 
 ## Cross-pollinated with zdtd_bot (the sibling Zig Wasm server)
 
-Improvements travel both ways with `../zdtd-server-server`'s `mods/zdtd_bot` Wasm brain
+Improvements travel both ways with `../zdtd-server`'s `mods/fps_bot` Wasm brain
 (`docs/q3-inspiration-notes.md` there). Everything stays deterministic via the
 per-bot LCG (`Config.Lcg`, held as `Bot._rng` and drawn through `Rng01()`/
-`RngSym()`, seeded from entity id).
+`RngSym()`, seeded from entity id). The type is `Foundation.Lcg`.
 
 - **Lost-sight combat memory (from zdtd_bot).** While a target stays retained
   but out of sight, chase where it was last SEEN instead of its live position
@@ -52,7 +52,7 @@ per-bot LCG (`Config.Lcg`, held as `Bot._rng` and drawn through `Rng01()`/
   around cover; zdtd's `BOT_MEMORY_TICKS` equivalent is `LoseTargetTimeSec`.
 - **Per-engagement aim bias (from zdtd_bot skill_aimerr).** On target
   acquisition, roll a fixed skill-scaled yaw bias
-  (`Bot._aimBiasYaw = RngSym() * (1 - AimAccuracy) * 0.45`) and rotate the lead
+  (`Bot._aimBiasYaw = RngSym() * max(0.03, (1 - AimAccuracy) * 0.45)`) and rotate the lead
   aim by it each attack tick: imperfect but stable shots, not perfect aimers.
 - **Grudge / vengeance memory (from zdtd_bot retaliation).** Being hit records
   the attacker as a grudge for 15 s (`Bot._grudgeId` / `_grudgeUntil`);

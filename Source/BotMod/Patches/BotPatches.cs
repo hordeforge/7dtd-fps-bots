@@ -7,8 +7,8 @@ using BotMod.Config;
 namespace BotMod.Patches
 {
     // EAC-off LAN uses synthetic ids; the client never finishes the full EOS/Steam
-    // handshake, so letting loopback synthetic ids auto-pass the Steam auth server's
-    // BeginUserAuthentication keeps those joins from stalling. Patching AuthorizationManager
+    // handshake, so letting loopback synthetic ids auto-pass the patched
+    // AuthenticateUser keeps those joins from stalling. Patching AuthorizationManager
     // generically was tried and interfered with normal sync/async dispatch, so the
     // bypass is limited to this concrete Steam patch.
     // Gated by AllowSyntheticAuthBypass (default off): the range is predictable, so an

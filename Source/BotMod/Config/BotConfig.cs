@@ -37,7 +37,9 @@ namespace BotMod.Config
         // render: mod-spawned trader bodies (npcTraderJoel) render nothing on
         // this dedi and survivor classes come back negative, so zombieSoldier is
         // the working visible FPS body (our loop drives its combat, not the
-        // zombie AI). The value is accepted for config compatibility.
+        // zombie AI). Any other value is honored as written
+        // (BotSpawner.SpawnBotEntity), which falls back to zombieSoldier, then
+        // zombieBoe, npcTraderJoel, npcSurvivorRanged, when it does not resolve.
         public string BotEntityClass { get; set; } = "mixed";
         public string BotWeapon { get; set; } = "mixed"; // mixed=random per bot from LoadoutPool, or a single gun id
         public string BotAmmo { get; set; } = "ammo762mmBulletBall";
@@ -49,8 +51,8 @@ namespace BotMod.Config
         public int Difficulty { get; set; } = 2;
         // The five Stock* constants below are the values the difficulty
         // preset and its bounds drive from. Named so the pristine snapshot in
-        // RawTunables, the property initializers, and the "did the operator
-        // tune this" test all read the same definition.
+        // RawTunables, the property initializers and the Normalize clamps all
+        // read the same definition.
         public const float StockVisionRange = 70f;
         public const float StockAttackRange = 45f;
         public const float StockAimJitterDegrees = 2.0f;
@@ -153,12 +155,6 @@ namespace BotMod.Config
             HeadshotChance = _raw.HeadshotChance;
         }
 
-        /// <summary>Set (team > 0) or clear (team <= 0) an assignment keyed by
-        /// base bot name. Accepts a bare base name or a full spawned name
-        /// ("[Bot] Kíra_42"): the key derives through BotText.BaseName, the
-        /// same split live-bot lookups use (Bot.TeamKey), so every surface
-        /// (web JSON, console, a pasted scoreboard name) lands on one stored
-        /// NFC form instead of a near-miss key that silently never matches.</summary>
         /// <summary>Outcome of one SetTeamAssignment call. Callers must report
         /// anything but <see cref="Ok"/>: a silently dropped assignment reads
         /// to the operator as "the team is set and the bots still fight each

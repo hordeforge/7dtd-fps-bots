@@ -186,8 +186,8 @@ namespace BotMod.Core
                 _strafeUntil = Time.time + 0.7f + Rng01() * 0.6f;
                 _nextPathRecalc = Time.time; // force move tick
             }
-            // Heavy-hit stagger (zdtd_bot parity): a hit above ~2x the pistol
-            // floor dazes the dodge longer, so snipers stagger bots.
+            // Heavy-hit stagger (zdtd_bot parity): a hit above 25 dazes the
+            // dodge longer, so a sniper (42) staggers a bot harder than an AK (16).
             if (strength > 25) _strafeUntil = Mathf.Max(_strafeUntil, Time.time + 1.6f);
         }
 

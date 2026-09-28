@@ -16,7 +16,7 @@ Server-side mod that spawns real FPS bots in 7 Days to Die dedicated servers. Na
 - Each bot bodies up as a **zombie soldier** (`BotEntityClass=mixed` pins the `zombieSoldier` class; the dedi rejects custom SDCS/Npc/Bandit appends with a negative EntityClass id and mod-spawned trader bodies render nothing, so soldiers are the working visible FPS bodies). Bots hold and fire real ranged weapons.
 - Weapons from `BotWeapon=mixed` → random from `LoadoutPool` (pistol/shotgun/AK/sniper/auto-shotgun/SMG) with per-weapon `WeaponProfile` (fire rate, burst 1-9, spread, damage, effective range, pellets).
 - FPS combat loop (docs/research/00..06): wide `VisionAngle` cone → `Physics.Raycast` + voxel LOS → leading aim (velocity prediction) → burst fire with reaction delay; pellets/headshots via `DamageSourceEntity`.
-- **FPS tactics**: active combat-seeking when idle (hunt nearest enemy), weapon-range standoff (snipers work out to their ~70m effective range and backpedal inside ~24m, shotguns close), squad flanking (split around shared target), cover-advance (peek from cover while chasing), instant target re-acquisition after a kill, finish-the-kill (commit when the enemy is critically wounded), wounded-target priority.
+- **FPS tactics**: active combat-seeking when idle (hunt nearest enemy), weapon-range standoff (snipers work out to their ~75m effective range and backpedal inside ~26m at the shipped `Difficulty 4`, shotguns close), squad flanking (split around shared target), cover-advance (peek from cover while chasing), instant target re-acquisition after a kill, finish-the-kill (commit when the enemy is critically wounded), wounded-target priority.
 - **Neural controller** (optional `UseNeuralBrain`): a GA-evolved `14→16→5` net drives aim-bias/fire/strafe/retreat in every engagement when `evolved/best.json` is loaded (see `tools/ga/`). Heuristic is the fallback.
 - Movement: `MoveEntityHeaded` with a manual-position fallback for trader bodies (trader motors ignore the call), continuous `Strafe`/`Backpedal` circling in `Attack`, dodge on hit, unstuck jump.
 - DM spawns: reads `Data/Worlds/<World>/spawnpoints.xml` (far-from-players farthest spawn, bot/bot avoidance), falls back to radius jitter near spawn point.
@@ -70,7 +70,7 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 
 The stock webserver serves `WebMod/bundle.js` and `WebMod/styling.css`
 uncompressed, so their shipped sizes are the whole download per panel open:
-14,325 and 8,874 bytes. `make check` holds both under a wire budget (14 KiB
+14,489 and 8,874 bytes. `make check` holds both under a wire budget (14 KiB
 and 12 KiB, the initial congestion window) so the panel arrives in one round
 trip. State comes from one same-origin `GET /api/bot` polled every 5 s, with
 only the fields the panel reads in the response.
@@ -97,14 +97,18 @@ back to their documented defaults only when omitted; a value that is present
 but malformed rejects the request with `400` and a named code instead of
 executing something else, as do missing required fields (`spawnNear`
 `player`, `removeOne` `entityId`, `setTeam` `name`, `vs` `target`) and the
-toggles' required `on` flag. Each action checks the field that names its
-target before the fields that qualify it, so a body missing several reports
-the one identifying the target.
+toggles' required `on` flag. Most actions check the field that names their
+target first (`spawnNear` `player`, `removeOne` `entityId`), so a body
+missing several reports the one identifying the target. `setTeam` and `vs`
+are the exceptions: they read their numeric or boolean field first, so a
+body missing both reports `INVALID_TEAM` or `INVALID_ON`.
 Rejection codes: `INVALID_ACTION`, `INVALID_COUNT`, `INVALID_ENTITY_ID`,
 `INVALID_LEVEL`, `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`,
-`INVALID_REQUEST_ID`, `INVALID_TARGET`, `INVALID_TEAM`, `INVALID_WEAPON`.
+`INVALID_REQUEST_ID`, `INVALID_TARGET`, `INVALID_TEAM`, `INVALID_WEAPON`, `TEAM_ASSIGNMENT_LIMIT`
+(the team map is capped at 256 entries).
 Range clamps match
-the console (`count` 1..16, `skill` 0..4, teams 0..8). Send an optional
+the console (`count` 1..16, `skill` 0..4, `teamCount` 0..8; a `setTeam`
+bucket is clamped to the current `teamCount`). Send an optional
 client-generated `"requestId"` with mutations so a retried POST replays the
 recorded response instead of executing twice; a concurrent duplicate gets
 `409 REQUEST_IN_PROGRESS`; the same requestId reused for a *different* body
@@ -194,7 +198,7 @@ bot weapon <gunId|mixed>      # default for next spawns
 bot skill <0-4>               # 0 bot, 1 easy, 2 normal, 3 hard, 4 nightmare
 bot count <n>                 # keep n alive
 bot remove all | bot remove <id>
-bot neural <on|off|reload|status>  # toggle/reload the GA-evolved neural controller
+bot neural <on|off|reload [path]|status>  # toggle/reload the GA-evolved neural controller
 bot vs bot|zombie|player <on|off>  # bots shoot that target class (all on = FFA)
 bot team <on|off>                  # squad mode: all bots one team, never fight each other
 bot team assign <name> <id>        # put that bot on team id (0 = free-for-all)
@@ -225,11 +229,16 @@ and the difficulty preset moved, which the file on disk does not.
 - `Difficulty` 0-4 drives `AimJitterDegrees`, `ReactionTimeSec`, `HeadshotChance`, `VisionRange/AttackRange` (see `BotConfig.ApplyDifficulty`). A `bot skill` change recomputes them from the values your `botmod.json` carried, so it always moves the whole way: `bot skill 0` then `bot skill 2` really does return to the normal reaction time. Setting `ReactionTimeSec` or `AimJitterDegrees` to something other than the stock value in `botmod.json` pins it and drops it out of the preset.
 - Combat feel: `HeadshotChance/HeadshotMultiplier/BurstMin/BurstMax/BurstPauseSec`.
 - Announcements/loot: `AnnounceSpawns`, `BotAnnounceKillsInChat` (bot frags to chat), `DropLootOnDeath`.
-- `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies), `BotWeapon`/`LoadoutPool`/`BotAmmo`, `BotHealth`.
+- `BotEntityClass` (default `mixed` = pinned `zombieSoldier`, the rendering bot bodies),
+  `BotNames` (the base names bots are minted from), `BotWeapon`/`LoadoutPool`,
+  `BotAmmo`/`BotAmmoCount`, `BotHealth`.
+- `DedicatedOnly` (load on a dedicated server only, default `true`).
 - `BotVsBot/BotVsZombie/BotVsPlayer` (which classes bots shoot; `bot vs <t> <on|off>`), `BotTeam` (squad mode; `bot team <on|off>`).
 - `BotTeamCount` (number of teams, default 2) and `TeamAssignments` (bot base name -> team id; `bot team assign <name> <id>`). Team 0 = free-for-all; same-team bots never fight.
-- `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
-- `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `SpawnProtectionSec`.
+- `VisionRange/VisionAngle/LoseTargetRange/LoseTargetTimeSec`, `AttackRange` per
+  weapon, `StrafeChance/DodgeOnHitChance`.
+- `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/RandomWanderIntervalSec`,
+  `SpawnRadius/SpawnNearPlayerChance/UseSpawnpoints`, `SpawnProtectionSec`.
 - `TargetBotCount=6 MaxBots=16`.
 - `Seed` (any int, default `12648430` = `0xC0FFEE`) seeds the spawn picks (bot
   name, gun, spawn spot, mixed loadout). Each bot's own decisions come from its
@@ -274,7 +283,7 @@ make test SUITE=lcg # one suite (SUITE="lcg bottext" for several)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod
 make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip
 make verify-reproducible  # build and package twice, then compare bytes
-make check         # what CI runs (shellcheck, yamllint, vnu HTML lint, tsc/oxlint/bundle freshness, ruff)
+make check         # what CI runs (preflight, shellcheck, yamllint, vnu HTML lint, tsc/oxlint/bundle freshness, ruff, test-recovery)
 make ci            # the full local gate: make check then make test
 make coverage      # line coverage of the pure-BCL suites (needs the dotnet SDK + dotnet-coverage)
 ```
@@ -326,10 +335,10 @@ atomic with a `.bak` last-known-good).
 make build && make install
 ./7DaysToDieServer.x86_64 -logfile .scratch/bot.log -quit -batchmode -nographics -dedicated -configfile .scratch/serverconfig.eacoff.xml
 # expect:
-# [BotMod] BotMod v0.7.1 loading. ModPath=.../Mods/BotMod Enabled=True DedicatedOnly=True AuthBypass=False
-# [BotMod] BotManager ready. TargetBots=6 diff=4 weapon=mixed
+# [BotMod] BotMod v0.7.1 loading. ModPath=.../Mods/BotMod ConfigPath=.../Mods/BotMod/Config/botmod.json Enabled=True DedicatedOnly=True AuthBypass=False
+# [BotMod] BotManager ready. TargetBots=6 diff=4 weapon=mixed seed=0xC0FFEE
 # [BotMod] DM spawns: 8 from .../Data/Worlds/Navezgane/spawnpoints.xml (world=Navezgane)
-# [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163,62,818) (1/6)
+# [BotMod] Bot spawned: [Bot] Grunt_42 [gunMGT1AK47] id=xxxx at (163, 62, 818) (1/6)
 # [BotMod] Bots alive: 6/6
 ```
 

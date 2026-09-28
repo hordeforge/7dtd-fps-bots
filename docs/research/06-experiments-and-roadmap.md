@@ -12,7 +12,7 @@ We are *not* trying to ship a self-improving bot in one go. The sequence answers
 | **3** | Does online background promotion help between offline runs? | Offline champ vs a low-priority background evolver that mutates 1 clone per 100 spare ticks. Long-running dedi, 24 h. | Background champ rate ≤ offline batch rate; it doesn't degrade or drift. If it drifts, keep training offline-only. |
 | **4** | Can we close the sim-to-real gap? | Headless-champ replays on the live dedi (same seeds, same harness but real chunk IO). | Headless fitness and dedi fitness correlate r > 0.8 over 30 matches. If not, the headless map sampling mis-models real LOS. |
 
-Each phase produces one `runs/<ts>/report.md` + `fitness.csv` plot. No phase starts until the previous one logged its report.
+Each phase produces one `runs/<ts>/report.html` (`tools/ga/report.py`) + `fitness.csv` plot. No phase starts until the previous one logged its report.
 
 ## 2. Ablations (answer with one knob per run)
 

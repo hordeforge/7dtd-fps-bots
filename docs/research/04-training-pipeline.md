@@ -40,7 +40,7 @@ Everything in `7dtd-fps-bots/evolved/` (per `evolved/.gitignore`: `runs/`, `arch
 ```
 evolved/
   best.json                 # flat float[] of the current champion (committed when promoted)
-  best.meta.json            # { generation, fitness, configHash } (as written by ga.save_best)
+  best.meta.json            # { generation, fitness, activation, configHash, seed } (ga.save_best)
   runs/<ts>/                # one dir per training run, never overwritten
     config.json             # full hyperparam table (03 §4) + run_seed
     gen_000.json            # state gen 000 ends in: top-3 + fitness, the full pool,
@@ -49,9 +49,6 @@ evolved/
                             # (`nextGen` is the generation the pool belongs to)
     gen_001.json ...
     fitness.csv             # per-gen best/mean/median/q25/q75/held-probe, append-only
-    innovations.json        # NEAT only
-    traces/<gen>_<idx>.bin  # optional: obs→action log for debugging
-  archive/                  # old bests moved here before promoting a new one
 ```
 
 `best.json` is small enough to commit (~8 KiB for the 325-float champion on disk). Keeping `runs/` git-ignored avoids repo bloat; CI uploads it as an artifact if needed.
@@ -128,7 +125,8 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
 - `tools/ga/determinism_check.py` runs the operators, the match kernel and the
   threaded harness twice from one seed and diffs the results; it is the
   executable form of this section.
-- `best.meta.json` records `configHash = sha256(config.json)`. The loader does
+- `best.meta.json` records `configHash = sha256(config dict)` truncated to 16 hex
+  chars (`ga.config_hash`); the `config.json` file itself is not hashed. The loader does
   not enforce it (`configHash` never affects loadability, see `05` §4); it is
   informational, surfaced by `bot neural status`, so an operator can spot a
   champion trained under a different hyperparam table.
@@ -152,7 +150,7 @@ Each `best.json` is validated before it can be promoted:
 
 - Promote `runs/<ts>/best.json` → `evolved/best.json` + `best.meta.json`.
 - Commit and push (`7dtd-fps-bots` repo). Operators `git pull` or download the asset.
-- The mod's `ModApi` loads `evolved/best.json` on `OnGameStartDone` (or on config reload via `bot reload` / `bot neural reload`) through `BotNeuralBrain.TryLoad`. If the file is absent or malformed (`version`/`inputs`/weight-count mismatch), the mod falls back to the heuristic and logs `BotNeuralBrain: not loaded (<reason>), using heuristic`.
+- The mod's `ModApi` loads `evolved/best.json` on `OnGameStartDone` (or on config reload via `bot reload` / `bot neural reload`) through `BotNeuralBrain.TryLoad`. If the file is absent or malformed (`version`/`inputs`/weight-count mismatch), the mod falls back to the heuristic and logs `BotNeuralBrain not loaded (<reason>), using heuristic.`
 
 No Python ships, no extra DLL, no native module, just JSON.
 
@@ -181,7 +179,7 @@ No Python ships, no extra DLL, no native module, just JSON.
 
 | Tool | Shape |
 |---|---|
-| `tools/ga/evolve.py` | CLI that owns the loop; flags: `--pop 32 --gens 80 --seed 42 --resume` |
+| `tools/ga/evolve.py` | CLI that owns the loop; flags (defaults): `--pop 32 --gens 40 --seed 42 --resume` |
 | `tools/ga/evolve.py eval <best.json>` | Re-evaluates a single `best.json` on the validation pool, prints report |
 | `tools/ga/report.py` | Renders the `fitness.csv` best/mean curves into the HTML run report |
 | `tools/ga/dashboard.py` | Cross-run dashboard, writes `docs/ga-dashboard.html` |

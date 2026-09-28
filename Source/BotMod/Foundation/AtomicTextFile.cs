@@ -22,9 +22,10 @@ namespace BotMod.Foundation
         /// <summary>Warning sink for degraded writes and unreadable files. Wired
         /// to ModApi.Warn by ModApi.InitMod, same contract as BotConfig.Warn:
         /// this layer stays free of engine/game type dependencies, and the
-        /// default keeps a failure visible in headless runs. Both swallow sites
-        /// below trade durability for availability (the swap still completes),
-        /// so an operator has to learn about it from the log: a .bak that was
+        /// default keeps a failure visible in headless runs. The write's swallow
+        /// site trades durability for availability (the swap still completes);
+        /// a failed read here falls through to the .bak candidate instead. Either
+        /// way the operator has to learn about it from the log: a .bak that was
         /// never written means the next torn primary has no last-known-good.
         /// Volatile for the same reason the ledger's sink is: InitMod wires it
         /// on the main thread while web handler threads reach it through

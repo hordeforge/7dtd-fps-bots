@@ -40,19 +40,21 @@ Source/BotMod/AI/BotNeuralBrain.cs
 
 ### 3.1 Forward pass (no alloc, no framework)
 
+The real entry point is `BotNeuralBrain.TryEval(in NeuralInputs inp, out NeuralOutputs outs)`; the arithmetic it runs is:
+
 ```csharp
 // hidden = tanh(W1*x + b1), out = mixed(W2*hidden + b2)
 // W1: 14*16, b1: 16, W2: 16*5, b2: 5
-public static void Forward(in float[] w, in float[] x, ref float[] hidden, ref float[] y) {
+void forward(float[] x, float[] hidden, float[] y) {
     for (int h=0; h<16; h++) { float s=b1[h]; for (int i=0;i<14;i++) s += W1[h*14+i]*x[i]; hidden[h] = (float)Math.Tanh(s); }
     for (int o=0;o<5;o++)  { float s=b2[o]; for (int h=0;h<16;h++) s += W2[o*16+h]*hidden[h]; y[o]=s; }
     // y[0],y[1],y[3],y[4] sigmoid; y[2] tanh scaled
 }
 ```
 
-- Arrays are `static readonly` buffers sized at startup; the tick reuses them (no `new`).
+- The shared buffers are `static`: `_scratchX`, `_hiddenBuf` and `_outBuf`. The latter two are grown at load when the file's layer sizes exceed their initial 32/8, so only `_scratchX` is `readonly`. Every tick reuses them (no `new`).
 - Weights order is canonical: `W1 row-major (16×14) | b1 | W2 row-major (5×16) | b2`. Documented in `evolved/README.md` and in the file header so Python and C# never drift.
-- Clamp outputs: `sigmoid(x)=1/(1+exp(-x))` with `x` clamped to `[-8,8]` so `exp` never under/overflows on Mono.
+- Clamp outputs: `sigmoid(x)` returns 0 below -8 and 1 above 8, so `exp` never under/overflows on Mono.
 - Micro-opt: run `forward` every *other* scan period, not every tick, if profiling ever shows cost (we have ~19 µs/bot budget before it matters, see §6).
 
 ### 3.2 Flat JSON contract
@@ -63,6 +65,7 @@ public static void Forward(in float[] w, in float[] x, ref float[] hidden, ref f
   "hidden": 16,
   "inputs": 14,
   "outputs": 5,
+  "activation": "tanh",
   "weights": [ -0.017, 0.203, ... ],
   "configHash": "sha256_of_hp_table",
   "fitness": 0.81,
@@ -97,7 +100,7 @@ No exception propagates to `Bot.Tick`.
 
 ## 5. Per-bot own trick: no cross-bot state
 
-`BotNeuralBrain` holds no per-bot mutable state (weights are shared). Any per-bot scratch (e.g., hidden-state for a future recurrent net) lives on the `Bot` instance, not `static`, otherwise two bots would alias each other's memory. Phase 1's fixed MLP needs no scratch at all.
+`BotNeuralBrain` holds no per-bot mutable state (weights are shared). Any per-bot scratch (e.g., hidden-state for a future recurrent net) lives on the `Bot` instance, not `static`, otherwise two bots would alias each other's memory. Phase 1's fixed MLP needs no per-bot scratch: all three buffers above are static.
 
 ## 6. Performance
 

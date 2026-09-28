@@ -38,8 +38,8 @@ static class WeaponProfileTests
             var wp = WeaponProfile.ForGun(spelling, Pool);
             Check(InPool(wp.GunId), "ForGun(\"" + spelling + "\") picks a LoadoutPool gun (got " + wp.GunId + ")");
         }
-        // An empty id is the same request as the literal (BotSpawner routes
-        // BotSpawner routes an unset BotWeapon here).
+        // An empty or null id is the same request as the literal: it expands
+        // through the pool.
         Check(InPool(WeaponProfile.ForGun("", Pool).GunId), "ForGun(\"\") picks a LoadoutPool gun");
         Check(InPool(WeaponProfile.ForGun(null, Pool).GunId), "ForGun(null) picks a LoadoutPool gun");
 

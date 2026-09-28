@@ -8,10 +8,10 @@ using BotMod.Foundation;
 
 namespace BotMod.Config
 {
-    // Direct port of Q3's 80 characteristic slots (chars.h). Only the six
-    // slots the engine reads (AimAccuracy, AimSkill, Aggression,
-    // SelfPreservation, Camper, and WantsToCamp below) affect behavior; the
-    // rest are carried so character files match the Q3 layout.
+    // Direct port of Q3's 80 characteristic slots (chars.h). Six of them
+    // drive behavior: AimAccuracy and AimSkill (Bot), Aggression and
+    // SelfPreservation (Bot), Camper (BotBrain), and the WantsToCamp gate
+    // (Bot). The rest are carried so character files match the Q3 layout.
     public sealed class BotCharacter
     {
         // 0 name, 1 gender, 2 attack_skill, 3 weaponweights, 4 view_factor, 5 view_maxchange,
@@ -39,7 +39,7 @@ namespace BotMod.Config
         public float Alertness { get; set; } = 0.5f;
         public float FireThrottle { get; set; } = 0.7f;
         public float ChatInsult { get; set; } = 0.3f;
-        public bool ChallengeAim { get; set; } = false; // Q3 bot_challenge cvar: true=clamped smooth, false=spring
+        public bool ChallengeAim { get; set; } = false; // Q3 bot_challenge cvar parity, carried for the characters.json layout; no code path reads it
 
         public static BotCharacter Defaults(string name) => new BotCharacter { Name = name };
 

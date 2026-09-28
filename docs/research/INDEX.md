@@ -54,10 +54,10 @@ The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers
 
 - **Shipped champion**: `evolved/best.json`, gen 199 (R12 run
   `2026-08-21_110155_pop64_g200_s42`, warm-started from the R11 gen-299
-  champion), held **13.04 avg**
-  on the canonical gate (seeds 999/1234/4242, 40 matches):
+  champion), held **12.93 avg**
+  on the canonical gate (seeds 999/1234/4242, 40 matches), measured 2026-09-28:
   `python3 tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40`
-  prints **GOAL MET** with margins +8.044/+8.862/+8.223 (re-measured after the
+  prints **GOAL MET** with margins +7.964/+8.402/+8.329 (re-measured after the
   R13 magazine alignment; before it the champion held 11.91 avg,
   margins +7.176/+7.747/+7.223).
 - **Task**: fire cost (finite ammo + spread) + policy-driven movement + fixed-
@@ -73,4 +73,4 @@ The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers
 
 The static (Q3/Doom 3-style) heuristic bot AI is cross-pollinated with the zdtd
 bot brain guest; the parity ledger is [`REPORT-2026-08-21-R13-static-bot-parity.md`](REPORT-2026-08-21-R13-static-bot-parity.md),
-referenced from zdtd's `docs/BOTS_SPEC.md`.
+referenced from the sibling's `docs/q3-inspiration-notes.md`.
