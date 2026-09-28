@@ -58,7 +58,7 @@ namespace BotMod.Core
                 }
                 // exact entityId string already tried; try prefix match
                 foreach (var p in world.Players.list) if (p != null) {
-                    if (p.entityId.ToString() == ident) return p;
+                    if (p.entityId.ToString(CultureInfo.InvariantCulture) == ident) return p;
                 }
             }
             return null;

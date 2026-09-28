@@ -38,7 +38,7 @@ namespace BotMod.Config
             }
             if (g.Contains("sniper") || g.Contains("hunting") || g.Contains("lever"))
                 return new WeaponProfile { GunId = gunId, FireRate = 0.9f, BurstMin = 1, BurstMax = 1, BurstPause = 0.9f, Damage = 42, Range = 90f, Pellets = 1, MagSize = 12, ReloadSec = 2.5f };
-            if (g.Contains("smg") || g.Contains("pipe") && g.Contains("machine"))
+            if (g.Contains("smg") || (g.Contains("pipe") && g.Contains("machine")))
                 return new WeaponProfile { GunId = gunId, FireRate = 0.09f, BurstMin = 5, BurstMax = 9, BurstPause = 0.5f, Damage = 9, Range = 35f, Pellets = 1, MagSize = 30, ReloadSec = 1.8f };
             if (g.Contains("m60") || g.Contains("tactical") || g.Contains("ak"))
                 return new WeaponProfile { GunId = gunId, FireRate = 0.11f, BurstMin = 3, BurstMax = 6, BurstPause = 0.55f, Damage = 16, Range = 55f, Pellets = 1, MagSize = 30, ReloadSec = 2.0f };

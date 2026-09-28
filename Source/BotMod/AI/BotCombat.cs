@@ -20,8 +20,10 @@ namespace BotMod.AI
                 // zero-width characters would otherwise forge log lines or
                 // reorder visible chat text (same contract as the web API's
                 // sanitized audit fields).
-                string k = BotMod.Config.LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString()) : "?");
-                string v = BotMod.Config.LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString()) : "?");
+                // Entity ids are protocol tokens, so the fallback renders invariantly
+                // (same convention as the invariant int.TryParse on every id surface).
+                string k = BotMod.Config.LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
+                string v = BotMod.Config.LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
                 ModApi.Log($"Kill: {k} killed {v}");
 
                 // Keep vanilla score paths for player->anything. For bot killers we must credit manually

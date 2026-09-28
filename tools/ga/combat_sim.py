@@ -108,7 +108,8 @@ def skill_hit_chance(skill, dist, trait_jitter):
 
 
 # World geometry: env variants (picked per-match by harness for diversity).
-# 0: L + block (default), 1: cross (4 walls), 2: open (no walls), 3: corridor.
+# 0: L + block (default), 1: cross (4 walls), 2: open (no walls, hardcoded as
+# an always-clear LOS in the kernel below), 3: corridor.
 WALLS = np.array([
     [20.0, 20.0, 20.0, 60.0],
     [20.0, 40.0, 60.0, 40.0],
@@ -120,7 +121,6 @@ WALLS_CROSS = np.array([
     [15.0, 15.0, 65.0, 65.0],
     [65.0, 15.0, 15.0, 65.0],
 ], dtype=np.float32)
-WALLS_OPEN = np.zeros((0, 4), dtype=np.float32)
 WALLS_CORRIDOR = np.array([
     [40.0, 0.0, 40.0, 30.0],
     [40.0, 50.0, 40.0, 80.0],
@@ -137,7 +137,6 @@ WALLS_MAZE = np.array([
     [60.0, 35.0, 60.0, 65.0],
     [45.0, 60.0, 68.0, 60.0],
 ], dtype=np.float32)
-_WALL_TABLE = [WALLS, WALLS_CROSS, WALLS_OPEN, WALLS_CORRIDOR, WALLS_MAZE]
 
 
 @numba.njit
@@ -411,8 +410,8 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 burst_cd[bi] -= dt
             if reload_cd[bi] > 0:
                 reload_cd[bi] -= dt
-            if reload_cd[bi] > 0:
-                continue
+                if reload_cd[bi] > 0:
+                    continue
             if ammo[bi] <= 0:
                 if reserve[bi] > 0:
                     reserve[bi] -= WEAPON_MAG[bweapon[bi]]

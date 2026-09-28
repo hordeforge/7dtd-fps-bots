@@ -754,7 +754,7 @@ namespace BotMod.Core
                 // ex.ToString() walks the stack, so it must not run per pull
                 // while the gate suppresses.
                 ModApi.WarnRateLimited(() => "Bot shot failed " + Name + " -> "
-                    + (target != null ? target.entityId.ToString() : "?") + ": " + ex);
+                    + (target != null ? target.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture) : "?") + ": " + ex);
             }
             _burstLeft--;
             _ammo--; // one round per trigger pull (zdtd_bot ammo pacing parity)

@@ -109,7 +109,7 @@ namespace BotMod.Patches
             {
                 // Deaths are rare; a failing death side effect (bookkeeping,
                 // loot drop) must stay visible.
-                BotMod.ModApi.Warn("BotDeathPatch failed for entity " + (__instance != null ? __instance.entityId.ToString() : "?") + ": " + ex);
+                BotMod.ModApi.Warn("BotDeathPatch failed for entity " + (__instance != null ? __instance.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture) : "?") + ": " + ex);
             }
         }
     }
