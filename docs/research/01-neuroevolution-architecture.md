@@ -102,8 +102,9 @@ If we want *gradient-free but smoother* than GA, OpenAI-ES (Salimans et al. 2017
 
 ## 6. Warm-start (behavioral cloning from heuristic)
 
-> Status (2026-08-24): not implemented as described. `ga.clone_heuristic`
-> is a stub: generation 0 = He init + σ=0.02 jitter (the R1-R12 runs all
+> Status (2026-08-24): not implemented as described. `ga.init_population`
+> (formerly `clone_heuristic`) is a stub: generation 0 = He init + σ=0.02
+> jitter (the R1-R12 runs all
 > started from random weights and still beat the heuristic). Trace-based
 > fitting below remains the design target.
 

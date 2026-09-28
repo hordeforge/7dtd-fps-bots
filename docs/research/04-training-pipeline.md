@@ -26,9 +26,9 @@ The evolution loop is deliberately split into a **trainer** (owns GA, fitness, l
 - Simpler to iterate on GA, plotting, and sweeps (NumPy + `matplotlib`).
 - No native deps shipped into the mod. The mod still reads plain `best.json`.
 
-### 2.2 Pure Zig trainer (phase 2)
+### 2.2 Pure Zig trainer (phase 2, not taken)
 
-- The GA itself is Zig (`tools/ga/`) so the entire pipeline is `zig build ga --best`.
+- The GA itself is Zig (`tools/ga/`) so the entire pipeline is `zig build ga --best`. There is no Zig trainer in the tree; `tools/ga/` is Python (see §11).
 - Useful for CI where Python is unavailable, and for embedding a background evolver thread in the dedicated server.
 
 Either way the *protocol* between trainer and harness is the same: send `bot <verb>` commands, receive `sense` bytes. No shared struct.
@@ -123,7 +123,7 @@ Promotion to next stage is guard-railed: best fitness must have risen `> 0.08` n
 > Status (2026-08-21): shipped gates are held-seed based. `evolve.py`
 > promotes only when the candidate's held40 probe beats the current
 > champion's; the canonical promotion gate is
-> `tools/ga/eval_static_vs_neural.py --seeds 999 1234 4242 --matches 40`
+> `tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40`
 > (GOAL MET = champion beats static by >= +0.5 on every seed). The
 > fresh-opponent-pool and human blind-test steps below remain design intent.
 
@@ -152,14 +152,17 @@ No Python ships, no extra DLL, no native module, just JSON.
 
 ## 11. Tools
 
-> Status (2026-08-25): all three ship as Python CLIs under `tools/ga/`
-> (`evolve.py`, `eval.py`, `plot.py`) with the shapes below; the Zig variant
-> was never needed.
+> Status (2026-08-25): the shape below ships as Python CLIs under
+> `tools/ga/`; the Zig variant was never needed. (2026-09-20, 0.7.0:
+> `eval.py` and `eval_static_vs_neural.py` were folded into `evolve.py` as
+> the `eval` and `static-vs-neural` subcommands, so all scoring paths share
+> `harness.canonical_scores`; the standalone `plot.py` is gone, `report.py`
+> and `dashboard.py` render the curves.)
 
 | Tool | Shape |
 |---|---|
 | `tools/ga/evolve.py` | CLI that owns the loop; flags: `--pop 32 --gens 80 --seed 42 --resume` |
-| `tools/ga/eval.py` | Re-evaluates a single `best.json` on the validation pool, prints report |
-| `tools/ga/plot.py` | Plots `fitness.csv` best/mean curves (Python) |
+| `tools/ga/evolve.py eval <best.json>` | Re-evaluates a single `best.json` on the validation pool, prints report |
+| `tools/ga/report.py` | Renders the `fitness.csv` best/mean curves into the HTML run report |
 
 All live under `7dtd-fps-bots/tools/ga/` so they ship with the mod's research and do not pollute the clean-room `zdtd` tree.

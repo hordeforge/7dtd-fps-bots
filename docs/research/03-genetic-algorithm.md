@@ -74,9 +74,9 @@ Sweeping should touch at most 2 knobs per experiment; evolution is slow to evalu
 
 ## 5. Seeding and generation count
 
-- **Generation 0:** He init + σ=0.02 jitter (`ga.clone_heuristic` stub; the
-  behavior-cloned warm-start of `01` §6 is not implemented yet). One exact
-  clone is the initial champion.
+- **Generation 0:** He init + σ=0.02 jitter (`ga.init_population`, the stub
+  formerly named `clone_heuristic`; the behavior-cloned warm-start of `01` §6
+  is not implemented yet). One exact clone is the initial champion.
 - **Generations 1..G:** full loop. Checkpoints: `gen_*.json` (top 3) is written
   when the generation improved on the best-so-far, not unconditionally;
   `fitness.csv` is appended every generation.
@@ -108,7 +108,7 @@ No DEAP/PyGAD import required on the mod side. The trainer (Python) owns these o
 ## 9. Pseudocode (trainer side, Python-shaped)
 
 ```
-pop = clone_heuristic(P, sigma=0.02)   # 1 exact, P-1 jittered
+pop = init_population(P, sigma=0.02)   # 1 exact, P-1 jittered
 hof = [pop[0]]
 for g in range(G):
     # evaluate

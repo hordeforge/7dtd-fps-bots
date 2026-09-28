@@ -24,7 +24,7 @@ Each phase produces one `runs/<ts>/report.md` + `fitness.csv` plot. No phase sta
 | No trait ΔCharacter tail | `W` only, traits fixed | Whether personality nudge matters or the net already learns it |
 | Single arena vs all 3 | DM only vs 1v1+FFA+Horde | Three arenas prevent single-mode overfit |
 
-Run each ablation as one knob overridden per run against the same seed so only the knob changes, in practice a dedicated sweep script that pins `harness.py` constants (`tools/ga/fitness_sweep.py` for fitness mixes, `tools/ga/sweep.py --hidden/--activations` for topology); `evolve.py` itself has no `--ablate` flag.
+Run each ablation as one knob overridden per run against the same seed so only the knob changes, in practice one override flag or sweep script per knob: `evolve.py --fit-elo/--fit-econ/--fit-surv/--fit-stuck` for fitness mixes, `tools/ga/sweep.py --activations` for the activation ablation; `evolve.py` itself has no `--ablate` flag. The hidden size is baked at H16 and no longer sweepable.
 
 ## 3. Metrics (what we watch while training)
 
@@ -39,7 +39,7 @@ Per `best.json` promotion candidate (30-match validation):
 - `Δfit vs heuristic`, `ΔdamageEff`, `headshotRate`, `campFrac`, `stuckTicks`.
 - Human note: one-line operator impression after a live DM watch (the only subjective signal).
 
-Dashboard: `python tools/ga/plot.py evolved/runs/<ts>/fitness.csv` writes `plot.png` next to the csv, best/mean curves only (no diversity sparkline; that metric is not logged, see `02` §7). Commit the PNG alongside the report.
+Dashboard: `python tools/ga/report.py --runs evolved/runs/<ts>` writes a self-contained HTML report with the `fitness.csv` best/mean curves (no diversity sparkline; that metric is not logged, see `02` §7). Commit the HTML alongside the report; `tools/ga/dashboard.py` builds the cross-run `docs/ga-dashboard.html`.
 
 ## 4. Roadmap (calendar-agnostic)
 

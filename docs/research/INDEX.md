@@ -6,6 +6,12 @@ The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers
   pipeline, integration, and roadmap as originally planned.
 - **Experiment log `REPORT-*.md`**: every run/experiment as it happened, R0-R13.
   The R-series is the authoritative record; the design docs describe intent.
+  Reports written before `tools/ga` 0.7.0 cite script paths that no longer
+  exist: `eval.py` and `eval_static_vs_neural.py` are now the
+  `evolve.py eval` and `evolve.py static-vs-neural` subcommands, while
+  `plot.py` and `fitness_sweep.py` are gone (`report.py` renders the fitness
+  curves, `evolve.py --fit-elo/--fit-econ/--fit-surv/--fit-stuck` overrides a
+  fitness mix per run). The report text is left as it was written.
 
 ## Design docs
 
@@ -50,7 +56,7 @@ The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers
   `2026-08-21_110155_pop64_g200_s42`, warm-started from the R11 gen-299
   champion), held **13.04 avg**
   on the canonical gate (seeds 999/1234/4242, 40 matches):
-  `python3 tools/ga/eval_static_vs_neural.py --seeds 999 1234 4242 --matches 40`
+  `python3 tools/ga/evolve.py static-vs-neural --seeds 999 1234 4242 --matches 40`
   prints **GOAL MET** with margins +8.044/+8.862/+8.223 (re-measured after the
   R13 magazine alignment; before it the champion held 11.91 avg,
   margins +7.176/+7.747/+7.223).

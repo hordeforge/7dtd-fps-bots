@@ -45,7 +45,7 @@ The fitness landscape is meaningless without a fixed test suite. Three arena typ
 
 ## 3. Fitness function
 
-We use a scalarized multi-objective so GA selection stays simple. Weights are configurable; defaults below are from paper-parity tuning (Q3 bot skill calibration) and kept explicit in `tools/ga/harness.py` (`FIT_ELO/FIT_ECON/FIT_SURV/FIT_STUCK/FIT_CAMP`); the R7 sweep (`tools/ga/fitness_sweep.py`) overrides them programmatically per mix, and the canon 0.55/0.25/0.15/0.05 was confirmed Pareto.
+We use a scalarized multi-objective so GA selection stays simple. Weights are configurable; defaults below are from paper-parity tuning (Q3 bot skill calibration) and kept explicit in `tools/ga/harness.py` (`FIT_ELO/FIT_ECON/FIT_SURV/FIT_STUCK/FIT_CAMP`); a run overrides them with `evolve.py --fit-elo/--fit-econ/--fit-surv/--fit-stuck` (the R7 sweep script that did this programmatically was deleted in 0.7.0), and the canon 0.55/0.25/0.15/0.05 was confirmed Pareto.
 
 ```
 elo = kills - deaths * 1.0                // raw K/D
