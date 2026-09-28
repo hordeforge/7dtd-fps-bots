@@ -153,6 +153,11 @@ def held_strip_b64(runs):
         labels.append(run.name.replace("evolved/runs/", ""))
         helds.append(vals[-1])
     if not helds:
+        # fig_b64 closes the figure on the success path (report.py closes it
+        # before encoding); this early exit has to do the same or pyplot's
+        # global figure registry keeps the FigureManager, its axes and its
+        # canvas alive for the rest of the process.
+        plt.close(fig)
         return ""
     order = np.argsort(helds)[::-1]
     labels = [labels[i] for i in order]
