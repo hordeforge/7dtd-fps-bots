@@ -134,9 +134,15 @@ namespace BotMod.Config
             string configPath = BotConfig.ConfigPath();
             string configDir = string.IsNullOrEmpty(configPath) ? null : System.IO.Path.GetDirectoryName(configPath);
             if (!string.IsNullOrEmpty(configDir)) candidates.Add(System.IO.Path.Combine(configDir, "characters.json"));
-            candidates.Add(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".", "Config", "characters.json"));
+            string modDir = System.IO.Path.GetDirectoryName(typeof(BotCharacterDB).Assembly.Location) ?? ".";
+            candidates.Add(System.IO.Path.Combine(modDir, "Config", "characters.json"));
+            // Same second choice BotConfig.DefaultPathBesideAssembly makes for
+            // botmod.json: an install that keeps its config at the mod root
+            // rather than in Config/ must resolve both halves from there, or
+            // the traits come from a Config/characters.json the same install
+            // does not use.
+            candidates.Add(System.IO.Path.Combine(modDir, "characters.json"));
             candidates.Add(System.IO.Path.Combine(".", "config", "characters.json"));
-            candidates.Add(System.IO.Path.Combine("config", "characters.json"));
             string path = null;
             // Built privately and published once at the end: the default
             // minting and the difficulty lerp below mutate the map, and a
@@ -147,6 +153,11 @@ namespace BotMod.Config
             // reload` with a broken file drift aim/reaction/aggression further
             // toward their clamps.
             var next = new Dictionary<string, BotCharacter>(StringComparer.OrdinalIgnoreCase);
+            // Names cfg.BotNames asks for that the ingested file did not
+            // carry. Reported once per load, below: a name with no block is
+            // the same silent-default surface as a misspelled trait, one
+            // layer up (a typo'd BotNames entry).
+            var unmatched = new List<string>();
             foreach (string candidate in candidates)
             {
                 if (System.IO.File.Exists(candidate)) { path = candidate; break; }
@@ -201,13 +212,21 @@ namespace BotMod.Config
                 }
                 catch (Exception ex) { BotConfig.Warn("characters.json parse failed (" + path + "): " + ex.Message); }
             }
+            // Entries the file actually carried. A file that yielded none
+            // (missing, unparseable, or "{"Grunt": null}" dropping its only
+            // entry) has already been reported once and defaults every name by
+            // design, so it is not a per-name mismatch.
+            int ingested = next.Count;
             // Ensure at least defaults for known names (BaseName is NFC, same
             // canonical form as the keys above).
             foreach (var n in cfg.BotNames)
             {
                 string key = BotText.BaseName(n);
-                if (!next.ContainsKey(key)) next[key] = BotCharacter.Defaults(key);
+                if (next.ContainsKey(key)) continue;
+                if (ingested > 0) unmatched.Add(key);
+                next[key] = BotCharacter.Defaults(key);
             }
+            if (unmatched.Count > 0) WarnUnmatchedNames(unmatched, path);
             // Apply difficulty lerp if characters have multiple skills (stored as skill 1 vs 5) - here we just scale by cfg.Difficulty
             float diffSkill = cfg.Difficulty / 4f;
             foreach (var kv in new List<KeyValuePair<string,BotCharacter>>(next))
@@ -221,6 +240,29 @@ namespace BotMod.Config
                 ch.Aggression = Math.Max(0f, Math.Min(1f, ch.Aggression + diffSkill * 0.2f - 0.1f));
             }
             Characters = next;
+        }
+
+        /// <summary>How many names one warning line spells out. BotNames is
+        /// operator text with no upper bound, so the report names the first
+        /// MaxUnmatchedNamesReported and the remainder's count, which says the
+        /// file does not cover the config without letting it grow the line
+        /// without limit. The names reach the log through BotText.BaseName,
+        /// which strips control and invisible characters, so a hand-edited name
+        /// cannot carry terminal escapes into the log.</summary>
+        internal const int MaxUnmatchedNamesReported = 8;
+
+        static void WarnUnmatchedNames(List<string> unmatched, string path)
+        {
+            int shown = Math.Min(unmatched.Count, MaxUnmatchedNamesReported);
+            var sb = new StringBuilder();
+            for (int i = 0; i < shown; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(unmatched[i]);
+            }
+            if (unmatched.Count > shown) sb.Append(", +").Append(unmatched.Count - shown).Append(" more");
+            BotConfig.Warn("BotNames has " + unmatched.Count + " name(s) with no block in " + path
+                + " (" + sb + "); those bots use built-in default characteristics");
         }
 
         /// <summary>(Entry name, unknown trait key) pairs for every character

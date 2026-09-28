@@ -209,8 +209,13 @@ The file is read from `Mods/BotMod/Config/botmod.json` (the repo default is
 `config/botmod.json`). Set `BOTMOD_CONFIG` to read and persist a different
 path, for a config mounted outside the mod directory; unset or blank means the
 path beside the assembly. `characters.json` is looked up next to whichever
-botmod.json is in use. If no config file is found at all, the mod logs a WARN
-naming the paths it tried and runs on built-in defaults.
+botmod.json is in use, then beside the mod directory, then `./config/`. If no
+config file is found at all, the mod logs a WARN naming the paths it tried and
+runs on built-in defaults, which are not the shipped profile: difficulty 2
+rather than 4, 100 hp rather than 50, and the neural brain off. A missing file
+is a different game from a tuned one, so read the WARN before the spawn count. A config that turns `AllowSyntheticAuthBypass` on
+gets its own WARN on every load and reload, naming the file: it is the one
+setting whose effect is invisible in play.
 
 To see what the server is actually running, `bot config` prints the file it
 read plus the effective values, and the same dump is logged at startup and on
@@ -240,7 +245,9 @@ and the difficulty preset moved, which the file on disk does not.
 - Personalities: `Config/characters.json` (Q3-style per-name skill blocks,
   see `Source/BotMod/Config/BotCharacter.cs`). A missing or unparseable file
   logs a WARN and bots use built-in default characteristics; misspelled trait
-  keys are reported as WARNs and keep the built-in default.
+  keys are reported as WARNs and keep the built-in default. A `BotNames` entry
+  the file has no block for is reported the same way, so a typo there does not
+  leave that bot on unseen defaults.
 
 Quake-style names by default: `Grunt/Visor/Ranger/Phobos/Dozer/...` (13 in
 `config/characters.json`). Only `AimAccuracy`, `AimSkill`, `Aggression`,

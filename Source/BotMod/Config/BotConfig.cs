@@ -367,6 +367,7 @@ namespace BotMod.Config
                     // visible, not just the corrupt-primary one.
                     if (source != candidate)
                         Warn("BotConfig restored from backup " + source + " (" + candidate + " was unreadable)");
+                    WarnUnsafe(loaded, source);
                     return loaded;
                 }
                 catch (Exception ex) { Warn("BotConfig parse failed (" + source + "): " + ex.Message); }
@@ -381,6 +382,21 @@ namespace BotMod.Config
                 + "); running on built-in defaults" + (ConfigPathOverride() != null
                     ? " - check the " + ConfigPathEnvVar + " override" : ""));
             return new BotConfig();
+        }
+
+        /// <summary>Report a loaded setting that weakens the server's identity
+        /// checks, on every load and reload instead of only inside the startup
+        /// config line an operator has to parse field by field. Today that is
+        /// one switch, and it is the one field here whose wrong value is not
+        /// visible in play: the forged-id connection it permits behaves like an
+        /// ordinary client. <paramref name="source"/> is the file the value
+        /// came from, so an operator tracing the log back to a file is not left
+        /// guessing which of botmod.json and its .bak asked for it.</summary>
+        static void WarnUnsafe(BotConfig loaded, string source)
+        {
+            if (loaded.AllowSyntheticAuthBypass)
+                Warn("AllowSyntheticAuthBypass is on in " + source
+                    + ": any client can connect with a synthetic Steam id in the reserved range and is treated as authenticated");
         }
 
         /// <summary>Top-level JSON keys in <paramref name="json"/> that bind no

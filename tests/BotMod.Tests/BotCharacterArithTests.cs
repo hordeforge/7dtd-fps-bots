@@ -61,7 +61,11 @@ static class BotCharacterArithTests
             File.WriteAllText(Path.Combine(dir, "config", "characters.json"), json, Encoding.UTF8);
         string oldCwd = Environment.CurrentDirectory;
         Action<string> prevWarn = BotConfig.Warn;
-        if (warnings != null) BotConfig.Warn = w => warnings.Add(w);
+        // Always capture, so a case that asserts on the table does not print
+        // the load's warnings into the middle of the suite's output; cases
+        // that assert on the warnings pass a list of their own.
+        var sink = warnings ?? new List<string>();
+        BotConfig.Warn = w => sink.Add(w);
         try
         {
             Environment.CurrentDirectory = dir;
@@ -323,6 +327,34 @@ static class BotCharacterArithTests
             }
             Check("concurrent reloads never expose a half-lerped character (" + reads + " reads, " + torn + " torn)",
                 reads > 0 && torn == 0);
+        }
+
+        // 12. A configured name the file does not cover is reported: a
+        //     typo'd BotNames entry ("Grnot") otherwise leaves that bot on
+        //     built-in traits with nothing in the log, the same silent
+        //     default a misspelled trait key used to have. Only a file that
+        //     carried entries is held to it, so a missing, unparseable or
+        //     empty one is still just its own single warning.
+        {
+            var w = new List<string>();
+            var cfg = new BotConfig { Difficulty = 2, BotNames = new[] { "Grunt", "Grnot" } };
+            LoadCharacters("{ \"Grunt\": { \"Camper\": 0.8 } }", cfg, w);
+            Check("name missing from characters.json is reported once",
+                w.Count == 1 && w[0].Contains("no block") && w[0].Contains("Grnot") && !w[0].Contains("Grunt,"));
+            Check("the unmatched name still gets a usable character",
+                BotCharacterDB.ForName("Grnot") != null && BotCharacterDB.ForName("Grnot").Camper == 0.2f);
+            w.Clear();
+            LoadCharacters("{ \"Grunt\": { \"Camper\": 0.8 } }",
+                new BotConfig { Difficulty = 2, BotNames = new[] { "Grunt" } }, w);
+            Check("a fully covered config reports nothing", w.Count == 0);
+            w.Clear();
+            LoadCharacters(null, cfg, w);
+            Check("a missing file warns once about the file, not per name",
+                w.Count == 1 && w[0].Contains("not found"));
+            w.Clear();
+            LoadCharacters("{ \"Grunt\": null }", cfg, w);
+            Check("a file that carried no usable entry is not a per-name mismatch",
+                w.Count == 0);
         }
 
         if (_failures == 0) { Console.WriteLine("all bot character arithmetic tests passed"); return 0; }

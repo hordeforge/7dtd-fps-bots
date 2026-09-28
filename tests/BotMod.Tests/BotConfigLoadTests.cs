@@ -354,6 +354,39 @@ static class BotConfigLoadTests
             Check("missing config file warns with the path", named);
         }
 
+        // The one setting whose wrong value is invisible in play: with the
+        // bypass on, any client can present a synthetic Steam id and be taken
+        // for authenticated. It is off by default and no admin surface sets
+        // it, so the load is the only place it can become true, and that is
+        // where the operator has to be told - not only as a field buried in
+        // the startup config dump.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"AllowSyntheticAuthBypass\": true }");
+            var warnings = new List<string>();
+            Action<string> prev = WarnCapture.Set(msg => warnings.Add(msg));
+            BotConfig cfg;
+            try { cfg = BotConfig.Load(path); }
+            finally { WarnCapture.Set(prev); }
+            Check("auth bypass loads as written", cfg.AllowSyntheticAuthBypass);
+            bool flagged = false;
+            foreach (string w in warnings)
+                if (w.Contains("AllowSyntheticAuthBypass") && w.Contains(path)) flagged = true;
+            Check("auth bypass is warned about, naming the file it came from", flagged);
+        }
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            File.WriteAllText(path, "{ \"TargetBotCount\": 3 }");
+            var warnings = new List<string>();
+            Action<string> prev = WarnCapture.Set(msg => warnings.Add(msg));
+            try { BotConfig.Load(path); }
+            finally { WarnCapture.Set(prev); }
+            bool flagged = false;
+            foreach (string w in warnings)
+                if (w.Contains("AllowSyntheticAuthBypass")) flagged = true;
+            Check("a config that leaves the bypass off is not warned about", !flagged);
+        }
+
         // Config path resolution: BOTMOD_CONFIG names the one file that owns
         // the config, and a blank value is unset, not "current directory".
         {
