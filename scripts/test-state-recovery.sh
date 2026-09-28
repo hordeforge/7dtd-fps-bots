@@ -205,6 +205,45 @@ expect_ok "restore with BOTMOD_CONFIG" \
   env SEVENDTD_DS_DIR="$msnap_src" BOTMOD_CONFIG="$mounted" bash "$RESTORE" "$msnap" --apply
 if [[ -f "$mounted" ]]; then ok "mounted config still in place"; else fail "mounted config disappeared"; fi
 
+check "install.sh verifies MANIFEST.sha256 before it swaps the payload in"
+ids="$work/ds-install"
+# install.sh resolves its payload as <script-root>/dist/BotMod, so run a copy
+# of the script under the scratch root instead of writing into the repo's dist.
+payload="$work/install-root/dist/BotMod"
+mkdir -p "$work/install-root/scripts" "$payload/Config" "$payload/WebMod"
+cp "$ROOT/scripts/install.sh" "$ROOT/scripts/server-dir.sh" "$ROOT/scripts/digest.sh" "$work/install-root/scripts/"
+install_script="$work/install-root/scripts/install.sh"
+mkdir -p "$ids/7DaysToDieServer_Data/Managed" "$ids/Mods/0_TFP_Harmony" "$ids/Mods/BotMod/Config"
+touch "$ids/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" "$ids/Mods/0_TFP_Harmony/0Harmony.dll"
+for f in BotMod.dll ModInfo.xml Config/botmod.json WebMod/bundle.js; do printf 'x\n' > "$payload/$f"; done
+printf '{"TargetBotCount": 9}\n' > "$ids/Mods/BotMod/Config/botmod.json"
+# The digest the release zip carries, written by whatever tool this host has
+# (digest.sh picks sha256sum on Linux, shasum on macOS); install.sh's gate has
+# to read back the one its own pick wrote.
+(
+  cd "$payload"
+  source "$ROOT/scripts/digest.sh"
+  find . -type f ! -name MANIFEST.sha256 | LC_ALL=C sort | while IFS= read -r f; do
+    "${SHA[@]}" "${f#./}"
+  done > "$work/manifest.new"
+)
+mv "$work/manifest.new" "$payload/MANIFEST.sha256"
+expect_ok "payload matching its MANIFEST installs" \
+  env SEVENDTD_DS_DIR="$ids" bash "$install_script"
+if grep -q '"TargetBotCount": 9' "$ids/Mods/BotMod/Config/botmod.json"; then
+  ok "operator config preserved across the reinstall"
+else
+  fail "operator config lost across the reinstall"
+fi
+printf 'tampered\n' > "$payload/ModInfo.xml"
+expect_fail "payload failing its MANIFEST refused" \
+  env SEVENDTD_DS_DIR="$ids" bash "$install_script"
+if grep -qx 'x' "$ids/Mods/BotMod/ModInfo.xml"; then
+  ok "refused install left the live payload alone"
+else
+  fail "refused install replaced the live payload"
+fi
+
 if [[ "$failures" -gt 0 ]]; then
   echo "$failures check(s) failed" >&2
   exit 1

@@ -10,8 +10,9 @@ set -euo pipefail
 export LC_ALL=C TZ=UTC
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRV="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
-CLIENT="${SEVENDTD_GAME_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days To Die}"
+STEAM_COMMON="${XDG_DATA_HOME:-$HOME/.local/share}/Steam/steamapps/common"
+SRV="${SEVENDTD_DS_DIR:-$STEAM_COMMON/7 Days to Die Dedicated Server}"
+CLIENT="${SEVENDTD_GAME_DIR:-$STEAM_COMMON/7 Days To Die}"
 if [[ -f "$SRV/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" ]]; then
   MANAGED="$SRV/7DaysToDieServer_Data/Managed"
   HARMONY="$SRV/Mods/0_TFP_Harmony/0Harmony.dll"
@@ -138,8 +139,10 @@ refs=(
   -r:"$MANAGED/LogLibrary.dll"
   -r:"$MANAGED/SpaceWizards_HttpListener.dll"
 )
-# sort -z: deterministic compile order regardless of readdir order.
-mapfile -d '' sources < <(find "$SRC" -type f -name '*.cs' -print0 | sort -z)
+# LC_ALL=C sort: deterministic compile order regardless of readdir order.
+# A newline-delimited list, not find -print0 | sort -z: sort -z is a GNU
+# extension, and the payload ships no file whose name holds a newline.
+mapfile -t sources < <(find "$SRC" -type f -name '*.cs' | LC_ALL=C sort)
 # -warnaserror: the tree compiles warning-free; keep it that way.
 mcs -nostdlib -sdk:4.7.2 -target:library -optimize+ -langversion:7.2 -warnaserror \
   -out:"$OUT/BotMod.dll" "${refs[@]}" "${sources[@]}"

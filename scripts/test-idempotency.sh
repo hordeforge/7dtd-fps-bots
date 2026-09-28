@@ -250,8 +250,9 @@ run_mod_suite() { # <name> <sources...>   (references: the full mod + game DLLs)
 if ! want_any "${game_suites[@]}"; then
   printf 'skip game-DLL suites (none selected)\n'
 else
-  srv="${SEVENDTD_DS_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server}"
-  client="${SEVENDTD_GAME_DIR:-$HOME/.local/share/Steam/steamapps/common/7 Days To Die}"
+  steam_common="${XDG_DATA_HOME:-$HOME/.local/share}/Steam/steamapps/common"
+  srv="${SEVENDTD_DS_DIR:-$steam_common/7 Days to Die Dedicated Server}"
+  client="${SEVENDTD_GAME_DIR:-$steam_common/7 Days To Die}"
   managed=""
   if [[ -f "$srv/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" ]]; then
     managed="$srv/7DaysToDieServer_Data/Managed"
@@ -334,7 +335,9 @@ else
     if [[ -f "$candidate" ]]; then harmony="$candidate"; fi
   fi
   if $have_all && [[ -n "$harmony" ]]; then
-    mapfile -d '' mod_sources < <(find "$root/Source/BotMod" -type f -name '*.cs' -print0 | sort -z)
+    # LC_ALL=C sort, newline-delimited: sort -z is a GNU extension and the
+    # mod tree holds no file whose name carries a newline.
+    mapfile -t mod_sources < <(find "$root/Source/BotMod" -type f -name '*.cs' | LC_ALL=C sort)
     mod_refs=()
     for dll in "${need_refs[@]}"; do mod_refs+=(-r:"$managed/$dll"); done
     mod_refs+=(-r:"$managed/mscorlib.dll" -r:"$managed/System.dll" -r:"$managed/System.Core.dll" -r:"$harmony")

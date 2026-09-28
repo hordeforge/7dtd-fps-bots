@@ -45,7 +45,10 @@ done
 # than a live one; a payload built in place (no manifest) is not checked.
 if [[ -f "$SRC/MANIFEST.sha256" ]]; then
   source "$ROOT/scripts/digest.sh"
-  if ! (cd "$SRC" && "${SHA[@]}" -c --quiet MANIFEST.sha256); then
+  # -c only: --quiet is a coreutils option that the shasum digest.sh picks on
+  # macOS does not take, so keep the report and echo it when the check fails.
+  if ! manifest_report="$(cd "$SRC" && "${SHA[@]}" -c MANIFEST.sha256 2>&1)"; then
+    echo "$manifest_report" >&2
     echo "ERROR: $SRC fails MANIFEST.sha256; nothing was installed" >&2
     echo "Re-extract the release zip or rebuild with scripts/build.sh." >&2
     exit 1

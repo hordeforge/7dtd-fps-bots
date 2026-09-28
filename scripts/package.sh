@@ -74,7 +74,10 @@ cp -r "$SRC" "$STAGE/BotMod"
 # itself, in `sha256sum -c` format (run it inside the extracted directory).
 (
   cd "$STAGE/BotMod"
-  mapfile -d '' files < <(find . -type f ! -name MANIFEST.sha256 -print0 | sort -z)
+  # LC_ALL=C sort, newline-delimited: sort -z is a GNU extension and the
+  # payload holds no file whose name carries a newline (the whitespace guard
+  # below refuses the zip step on one).
+  mapfile -t files < <(find . -type f ! -name MANIFEST.sha256 | LC_ALL=C sort)
   : > MANIFEST.sha256
   for f in "${files[@]}"; do
     "${SHA[@]}" "${f#./}" >> MANIFEST.sha256
@@ -91,7 +94,18 @@ done < <(cd "$STAGE" && find BotMod -print0)
 
 find "$STAGE/BotMod" -type d -exec chmod 755 {} +
 find "$STAGE/BotMod" -type f -exec chmod 644 {} +
-find "$STAGE/BotMod" -exec touch -h -d "@$EPOCH" {} +
+# touch -d "@epoch" is a GNU extension; POSIX touch -t is everywhere, so probe
+# the date tool for the epoch-to-stamp conversion instead of the OS name (GNU
+# spells it -d, BSD -r). TZ=UTC above makes touch -t read the stamp in UTC, so
+# the archive timestamp is the epoch instant on either tool.
+if STAMP_TIME="$(date -u -d "@$EPOCH" +%Y%m%d%H%M.%S 2>/dev/null)" ||
+  STAMP_TIME="$(date -u -r "$EPOCH" +%Y%m%d%H%M.%S 2>/dev/null)"; then
+  :
+else
+  echo "ERROR: need GNU date (-d @epoch) or BSD date (-r epoch) to stamp the payload" >&2
+  exit 1
+fi
+find "$STAGE/BotMod" -exec touch -h -t "$STAMP_TIME" {} +
 
 OUT="$ROOT/dist/BotMod-$VERSION.zip"
 rm -f "$OUT"
