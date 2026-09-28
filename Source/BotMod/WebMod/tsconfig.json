@@ -2,6 +2,11 @@
   "compilerOptions": {
     "target": "ES2017",
     "module": "es2020",
+    // Type-checked against ES2020 built-ins while still emitting ES2017: the
+    // dashboard runs in the stock 7DTD Chromium, which ships Intl.PluralRules
+    // and the Intl.NumberFormat unit style, but the emit stays conservative
+    // so nothing downlevels or polyfills. lib alone changes no emit.
+    "lib": ["ES2020", "DOM"],
     // strict: the WebMod is fully typed (no any) and the oxlint type-aware
     // rules (strict-boolean-expressions, no-floating-promises) refuse to run
     // without strictNullChecks.

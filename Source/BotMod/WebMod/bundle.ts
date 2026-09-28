@@ -142,6 +142,37 @@ function numOr(v: unknown, fallback: number): number {
 
 const num = (v: unknown): number => numOr(v, 0);
 
+// Output formatting, for text the viewer reads. Raw `String(v)` bakes in
+// en-US digits and grouping, which a viewer running under ar-EG (Arabic-Indic
+// digits) or de-DE (comma grouping) reads as foreign. These follow the runtime
+// locale instead. They are for display only: a posted count, an <input value>
+// and a <select value> are protocol tokens and keep the plain String(v) form,
+// so a localized digit never reaches the server.
+const COUNT_FORMAT: Intl.NumberFormat = new Intl.NumberFormat();
+
+// Distances are in game world units, which are meters in every server build:
+// the locale changes how the number and the unit are written, never what is
+// measured, so the unit is pinned and only the number is localized.
+const METER_FORMAT: Intl.NumberFormat = new Intl.NumberFormat(undefined, { style: "unit", unit: "meter" });
+
+// Plural category for n in the viewer's locale. `n === 1` is an English rule:
+// Polish has one/few/many, Arabic zero/one/two/few/many/other, and the category
+// is what picks the noun form. The panel's English labels only need one and
+// other, so the selection collapses to that here; a translated label set adds
+// the categories its language defines, keyed off the same call.
+const PLURAL_RULES: Intl.PluralRules = new Intl.PluralRules();
+
+function isSingular(n: number): boolean {
+  return PLURAL_RULES.select(n) === "one";
+}
+
+// A scoreboard cell whose field the server left out renders empty, as the
+// bare `undefined` child did, instead of a formatted 0: a missing reading and
+// a real zero must not read the same. A zero the server did send is formatted.
+function fmtCell(v: number | undefined): string | undefined {
+  return v === undefined ? undefined : COUNT_FORMAT.format(v);
+}
+
 function strOrEmpty(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
@@ -197,7 +228,7 @@ function newRequestId(): string {
 
 function botCount(count: number | undefined): string {
   const n = numOr(count, 1);
-  return `${n} ${n === 1 ? "bot" : "bots"}`;
+  return `${COUNT_FORMAT.format(n)} ${isSingular(n) ? "bot" : "bots"}`;
 }
 
 // Plain-language name of a command, for the command-result line. The button
@@ -325,45 +356,30 @@ function postAction(opts: {
     });
 }
 
-// Destructive buttons: click to arm, click again within 4 s to run. The arm
-// step is announced (`say`) because the only visual cue is the label change.
-function armOrRun(opts: {
-  armed: string;
-  setArmed: (v: string | ((prev: string) => string)) => void;
-  label: string;
-  say: (v: string) => void;
-  onConfirm: () => void;
-}): void {
-  if (opts.armed === opts.label) {
-    opts.onConfirm();
-    return;
-  }
-  opts.setArmed(opts.label);
-  opts.say(`${opts.label} armed, activate again within 4 seconds to confirm`);
-  setTimeout((): void => opts.setArmed((a: string) => (a === opts.label ? "" : a)), ARM_TIMEOUT_MS);
-}
-
 // `off` disables the control for a reason other than a command in flight
-// (the Spawn near inputs have no player to target).
-function makeBtn(h: CreateElement, busy: string, post: (body: BotAction) => void): (label: string, body: BotAction, cls?: string, off?: boolean) => unknown {
-  return (label: string, body: BotAction, cls?: string, off?: boolean): unknown =>
-    h("button", {
-      className: `botmod-btn${cls === undefined ? "" : ` ${cls}`}`,
-      disabled: busy !== "" || off === true,
-      onClick: (): void => post(body)
-    }, label);
-}
-
-function makeArmedBtn(h: CreateElement, armed: string, setArmed: (v: string | ((prev: string) => string)) => void, busy: string, say: (v: string) => void, post: (body: BotAction) => void): (label: string, body: BotAction, cls?: string) => unknown {
-  return (label: string, body: BotAction, cls?: string): unknown => {
-    const isArmed = armed === label;
+// (the Spawn near inputs have no player to target). A destructive control
+// passes `arm`: its first click arms it and the second one runs it, with the
+// arm step announced through `say` because the only visual cue is the label
+// change. Arming is per-control, so one `armed` label is all the state
+// needed to tell a disarmed control from an armed one, and the armed label
+// repeats the action it confirms (a bare "Confirm?" left the user reading a
+// question, with the destructive verb off screen, right above buttons that
+// also disarm on a second click).
+function makeBtn(h: CreateElement, busy: string, post: (body: BotAction) => void, arm?: { armed: string; setArmed: (v: string | ((prev: string) => string)) => void; say: (v: string) => void }): (label: string, body: BotAction, cls?: string, off?: boolean) => unknown {
+  return (label: string, body: BotAction, cls?: string, off?: boolean): unknown => {
+    const isArmed = arm?.armed === label;
     return h("button", {
       className: `botmod-btn${cls === undefined ? "" : ` ${cls}`}${isArmed ? " botmod-armed" : ""}`,
-      disabled: busy !== "",
-      onClick: (): void => armOrRun({ armed, setArmed, label, say, onConfirm: (): void => post(body) })
-    // The armed label repeats the action it confirms: a bare "Confirm?" left
-    // the user reading a question, with the destructive verb off screen, right
-    // above buttons that also disarm on a second click.
+      disabled: busy !== "" || off === true,
+      onClick: (): void => {
+        if (arm === undefined || arm.armed === label) {
+          post(body);
+          return;
+        }
+        arm.setArmed(label);
+        arm.say(`${label} armed, activate again within ${ARM_TIMEOUT_MS / 1000} seconds to confirm`);
+        setTimeout((): void => arm.setArmed((a: string) => (a === label ? "" : a)), ARM_TIMEOUT_MS);
+      }
     }, isArmed ? `Confirm ${label}?` : label);
   };
 }
@@ -409,49 +425,60 @@ function nearLabel(b: BotStat): string {
   if (b.nearestPlayerDist === undefined || b.nearestPlayerDist < 0) {
     return "n/a";
   }
-  return `${b.nearestPlayerDist}m${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
+  return `${METER_FORMAT.format(b.nearestPlayerDist)}${b.nearestPlayer === undefined ? "" : ` ${b.nearestPlayer}`}`;
 }
 
-// Team palette: index 0 = free-for-all (neutral), 1..8 team colors. Kept in
-// sync with the buckets, row dots, chips, and per-row selects.
+// Team palette: index 0 = free-for-all (neutral), 1..TEAM_LIMIT team colors.
+// Kept in sync with the buckets, row dots, chips, and per-row selects.
+const TEAM_LIMIT = 8;
 const TEAM_COLORS: ReadonlyArray<string> = [
   "#9aa0a6", "#ff7070", "#8ab4f8", "#57d977", "#f9ab00", "#c58af9", "#4dd0e1", "#f48fb1", "#ffe082"
 ];
-const TEAM_LABELS: ReadonlyArray<string> = [
-  "FFA", "Team 1", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8"
-];
 
-// Bucket count the panel renders, clamped to the 0..8 range the server holds
-// (BotConfig.SetTeamCount). One definition, so the buckets, the Team-column
-// options and the +/- buttons cannot drift on how many teams exist.
-const TEAM_MAX = 8;
-
-function teamCountOf(s: BotStatus): number {
-  return Math.max(0, Math.min(TEAM_MAX, numOr(s.teamCount, 2)));
+// One clamp for every team index: the palette, the bucket labels, and the
+// squad size. A config asking for more teams than the panel has colors for
+// would otherwise index past TEAM_COLORS and render "undefined" as a chip
+// color. The labels are derived, not a parallel array that can fall out of
+// step with TEAM_LIMIT (and with the count the +/- buttons allow).
+function clampTeam(team: number | undefined): number {
+  return Math.min(Math.max(numOr(team, 0), 0), TEAM_LIMIT);
 }
 
-function teamSlot(team: number | undefined): number {
-  return Math.min(Math.max(0, numOr(team, 0)), TEAM_MAX);
+// Bucket count the panel renders, clamped to the 0..TEAM_LIMIT range the
+// server holds (BotConfig.SetTeamCount). One definition, so the buckets, the
+// Team-column options and the +/- buttons cannot drift on how many teams
+// exist.
+function teamCountOf(s: BotStatus): number {
+  return clampTeam(numOr(s.teamCount, 2));
 }
 
 function teamColor(team: number | undefined): string {
-  return TEAM_COLORS[teamSlot(team)];
+  return TEAM_COLORS[clampTeam(team)];
 }
 
 function teamLabel(team: number | undefined): string {
-  return TEAM_LABELS[teamSlot(team)];
+  const t = clampTeam(team);
+  return t === 0 ? "FFA" : `Team ${t}`;
 }
 
 function renderBotHeader(h: CreateElement, s: BotStatus, onlinePlayers: Array<BotPlayer>, pill: (on: boolean, onLabel: string, offLabel: string) => unknown): unknown {
-  const playerSuffix = onlinePlayers.length > 1 ? "s" : "";
-  const onlineText = onlinePlayers.length > 0
-    ? `${onlinePlayers.length} player${playerSuffix} online (${onlinePlayers.map((p): string => p.name).join(", ")})`
-    : "no players online";
+  const online = onlinePlayers.length;
+  // The name list is the one user-chosen run in this line (players join with
+  // whatever name their client carries, Arabic and CJK included), so it gets
+  // its own dir=auto span: nested directly in the fixed English it would
+  // inherit the panel's base direction and reorder against it.
+  const onlineText: unknown = online === 0
+    ? "no players online"
+    : h("span", null,
+        `${COUNT_FORMAT.format(online)} ${isSingular(online) ? "player" : "players"} online (`,
+        h("span", { dir: "auto" }, onlinePlayers.map((p): string => p.name).join(", ")),
+        ")");
   return h("div", { className: "botmod-head" },
     h("h2", null, "Bot Control"),
     pill(s.enabled === true, "ENABLED", "DISABLED"),
     h("span", { className: "botmod-window" },
-      `alive ${num(s.alive)}/${num(s.targetBotCount)} · max ${num(s.maxBots)} · brain ${brainLabel(s.neural, s.neuralLoaded)} · ${onlineText}`));
+      `alive ${COUNT_FORMAT.format(num(s.alive))}/${COUNT_FORMAT.format(num(s.targetBotCount))} · max ${COUNT_FORMAT.format(num(s.maxBots))} · brain ${brainLabel(s.neural, s.neuralLoaded)} · `,
+      onlineText));
 }
 
 // Outcome of the last command. It stays until the next command or a dismiss,
@@ -617,7 +644,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
       onClick: (): void => post({ action: "teamCount", count: teamCount - 1 })
     }, "− teams"),
     h("button", {
-      className: "botmod-btn", disabled: busy !== "" || teamCount >= TEAM_MAX,
+      className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= TEAM_LIMIT,
       onClick: (): void => post({ action: "teamCount", count: teamCount + 1 })
     }, "+ teams"),
     armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"));
@@ -626,9 +653,9 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
 function renderConfigRow(h: CreateElement, s: BotStatus): unknown {
   return h("div", { className: "botmod-row botmod-cfg" },
     h("span", { className: "botmod-window" },
-      `vision ${num(s.visionRange)}m · attack ${num(s.attackRange)}m · spawn r ${num(s.spawnRadius)}m` +
+      `vision ${METER_FORMAT.format(num(s.visionRange))} · attack ${METER_FORMAT.format(num(s.attackRange))} · spawn r ${METER_FORMAT.format(num(s.spawnRadius))}` +
       ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
-      `${s.botVsBot === true ? " · vsBot" : ""} · hp ${num(s.botHealth)}`));
+      `${s.botVsBot === true ? " · vsBot" : ""} · hp ${COUNT_FORMAT.format(num(s.botHealth))}`));
 }
 
 function ariaSortValue(sort: SortState, key: string): string {
@@ -645,11 +672,6 @@ function sortArrowNode(h: CreateElement, sort: SortState, key: string): unknown 
   }
   return h("span", { key: "arrow", "aria-hidden": "true" }, sort.dir < 0 ? " ▼" : " ▲");
 }
-
-// The scoreboard columns that read a field straight off the row, in display
-// order. One list keeps the cells and the sort keys in the header from
-// drifting apart.
-const STAT_COLUMNS = ["weapon", "health", "players", "zombies", "deaths", "score", "level"] as const;
 
 // Row label: the same span heads every control row, so the class and the
 // trailing colon live in one place.
@@ -687,22 +709,30 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
       setDropOver(null);
     }
   },
-    // dir=auto on every cell that renders a player-chosen name: an Arabic or
-    // Hebrew bot name inside an LTR table, or a mixed run of Latin and RTL
-    // text, resolves its own base direction instead of borrowing the page's.
+    // dir=auto on every cell that carries a player-chosen name, whether as
+    // visible text or inside an aria-label: an Arabic or Hebrew bot name
+    // inside an LTR table, or a mixed run of Latin and RTL text, resolves its
+    // own base direction instead of borrowing the page's.
     h("td", { dir: "auto" },
       h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) }, "aria-hidden": "true" }),
       b.name),
-    STAT_COLUMNS.map((c): unknown => h("td", { key: c }, b[c])),
+    h("td", null, b.weapon),
+    h("td", null, fmtCell(b.health)),
+    h("td", null, fmtCell(b.players)),
+    h("td", null, fmtCell(b.zombies)),
+    h("td", null, fmtCell(b.deaths)),
+    h("td", null, fmtCell(b.score)),
+    h("td", null, fmtCell(b.level)),
     h("td", { dir: "auto" }, nearLabel(b)),
-    h("td", null, h("select", {
+    h("td", { dir: "auto" }, h("select", {
       className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
       "aria-label": `Team for ${b.name}`,
       onChange: (e: { target: { value: string } }): void => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
     }, teamOptions)),
     h("td", { className: "botmod-state" }, b.status),
-    h("td", null, h("button", {
-      className: "botmod-btn botmod-danger botmod-remove", "aria-label": `Remove bot ${b.name}`,
+    h("td", { dir: "auto" }, h("button", {
+      className: "botmod-btn botmod-danger botmod-remove", title: "Remove bot",
+      "aria-label": `Remove bot ${b.name}`,
       disabled: busy !== "", onClick: (): void => post({ action: "removeOne", entityId: b.entityId })
     }, "✕")));
 }
@@ -846,7 +876,7 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
   }
   const post = (body: BotAction): void => postAction({ HTTP, busy, setBusy, setArmed, setStatus, refetch, body });
   const btn = makeBtn(h, busy, post);
-  const armedBtn = makeArmedBtn(h, armed, setArmed, busy, setAnnounce, post);
+  const armedBtn = makeBtn(h, busy, post, { armed, setArmed, say: setAnnounce });
   const pill = (on: boolean, onLabel: string, offLabel: string): unknown =>
     h("span", { className: `botmod-pill ${on ? "botmod-ok" : "botmod-off"}` }, on ? onLabel : offLabel);
 

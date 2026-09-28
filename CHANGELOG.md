@@ -226,6 +226,35 @@ of them removes a config key or a console command.
   allocates the whole string array behind the discarded tail. It runs on the
   per-damage-event ally check and on every character lookup, so it now uses
   `IndexOf` with the same result and no array.
+- The dashboard panel rendered every number it displays as raw `String(v)`,
+  so digit shapes, grouping separators and the meter unit were en-US for every
+  viewer: a de-DE or ar-EG admin read `12,345` and `1250 m` where their locale
+  writes `12.345` and `١٬٢٥٠ مترًا`, and a bot count past 999 read as an
+  undifferentiated run of digits. Displayed counts, distances and the
+  scoreboard cells go through `Intl.NumberFormat` now. Posted values, `<input>`
+  values and `<select>` values stay on the plain form: those are protocol
+  tokens, and a localized digit must never reach the server.
+- The panel chose its noun form with `n === 1`, an English rule. It picks the
+  plural category through `Intl.PluralRules` now, so a locale with more than
+  one/other selects its own category. The panel's labels are still English, so
+  the visible text is unchanged until a translated label set supplies the
+  forms its language needs.
+- The online-players list in the panel header rendered player names in the
+  same run as the fixed English around them, and the Team and Remove cells
+  carried a bot name inside an `aria-label` with no direction of its own. An
+  Arabic or Hebrew name there resolved against the panel's base direction
+  instead of its own. The names get their own `dir=auto` run, like the
+  scoreboard's name cell already had.
+- The Team palette kept its labels in a parallel `TEAM_LABELS` array and clamped
+  the team index twice (`TEAM_COLORS.length - 1` for a color, a literal 8 for a
+  count). A team past the palette rendered `undefined` as a chip color. The
+  labels are derived from one `clampTeam` and the cap is the named `TEAM_LIMIT`
+  the +/- buttons use.
+- `makeArmedBtn` and `makeBtn` built the same button element twice, differing
+  only in whether a click armed first. One factory takes the arming state as an
+  optional argument, and the "activate again within 4 seconds" announcement
+  reads `ARM_TIMEOUT_MS` rather than repeating the number the timeout already
+  had.
 - `IdempotencyLedger.cs` and `IdempotencyLedgerFuzzTests.cs` imported
   `BotMod.Config` for the `BotText` character count they call, which lives in
   `BotMod.Foundation`. The suites compile a reduced source set without
