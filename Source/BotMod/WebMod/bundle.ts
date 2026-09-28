@@ -487,9 +487,13 @@ function renderSpawnRow(h: CreateElement, enabled: boolean, busy: string, spawnC
       }, `+${n}`)));
 }
 
+// The row class every brain-family row shares (skill, brain, squad, vs, teams).
+// One constant so the rows cannot drift apart on padding or spacing.
+const BRAIN_ROW_CLASS = "botmod-row botmod-brain";
+
 function renderSkillRow(h: CreateElement, s: BotStatus, busy: string, post: (body: BotAction) => void): unknown {
-  return h("div", { className: "botmod-row botmod-brain" },
-    h("span", { className: "botmod-label" }, "Skill:"),
+  return h("div", { className: BRAIN_ROW_CLASS },
+    rowLabel(h, "Skill"),
     [0, 1, 2, 3, 4].map((d): unknown =>
       h("button", {
         key: d, className: `botmod-btn${s.difficulty === d ? " botmod-primary" : ""}`, disabled: busy !== "",
@@ -503,7 +507,7 @@ function renderSkillRow(h: CreateElement, s: BotStatus, busy: string, post: (bod
 function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPlayer: string, setNearPlayer: (v: string) => void, nearCount: string, setNearCount: (v: string) => void, nearWeapon: string, setNearWeapon: (v: string) => void, btn: (label: string, body: BotAction, cls?: string, off?: boolean) => unknown): unknown {
   const noPlayers = onlinePlayers.length === 0;
   return h("div", { className: "botmod-row" },
-    h("span", { className: "botmod-label" }, "Near player:"),
+    rowLabel(h, "Near player"),
     noPlayers
       ? h("span", { className: "botmod-window" }, "no players online")
       : h("select", {
@@ -529,16 +533,16 @@ function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPl
 }
 
 function renderBrainRow(h: CreateElement, s: BotStatus, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
-  return h("div", { className: "botmod-row botmod-brain" },
-    h("span", { className: "botmod-label" }, "Brain:"),
+  return h("div", { className: BRAIN_ROW_CLASS },
+    rowLabel(h, "Brain"),
     btn(s.neural === true ? "Static AI" : "GA brain", { action: "neural", on: s.neural !== true }),
     s.neuralPath !== undefined && s.neuralPath !== "" ? h("span", { className: "botmod-window" }, `weights: ${s.neuralPath}`) : null);
 }
 
 function renderTeamRow(h: CreateElement, s: BotStatus, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
   const team = s.botTeam === true;
-  return h("div", { className: "botmod-row botmod-brain" },
-    h("span", { className: "botmod-label" }, "Squad:"),
+  return h("div", { className: BRAIN_ROW_CLASS },
+    rowLabel(h, "Squad"),
     btn(team ? "Free-for-all" : "Squad mode", { action: "team", on: !team }, team ? "botmod-primary" : ""),
     h("span", { className: "botmod-window" }, team ? "all bots are allies" : "bots fight each other"));
 }
@@ -549,8 +553,8 @@ function renderVsRow(h: CreateElement, s: BotStatus, busy: string, post: (body: 
     { label: "Zombies", target: "zombie", on: s.botVsZombie === true },
     { label: "Players", target: "player", on: s.botVsPlayer === true }
   ];
-  return h("div", { className: "botmod-row botmod-brain" },
-    h("span", { className: "botmod-label" }, "Shoot at:"),
+  return h("div", { className: BRAIN_ROW_CLASS },
+    rowLabel(h, "Shoot at"),
     toggles.map((t): unknown =>
       h("button", {
         key: t.target, className: `botmod-btn${t.on ? " botmod-primary" : ""}`, disabled: busy !== "",
@@ -571,7 +575,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
     });
   }
   return h("div", { className: "botmod-row botmod-brain botmod-teams" },
-    h("span", { className: "botmod-label" }, "Teams:"),
+    rowLabel(h, "Teams"),
     buckets.map((bkt): unknown =>
       h("div", {
         key: bkt.team,
@@ -642,6 +646,17 @@ function sortArrowNode(h: CreateElement, sort: SortState, key: string): unknown 
   return h("span", { key: "arrow", "aria-hidden": "true" }, sort.dir < 0 ? " ▼" : " ▲");
 }
 
+// The scoreboard columns that read a field straight off the row, in display
+// order. One list keeps the cells and the sort keys in the header from
+// drifting apart.
+const STAT_COLUMNS = ["weapon", "health", "players", "zombies", "deaths", "score", "level"] as const;
+
+// Row label: the same span heads every control row, so the class and the
+// trailing colon live in one place.
+function rowLabel(h: CreateElement, text: string): unknown {
+  return h("span", { className: "botmod-label" }, `${text}:`);
+}
+
 // One scoreboard row: draggable for pointer users; the Team select is the
 // keyboard/screen-reader path to the same action (dragging needs an
 // alternative that does not rely on pointer precision, WCAG 2.5.7).
@@ -659,7 +674,7 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     rowClass = rowClass === "" ? "botmod-drag" : `${rowClass} botmod-drag`;
   }
   return h("tr", {
-    key: String(b.entityId),
+    key: b.entityId,
     draggable: true,
     className: rowClass,
     onDragStart: (e: { dataTransfer: { setData: (t: string, v: string) => void; effectAllowed: string } }): void => {
@@ -678,13 +693,7 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     h("td", { dir: "auto" },
       h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) }, "aria-hidden": "true" }),
       b.name),
-    h("td", null, b.weapon),
-    h("td", null, b.health),
-    h("td", null, b.players),
-    h("td", null, b.zombies),
-    h("td", null, b.deaths),
-    h("td", null, b.score),
-    h("td", null, b.level),
+    STAT_COLUMNS.map((c): unknown => h("td", { key: c }, b[c])),
     h("td", { dir: "auto" }, nearLabel(b)),
     h("td", null, h("select", {
       className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",

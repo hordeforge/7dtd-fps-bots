@@ -13,4 +13,15 @@ __pycache__/
 .scratch/
 backups/
 *.lock
+# Lockfiles are dependency state, not build output: committing one is the only
+# way the toolchain can verify what it installs. Everything else matching
+# *.lock (notably .gauntlet.lock) stays ignored.
+!bun.lock
+!package-lock.json
+!yarn.lock
+!pnpm-lock.yaml
+!uv.lock
+!poetry.lock
+!Cargo.lock
+!go.sum
 coverage.cobertura.xml

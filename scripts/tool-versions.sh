@@ -29,9 +29,12 @@
 # revision is intended; the digest says the bytes on disk are that revision.
 # A mismatch is a tampered mirror or cache, never a formatting change to
 # update around: re-fetch, compare against the pinned commit, and only then
-# replace this value. The npm pins above resolve through the registry's own
-# per-version sha512 integrity fields (bun.lock); this archive has no registry,
-# so the digest is the only integrity control it has.
+# replace this value. The npm pins above are exact versions fetched through
+# bunx, which checks the downloaded tarball against the registry's own
+# sha512 integrity metadata; there is no committed lockfile, so what that
+# pins is the top-level version, not the dependency tree beneath it. This
+# archive has no registry behind it, so the digest is the only integrity
+# control it has.
 : "${ANTI_SLOP_SHA256:=a720663fd2562e22e3da670769faa88dc34c9a761fdd9a7d285e20d92871848e}"
 : "${VNU_VERSION:=26.8.20}"
 # Python analysis gate (make lint-python / .github/workflows/ci.yml). Keep in
