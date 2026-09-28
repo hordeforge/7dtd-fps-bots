@@ -302,6 +302,13 @@ namespace BotMod.Config
             }
             return unknown;
         }
+        /// <summary>Traits for a bot name, resolved against the currently
+        /// published table. Never returns null: an unknown name falls back to
+        /// the Grunt entry, and a table without one to freshly minted defaults.
+        /// Callers that run per bot per tick (Bot.Character) may read it every
+        /// tick: the cost is the BaseName scan plus one dictionary lookup, and
+        /// a snapshot instead would pin a live bot to the traits in force at
+        /// its spawn, which a `bot reload` cannot reach.</summary>
         public static BotCharacter ForName(string name)
         {
             // Identity key must match BotText.BaseName: spawned names look like

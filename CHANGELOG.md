@@ -313,6 +313,21 @@ Under the 0.x policy above, these change what an existing consumer sees.
 
 ### Fixed
 
+- Editing `characters.json` and running `bot reload` (or the web API's reload
+  action) changed nothing for bots that were already alive. `Bot` captured its
+  `BotCharacter` in the constructor and never looked again, so every live bot
+  ran on the traits in force at its spawn until it respawned, and the reload
+  read as applied. `BotCharacterDB` publishes its table by reference store
+  exactly so readers observe the swap, and `Bot.Character` now resolves through
+  `ForName` on each read (a base-name scan plus one dictionary lookup, a few
+  times per bot per tick). The `Bot` constructor's now-redundant
+  `BotCharacter` parameter is gone.
+- `BotCombat.GameMessageOverload` set its "already probed" flag before storing
+  the probed `MethodInfo`, with both fields plain. Another core can observe the
+  flag and not the result, take "probed, no overload" as the answer, and fall
+  back to the slower announce path for the rest of the run. The flag is
+  `volatile` and is stored after the result, so the publish is ordered; a
+  double probe stays possible and is harmless (the walk is pure).
 - The bot panel formatted only some of its numbers through the runtime locale.
   The spawned/done line, the team bucket head, the scoreboard heading, the
   skill and team-count result lines, the `+N` buttons and the config row's

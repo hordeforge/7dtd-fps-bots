@@ -357,6 +357,31 @@ static class BotCharacterArithTests
                 w.Count == 0);
         }
 
+        // 13. Republish reaches a caller that holds only a name. Bot.Character
+        //     resolves through ForName on every read precisely so a `bot
+        //     reload` reaches bots that are already alive; a snapshot taken at
+        //     spawn pinned them to pre-reload traits until they respawned and
+        //     the edited file read as applied while nothing changed in play.
+        //     This pins the half Bot.Character cannot: ForName re-reads the
+        //     published table, and a name whose traits vanished with the
+        //     reload falls back rather than reporting a stale hit.
+        {
+            var cfg = new BotConfig { Difficulty = 2, BotNames = new[] { "Grunt" } };
+            LoadCharacters("{ \"Grunt\": { \"Camper\": 0.8 } }", cfg);
+            float first = BotCharacterDB.ForName("[Bot] Grunt_42").Camper;
+            Check("a held name resolves to the loaded traits", first == 0.8f);
+            LoadCharacters("{ \"Grunt\": { \"Camper\": 0.3 } }", cfg);
+            Check("the same name sees the reloaded traits",
+                BotCharacterDB.ForName("[Bot] Grunt_42").Camper == 0.3f);
+            // The reload drops the block: the name must fall back to minted
+            // defaults (Camper 0.2), not keep answering with the entry the
+            // previous publish held.
+            LoadCharacters("{ \"Rookie\": { \"Camper\": 0.9 } }",
+                new BotConfig { Difficulty = 2, BotNames = new[] { "Rookie" } });
+            Check("a name the reload dropped falls back instead of sticking",
+                BotCharacterDB.ForName("[Bot] Grunt_42").Camper == 0.2f);
+        }
+
         if (_failures == 0) { Console.WriteLine("all bot character arithmetic tests passed"); return 0; }
         Console.WriteLine(_failures + " bot character arithmetic tests FAILED");
         return 1;

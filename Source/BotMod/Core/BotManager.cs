@@ -205,7 +205,6 @@ namespace BotMod.Core
             string name = BotSpawner.PickName(cfg);
             var wp = BotSpawner.PickWeapon(cfg, weaponOverride);
             Entity e = BotSpawner.SpawnBotEntity(world, pos, cfg.BotEntityClass, name);
-            var character = BotCharacterDB.ForName(name);
             if (e == null)
             {
                 // MaintainPopulation retries this every second, so an unthrottled
@@ -217,7 +216,7 @@ namespace BotMod.Core
                 return false;
             }
             BotSpawner.ConfigureBotEntity(e, cfg, wp.GunId, name);
-            var bot = new Bot(e.entityId, name, BotClock.Now, wp, character);
+            var bot = new Bot(e.entityId, name, BotClock.Now, wp);
             _bots.Add(bot); _botById[e.entityId] = bot;
             if (cfg.AnnounceSpawns) ModApi.Log($"Bot spawned: {name} [{wp.GunId}] id={e.entityId} at {pos} ({_bots.Count}/{cfg.TargetBotCount})");
             return true;

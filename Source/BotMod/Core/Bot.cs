@@ -15,7 +15,16 @@ namespace BotMod.Core
         public string TeamKey { get; }
         public float SpawnTime { get; }
         public WeaponProfile Weapon { get; private set; }
-        public BotCharacter Character { get; private set; }
+        /// <summary>Traits for this bot's base name, resolved from the live
+        /// BotCharacterDB table on every read, never captured at spawn.
+        /// `bot reload` (and the web API's reload action) republishes that table
+        /// through BotCharacterDB.Load, and the table is published by reference
+        /// store precisely so a reader sees the new one. A snapshot taken in the
+        /// constructor pinned every live bot to its spawn-time traits until it
+        /// respawned, so an edited characters.json read as applied while nothing
+        /// changed in play and nothing said so. Never null: ForName falls back
+        /// to the Grunt entry, then to minted defaults.</summary>
+        public BotCharacter Character { get { return BotCharacterDB.ForName(Name); } }
         bool _dead;
         EntityAlive _cachedEntity;
         float _nextTargetScan;
@@ -95,9 +104,9 @@ namespace BotMod.Core
         // so it runs at 4 Hz instead of once per frame (flip latency <= 0.25 s).
         float _nextFlankScan;
 
-        public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character)
+        public Bot(int entityId, string name, float now, WeaponProfile weapon)
         {
-            EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
+            EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon;
             TeamKey = BotText.BaseName(name); // frozen: names never change after spawn
             _burstLeft = weapon.BurstMin;
             _rng = Lcg.Seeded((uint)entityId * 2654435761u + 97u);
@@ -105,11 +114,8 @@ namespace BotMod.Core
         }
 
         public void MarkDead() { _dead = true; }
-        /// <summary>Aim traits with the documented fallback when this bot has
-        /// no character entry (single definition; consumers: engagement aim
-        /// bias and the neural observation slots).</summary>
-        float AimAcc => Character?.AimAccuracy ?? 0.75f;
-        float AimSkillVal => Character?.AimSkill ?? 0.75f;
+        float AimAcc => Character.AimAccuracy;
+        float AimSkillVal => Character.AimSkill;
         float Rng01() { return _rng.Next01(); }
         float RngSym() { return _rng.NextSymmetric(); }
         public bool IsDeadOrUnloaded(World world)
@@ -206,7 +212,7 @@ namespace BotMod.Core
             UpdateTargetVelocity(dt);
             AcquireTarget(me, world, cfg);
 
-            var ch = Character ?? BotCharacterDB.ForName(Name);
+            var ch = Character;
             if (_target != null && _target.IsAlive()) RetreatToCover(me, world, cfg, ch);
 
             if (_target != null && _target.IsAlive() && !IsDeadTgt(_target))
@@ -954,7 +960,7 @@ namespace BotMod.Core
             float acc = AimAcc;
             float skill = AimSkillVal;
             float aggr = 0.5f, selfPres = 0.5f, camper = 0.2f;
-            try { if (Character != null) { aggr = Character.Aggression; selfPres = Character.SelfPreservation; camper = Character.Camper; } }
+            try { var ch = Character; aggr = ch.Aggression; selfPres = ch.SelfPreservation; camper = ch.Camper; }
             catch (Exception ex) { WarnInputSlot("characterTraits", aggr, ex); }
             // Slot 12: rounds-left fraction. The sim divides ammo+reserve by the
             // 2x-mag pool; the runtime has no finite reserve (BotAmmoCount is

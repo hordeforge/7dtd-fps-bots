@@ -189,10 +189,18 @@ namespace BotMod.AI
         /// overload is not re-walked on every kill either.</summary>
         static System.Reflection.MethodInfo GameMessageOverload()
         {
+            // The probed flag is the publish signal for the result, so it is
+            // volatile: a plain write can be observed by another core before the
+            // result field it guards, and that reader would take "probed, no
+            // overload" as the answer. The release/acquire pair orders the
+            // result store ahead of the flag, so a reader that sees the flag set
+            // also sees the MethodInfo. Two threads racing into the probe is
+            // harmless and possible either way: the walk is pure and both get
+            // the same answer.
             if (!s_gameMessageProbed)
             {
-                s_gameMessageProbed = true;
                 s_gameMessageOverload = ProbeGameMessageOverload();
+                s_gameMessageProbed = true;
             }
             return s_gameMessageOverload;
         }
@@ -213,7 +221,7 @@ namespace BotMod.AI
             return null;
         }
 
-        static bool s_gameMessageProbed;
+        static volatile bool s_gameMessageProbed;
         static System.Reflection.MethodInfo s_gameMessageOverload;
     }
 }
