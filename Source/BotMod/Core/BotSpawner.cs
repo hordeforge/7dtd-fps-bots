@@ -75,6 +75,10 @@ namespace BotMod.Core
         {
             if (player == null) return PickSpawnPosition(world, cfg);
             Vector3 pp = player.position;
+            // The candidate loops below each rebuilt the player's eye from pp;
+            // position is a Unity property read, and these loops run their
+            // full attempt budget on every spawn.
+            Vector3 playerEye = pp + Vector3.up * 1.45f;
             // Positions of the bots already up, snapshotted once per call: the
             // candidate loop below scores every spawnpoint against them, and
             // resolving the roster inside that loop repeated a world-dictionary
@@ -93,7 +97,7 @@ namespace BotMod.Core
                         float d = Vector3.Distance(cand, pp);
                         if (d < 11f || d > 42f) continue; // not too close / not too far
                         // Prefer out-of-sight spawn (FPS spawn protection)
-                        bool los = HasLineOfSightForSpawn(pp + Vector3.up * 1.45f, cand + Vector3.up * 0.5f, world);
+                        bool los = HasLineOfSightForSpawn(playerEye, cand + Vector3.up * 0.5f, world);
                         float score = 0f;
                         if (!los) score += 9f;
                         score += 6f - Math.Abs(d - 22f) * 0.3f; // sweet spot ~22m
@@ -120,7 +124,7 @@ namespace BotMod.Core
                 if (pos == Vector3.zero) continue;
                 if (Vector3.Distance(pos, pp) < 10f) continue;
                 // Prefer not in direct sight (so bot doesn't spawn in your face)
-                if (HasLineOfSightForSpawn(pp + Vector3.up * 1.45f, pos + Vector3.up * 0.9f, world)) continue;
+                if (HasLineOfSightForSpawn(playerEye, pos + Vector3.up * 0.9f, world)) continue;
                 if (!IsSpawnClear(world, pos, pp, cfg)) continue;
                 return pos;
             }
@@ -244,13 +248,14 @@ namespace BotMod.Core
                     if (list.Count > 0)
                     {
                         var pl = list[RngPick(list.Count)];
+                        Vector3 plPos = pl.position;
                         for (int attempt = 0; attempt < 6; attempt++)
                         {
                             float ang = (float)(Rng01() * Math.PI * 2);
                             float dist = (float)(Rng01() * cfg.SpawnRadius + 10f);
-                            Vector3 pos = pl.position + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
+                            Vector3 pos = plPos + new Vector3(Mathf.Cos(ang) * dist, 0, Mathf.Sin(ang) * dist);
                             pos = FindGround(world, pos);
-                            if (pos != Vector3.zero && IsSpawnClear(world, pos, pl.position, cfg)) return pos;
+                            if (pos != Vector3.zero && IsSpawnClear(world, pos, plPos, cfg)) return pos;
                         }
                     }
                 }

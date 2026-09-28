@@ -59,6 +59,10 @@ namespace BotMod.AI
             // config-constant for the whole scan, and the loops run it once per
             // entity in the vision box (or once per EntityAlive in the world).
             float botHealth = System.Math.Max(1f, cfg.BotHealth);
+            // Same for the eye height. EntityAlive.position is a Unity property
+            // read that crosses into the engine, and the three candidate loops
+            // below rebuilt this from myPos for every entity they scored.
+            Vector3 eye = myPos + Vector3.up * 1.45f;
 
             try
             {
@@ -74,7 +78,14 @@ namespace BotMod.AI
                         if (e == null || e == me) continue;
                         if (!(e is EntityAlive alive)) continue;
                         if (alive.IsDead() || !alive.IsAlive()) continue;
-                        float dist = Vector3.Distance(myPos, alive.position);
+                        // One read per candidate, used for the range test, the
+                        // FOV direction and the LOS endpoint. position is a
+                        // Unity property access, and nothing below moves the
+                        // body (the gates are pure arithmetic and registry
+                        // lookups), so the three reads the loop used to make
+                        // all returned this value.
+                        Vector3 ap = alive.position;
+                        float dist = Vector3.Distance(myPos, ap);
                         if (dist > cfg.VisionRange) continue;
                         // Range, then the distance-only score bound, then the
                         // ally check, cheapest first. IsFriendly costs a
@@ -84,18 +95,18 @@ namespace BotMod.AI
                         // skips the FOV math and the LOS raycast. Every gate
                         // here only skips, so the order changes no pick.
                         if (CannotBeat(alive.entityId, preferredId, dist, bestScore, MinScoreMult)) continue;
-                        if (IsFriendly(me, alive, cfg)) continue;
-                        Vector3 dir = (alive.position - myPos); dir.y = 0;
+                        if (IsFriendly(me, alive, cfg, out bool aliveIsBot)) continue;
+                        Vector3 dir = (ap - myPos); dir.y = 0;
                         if (dir == Vector3.zero) continue;
                         dir.Normalize();
                         float angle = Vector3.Angle(fwd, dir);
                         // Wide FOV for FPS feel; close targets always spotted
                         float fov = cfg.VisionAngle * (dist < 12f ? 1.1f : 1f);
                         if (dist > 7f && angle > fov * 0.5f) continue;
-                        if (!HasLineOfSight(myPos + Vector3.up * 1.45f, alive.position + Vector3.up * 1.05f, world)) continue;
+                        if (!HasLineOfSight(eye, ap + Vector3.up * 1.05f, world)) continue;
                         float score = dist;
                         if (alive is EntityPlayer) score *= 0.82f;
-                        if (BotManager.Instance.IsBotEntity(alive.entityId)) score *= 0.9f;
+                        if (aliveIsBot) score *= 0.9f;
                         // FPS priority: strongly prefer finishing wounded targets (low HP -> low
                         // score -> chosen). A ~10% HP foe beats a full-HP one by ~5.4 on the
                         // distance scale, matching finish-the-kill. Fraction of cfg.BotHealth,
@@ -125,11 +136,12 @@ namespace BotMod.AI
                         foreach (var p in world.Players.list)
                         {
                             if (p == null || p == me || p.IsDead()) continue;
-                            float dist = Vector3.Distance(myPos, p.position);
+                            Vector3 pp = p.position;
+                            float dist = Vector3.Distance(myPos, pp);
                             if (dist > cfg.VisionRange) continue;
                             if (CannotBeat(p.entityId, preferredId, dist, bestScore, MinScoreMult)) continue;
-                            if (IsFriendly(me, p, cfg)) continue;
-                            if (!HasLineOfSight(myPos + Vector3.up * 1.45f, p.position + Vector3.up * 1.05f, world)) continue;
+                            if (IsFriendly(me, p, cfg, out _)) continue;
+                            if (!HasLineOfSight(eye, pp + Vector3.up * 1.05f, world)) continue;
                             float score = dist * 0.82f;
                             if (preferredId >= 0 && p.entityId == preferredId) score *= GrudgeBias;
                             if (score < bestScore) { bestScore = score; best = p; }
@@ -149,7 +161,8 @@ namespace BotMod.AI
                             // Scan every EntityAlive, not just zombies: bot bodies follow
                             // BotEntityClass (and its negative-id fallbacks), so they are
                             // not guaranteed to be zombie-typed.
-                            float dist = Vector3.Distance(myPos, a.position);
+                            Vector3 ap = a.position;
+                            float dist = Vector3.Distance(myPos, ap);
                             if (dist > cfg.VisionRange) continue;
                             // Same gates, cheapest first (see the bounds pass).
                             // The bound is the sharpest of the three: this pass
@@ -159,8 +172,8 @@ namespace BotMod.AI
                             // this is what keeps the sweep from raycasting
                             // every body in vision range.
                             if (CannotBeat(a.entityId, preferredId, dist, bestScore, 1f)) continue;
-                            if (IsFriendly(me, a, cfg)) continue;
-                            if (!HasLineOfSight(myPos + Vector3.up * 1.45f, a.position + Vector3.up * 1.05f, world)) continue;
+                            if (IsFriendly(me, a, cfg, out _)) continue;
+                            if (!HasLineOfSight(eye, ap + Vector3.up * 1.05f, world)) continue;
                             float score = dist;
                             score += (a.Health / botHealth) * 6f; // finish wounded targets
                             if (preferredId >= 0 && a.entityId == preferredId) score *= GrudgeBias;
@@ -198,9 +211,16 @@ namespace BotMod.AI
             uint threshold = (uint)System.Math.Min(100f, camper * 12f); // saturates above camper=8.33
             return ((uint)entityId * 2654435761u) % 100u < threshold;
         }
-        static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg)
+        /// <summary>Whether <paramref name="other"/> is excluded from the
+        /// candidate set, and whether it is a registered bot.
+        /// <paramref name="otherIsBot"/> reports the registry answer the ally
+        /// rule already had to look up: the vision-box scoring pass needs the
+        /// same fact to weight the score, and reading it from the registry
+        /// again there was a second lookup for every candidate that survived
+        /// the gates.</summary>
+        static bool IsFriendly(EntityAlive me, EntityAlive other, BotConfig cfg, out bool otherIsBot)
         {
-            bool otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
+            otherIsBot = BotManager.Instance.IsBotEntity(other.entityId);
             // Squad mode, vsBot-off, and same-team all make bots allies; otherwise
             // bots are fair game. Bot bodies are zombieSoldier (EntityZombie) - the
             // friendly checks below must not exempt them from the vsBot gate.
@@ -404,6 +424,9 @@ namespace BotMod.AI
             // keep candidates a threat's LOS cannot reach
             Vector3 best = Vector3.zero; float bestScore = -1f;
             Vector3 myPos = me.position;
+            // threat.position is a Unity property read, and the eight compass
+            // candidates below each rebuilt the threat's eye from it.
+            Vector3 threatEye = threat.position + Vector3.up * 1.45f;
             for (int i = 0; i < 8; i++)
             {
                 float ang = i * 45f * Mathf.Deg2Rad;
@@ -415,7 +438,7 @@ namespace BotMod.AI
                     if (bv.type != 0) { cand.y = myPos.y + y + 1.8f; break; }
                 }
                 // must be not visible from threat
-                if (HasLineOfSight(threat.position + Vector3.up * 1.45f, cand + Vector3.up * 0.5f, world)) continue;
+                if (HasLineOfSight(threatEye, cand + Vector3.up * 0.5f, world)) continue;
                 // must be reachable (not inside wall)
                 var bv2 = world.GetBlock(new Vector3i(Mathf.FloorToInt(cand.x), Mathf.FloorToInt(cand.y), Mathf.FloorToInt(cand.z)));
                 if (bv2.type != 0 && Block.list[bv2.type] != null && Block.list[bv2.type].IsCollideMovement) continue;

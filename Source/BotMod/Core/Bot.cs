@@ -645,8 +645,13 @@ namespace BotMod.Core
                         // teammates (team/squad modes) or any bot when vs-bot is off.
                         // FindTarget excludes allies, so seeking them just clumps bots.
                         if (BotManager.Instance.AreAllies(EntityId, b.EntityId)) continue;
-                        float d = Vector3.Distance(mePos, e2.position);
-                        if (d < bestD) { bestD = d; best = e2.position; }
+                        // One read per peer: the distance test and the "nearest"
+                        // bookkeeping both wanted the same value, and position
+                        // is a Unity property access on every entity in the
+                        // roster, on a scan that runs per idle wander tick.
+                        Vector3 bPos = e2.position;
+                        float d = Vector3.Distance(mePos, bPos);
+                        if (d < bestD) { bestD = d; best = bPos; }
                     }
                 }
                 // A half-completed scan returns the other class's best only, so the
@@ -660,8 +665,9 @@ namespace BotMod.Core
                         foreach (var p in world.Players.list)
                         {
                             if (p == null || p.IsDead()) continue;
-                            float d = Vector3.Distance(mePos, p.position);
-                            if (d < bestD) { bestD = d; best = p.position; }
+                            Vector3 pPos = p.position;
+                            float d = Vector3.Distance(mePos, pPos);
+                            if (d < bestD) { bestD = d; best = pPos; }
                         }
                 }
                 catch (Exception ex) { ModApi.WarnRateLimited(() => "player scan aborted for " + Name + ", bot candidates only: " + ex.Message); }
@@ -681,7 +687,11 @@ namespace BotMod.Core
             try
             {
                 if (me == null || target == null || world == null) return false;
-                var toT = target.position - me.position; toT.y = 0;
+                // Read once per scan: the peer loop below asked the target for
+                // its position twice per peer, on a walk over the whole roster
+                // that runs at 4 Hz per bot.
+                Vector3 tPos = target.position;
+                var toT = tPos - me.position; toT.y = 0;
                 if (toT.sqrMagnitude < 0.01f) return false;
                 var cross = Vector3.Cross(Vector3.up, toT.normalized);
                 int mySide = (int)Mathf.Sign(Vector3.Dot(cross, Vector3.right) * myStrafeDir);
@@ -691,8 +701,9 @@ namespace BotMod.Core
                     var e2 = b.ResolveEntity(world);
                     if (e2 == null || e2.IsDead() || !e2.IsAlive()) continue;
                     // is this bot lining up on the same target?
-                    if (Vector3.Distance(e2.position, target.position) > 3f) continue;
-                    var bToT = target.position - e2.position; bToT.y = 0;
+                    Vector3 bPos = e2.position;
+                    if (Vector3.Distance(bPos, tPos) > 3f) continue;
+                    var bToT = tPos - bPos; bToT.y = 0;
                     if (bToT.sqrMagnitude < 0.01f) continue;
                     var bCross = Vector3.Cross(Vector3.up, bToT.normalized);
                     int bSide = (int)Mathf.Sign(Vector3.Dot(bCross, Vector3.right));
@@ -921,7 +932,7 @@ namespace BotMod.Core
             try { if (_target != null && _target.IsAlive()) enemyHp = Mathf.Clamp01(_target.Health / Mathf.Max(1f, cfg.BotHealth)); }
             catch (Exception ex) { WarnInputSlot("enemyHpFrac", enemyHp, ex); }
             float distNorm = 0f;
-            try { distNorm = Mathf.Clamp01(Vector3.Distance(me.position, _target != null ? _target.position : me.position) / Mathf.Max(1f, cfg.VisionRange)); }
+            try { Vector3 from = me.position; distNorm = Mathf.Clamp01(Vector3.Distance(from, _target != null ? _target.position : from) / Mathf.Max(1f, cfg.VisionRange)); }
             catch (Exception ex) { WarnInputSlot("distNorm", distNorm, ex); }
             float canSee = 0f;
             try { canSee = TargetVisible(me, world, cfg) ? 1f : 0f; }
