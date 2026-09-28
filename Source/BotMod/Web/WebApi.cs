@@ -427,8 +427,14 @@ namespace BotMod.Web
                             if (countRead == FieldRead.Invalid) { failure = "INVALID_COUNT"; break; }
                             if (countRead == FieldRead.Ok) count = countParsed;
                             string field = ModApi.Config.SetTeamCount(count);
-                            ModApi.PersistConfigField(field, ModApi.Config.BotTeamCount);
-                            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
+                            // One write for both fields: two separate persists
+                            // re-read, re-parsed, fsynced and backed up the same
+                            // config file twice for one request.
+                            ModApi.PersistConfigFields(new[]
+                            {
+                                new KeyValuePair<string, object>(field, ModApi.Config.BotTeamCount),
+                                new KeyValuePair<string, object>("TeamAssignments", ModApi.Config.SnapshotTeamAssignments())
+                            });
                             respBody = RespondJson("teamCount", ModApi.Config.BotTeamCount);
                         }
                         break;
@@ -561,7 +567,11 @@ namespace BotMod.Web
                 }
                 foreach (var b in mgr.Bots)
                 {
-                    var ent = world.GetEntity(b.EntityId) as EntityAlive;
+                    // Through the bot's own entity cache: the poll runs on the
+                    // main thread right after the tick that just primed every
+                    // bot's cache, so this resolves from that cache instead of
+                    // repeating a world-dictionary lookup per bot per poll.
+                    var ent = b.ResolveEntity(world);
                     // Nearest live player + distance in metres (blocks).
                     string nearName = null;
                     float nearDist = -1f;

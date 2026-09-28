@@ -292,7 +292,10 @@ namespace BotMod.Commands
             if (team < 0 || team > cfg.BotTeamCount) { SdtdConsole.Instance.Output("teamId must be 0.." + cfg.BotTeamCount + "."); return; }
             string name = BotText.BaseName(p[2]);
             bool live = false;
-            foreach (var b in BotManager.Instance.Bots) if (BotText.BaseName(b.Name) == name) { live = true; break; }
+            // Bot.TeamKey is BaseName(Name) frozen at spawn, so the roster scan
+            // re-canonicalizing every live bot's name was re-deriving a value
+            // each bot already carries.
+            foreach (var b in BotManager.Instance.Bots) if (b.TeamKey == name) { live = true; break; }
             var result = cfg.SetTeamAssignment(name, team);
             if (result != BotConfig.TeamAssignResult.Ok)
             {
@@ -300,8 +303,8 @@ namespace BotMod.Commands
                 // read to the operator as "the team is set" while the bots keep
                 // fighting each other.
                 SdtdConsole.Instance.Output(result == BotConfig.TeamAssignResult.AtCapacity
-                    ? $"Team map is full ({cfg.MaxTeamAssignments} assignments); not stored. 'bot team clear' or assign teamId 0 first."
-                    : "Team name is empty or longer than " + cfg.MaxTeamNameChars + " characters; not stored.");
+                    ? $"Team map is full ({BotConfig.MaxTeamAssignments} assignments); not stored. 'bot team clear' or assign teamId 0 first."
+                    : "Team name is empty or longer than " + BotConfig.MaxTeamNameChars + " characters; not stored.");
                 return;
             }
             ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
@@ -330,8 +333,11 @@ namespace BotMod.Commands
             }
             // Clamp + assignment pruning live in BotConfig.SetTeamCount (shared
             // with the web `teamCount` action).
-            ModApi.PersistConfigField(ModApi.Config.SetTeamCount(n), ModApi.Config.BotTeamCount);
-            ModApi.PersistConfigField("TeamAssignments", ModApi.Config.SnapshotTeamAssignments());
+            ModApi.PersistConfigFields(new[]
+            {
+                new KeyValuePair<string, object>(ModApi.Config.SetTeamCount(n), ModApi.Config.BotTeamCount),
+                new KeyValuePair<string, object>("TeamAssignments", ModApi.Config.SnapshotTeamAssignments())
+            });
             SdtdConsole.Instance.Output("Team count set to " + ModApi.Config.BotTeamCount + (ModApi.Config.BotTeamCount == 0 ? " - free-for-all only." : "."));
         }
         static bool ParseOnOff(string v, out bool on)

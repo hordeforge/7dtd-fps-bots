@@ -124,7 +124,13 @@ namespace BotMod.Core
             if (e.IsDead() || !e.IsAlive()) return true;
             return false;
         }
-        EntityAlive GetEntity(World world)
+        /// <summary>Live body for this bot, or null when it is not in the world
+        /// dict. Cached on the bot, so a scan that walks the whole roster
+        /// (FlankAway, SeekNearestEnemy) resolves each peer through that peer's
+        /// own cache instead of paying a world-dictionary lookup per pair; the
+        /// cached reference is the same entity the lookup returns, and the
+        /// IsAlive/IsDead checks every caller already made still run on it.</summary>
+        public EntityAlive ResolveEntity(World world)
         {
             if (_cachedEntity != null && _cachedEntity.entityId == EntityId && _cachedEntity.IsAlive()) return _cachedEntity;
             var e = world.GetEntity(EntityId) as EntityAlive;
@@ -186,7 +192,7 @@ namespace BotMod.Core
             // Spread recovery runs before any shot this tick can add to it,
             // matching the sim's decay-then-maybe-fire ordering per tick.
             if (_fireSpread > 0f) _fireSpread = Mathf.Max(0f, _fireSpread - kSpreadDecayPerSec * dt);
-            var me = GetEntity(world);
+            var me = ResolveEntity(world);
             if (me == null) return;
             var cfg = ModApi.Config;
             if (Time.time - SpawnTime < cfg.SpawnProtectionSec) return;
@@ -606,7 +612,7 @@ namespace BotMod.Core
                     foreach (var b in BotManager.Instance.Bots)
                     {
                         if (b == null || b.EntityId == EntityId) continue;
-                        var e2 = world.GetEntity(b.EntityId) as EntityAlive;
+                        var e2 = b.ResolveEntity(world);
                         if (e2 == null || e2.IsDead() || !e2.IsAlive()) continue;
                         // Single ally rule (BotManager.AreAllies): never converge on
                         // teammates (team/squad modes) or any bot when vs-bot is off.
@@ -649,7 +655,7 @@ namespace BotMod.Core
                 foreach (var b in BotManager.Instance.Bots)
                 {
                     if (b == null || b.EntityId == EntityId) continue;
-                    var e2 = world.GetEntity(b.EntityId) as EntityAlive;
+                    var e2 = b.ResolveEntity(world);
                     if (e2 == null || e2.IsDead() || !e2.IsAlive()) continue;
                     // is this bot lining up on the same target?
                     if (Vector3.Distance(e2.position, target.position) > 3f) continue;

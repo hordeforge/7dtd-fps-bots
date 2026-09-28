@@ -97,28 +97,18 @@ namespace BotMod.AI
             {
                 var gm = GameManager.Instance;
                 if (gm == null) return;
-                // Recipients = connected players (empty collection => broadcast).
-                System.Collections.Generic.List<ClientInfo> cts = new System.Collections.Generic.List<ClientInfo>();
-                try { if (ConnectionManager.Instance?.Clients?.List != null) cts = new System.Collections.Generic.List<ClientInfo>(ConnectionManager.Instance.Clients.List); } catch { }
                 // Prefer ChatMessageServer(int?) constructor chain; wrap as few assumptions as possible.
-                try
+                // The overload is resolved once per process: Type.GetMethods()
+                // walks the whole method table and materializes a MethodInfo per
+                // entry, and this runs on every bot kill, where a busy free-for-all
+                // produces several a second. The assembly cannot change under a
+                // running process, so a miss is a miss for the rest of the run.
+                var gameMessage = GameMessageOverload();
+                if (gameMessage != null)
                 {
-                    var t = typeof(GameManager);
-                    // Best-effort: find a GameMessage overload accepting
-                    // (EnumGameMessages, string message).
-                    foreach (var ov in t.GetMethods())
-                    {
-                        if (ov.Name != "GameMessage") continue;
-                        var ps = ov.GetParameters();
-                        try
-                        {
-                            if (ps.Length >= 2 && ps[0].ParameterType.Name == "EnumGameMessages" && ps[1].ParameterType == typeof(string))
-                                { ov.Invoke(gm, new object[] { (int)0, msg }); sent = true; return; }
-                        }
-                        catch { }
-                    }
+                    try { gameMessage.Invoke(gm, new object[] { (int)0, msg }); sent = true; return; }
+                    catch { }
                 }
-                catch { }
                 // Fallback: direct ChatMessageServer packet if reachable via NetPackage reflection.
                 try
                 {
@@ -137,7 +127,17 @@ namespace BotMod.AI
                             try
                             {
                                 if (p.Length >= 2)
-                                    { sp.Invoke(inst, new object[] { cts, msg, false }); sent = true; return; }
+                                {
+                                    // Recipients = connected players (empty collection
+                                    // => broadcast). Built here, not for both
+                                    // branches: the preferred overload above never
+                                    // looks at it.
+                                    System.Collections.Generic.List<ClientInfo> cts = new System.Collections.Generic.List<ClientInfo>();
+                                    try { if (ConnectionManager.Instance?.Clients?.List != null) cts = new System.Collections.Generic.List<ClientInfo>(ConnectionManager.Instance.Clients.List); } catch { }
+                                    sp.Invoke(inst, new object[] { cts, msg, false });
+                                    sent = true;
+                                    return;
+                                }
                             }
                             catch { }
                         }
@@ -148,5 +148,38 @@ namespace BotMod.AI
             catch { }
             if (!sent) ModApi.WarnRateLimited(() => "kill chat announce not delivered: no usable GameMessage/ChatMessageServer API (kill log lines unaffected)");
         }
+
+        /// <summary>Cached GameManager.GameMessage(EnumGameMessages, string)
+        /// lookup. The probe runs once per process: the method table cannot
+        /// change under a running process, so a server whose API lacks the
+        /// overload is not re-walked on every kill either.</summary>
+        static System.Reflection.MethodInfo GameMessageOverload()
+        {
+            if (!s_gameMessageProbed)
+            {
+                s_gameMessageProbed = true;
+                s_gameMessageOverload = ProbeGameMessageOverload();
+            }
+            return s_gameMessageOverload;
+        }
+
+        static System.Reflection.MethodInfo ProbeGameMessageOverload()
+        {
+            try
+            {
+                foreach (var ov in typeof(GameManager).GetMethods())
+                {
+                    if (ov.Name != "GameMessage") continue;
+                    var ps = ov.GetParameters();
+                    if (ps.Length >= 2 && ps[0].ParameterType.Name == "EnumGameMessages" && ps[1].ParameterType == typeof(string))
+                        return ov;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        static bool s_gameMessageProbed;
+        static System.Reflection.MethodInfo s_gameMessageOverload;
     }
 }

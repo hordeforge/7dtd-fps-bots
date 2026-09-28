@@ -251,6 +251,23 @@ namespace BotMod
 
         public static void PersistConfigField(string key, object value)
         {
+            PersistConfigFields(new[] { new KeyValuePair<string, object>(key, value) });
+        }
+
+        /// <summary>Persist several fields of one logical mutation in a single
+        /// read-modify-write per config file. A mutation that changes two fields
+        /// (`bot teams` rewrites the bucket count and prunes the assignments;
+        /// the web teamCount action does the same) used to call
+        /// PersistConfigField twice, and each call re-read and re-parsed the
+        /// whole file, then staged an fsynced temp plus a full .bak copy of it:
+        /// two file rewrites, two fsyncs and two backups for one operator
+        /// action, the second one restoring the intermediate state as
+        /// last-known-good. One pass per file gives the same end state with one
+        /// write; the gate below keeps the whole batch serialized against other
+        /// persists exactly as the single-field path is.</summary>
+        public static void PersistConfigFields(KeyValuePair<string, object>[] fields)
+        {
+            if (fields == null || fields.Length == 0) return;
             lock (PersistGate)
             {
                 bool wrote = false;
@@ -261,7 +278,8 @@ namespace BotMod
                         if (!File.Exists(path)) continue;
                         // Explicit UTF-8: matches AtomicTextFile.Write's Encoding.UTF8.
                         var root = JObject.Parse(File.ReadAllText(path, System.Text.Encoding.UTF8));
-                        root[key] = JToken.FromObject(value);
+                        for (int i = 0; i < fields.Length; i++)
+                            root[fields[i].Key] = JToken.FromObject(fields[i].Value);
                         AtomicTextFile.Write(path, root.ToString(Newtonsoft.Json.Formatting.Indented));
                         wrote = true;
                     }
@@ -271,14 +289,27 @@ namespace BotMod
                 // run with no config file present must say so instead of logging a
                 // persist that never happened (the toggle would silently revert on
                 // restart despite the log).
-                if (!wrote) Warn("bot config persist skipped for '" + key + "': no botmod.json found (expected /mods/BotMod/Config or beside the assembly)");
+                if (!wrote) Warn("bot config persist skipped for '" + Describe(fields) + "': no botmod.json found (expected /mods/BotMod/Config or beside the assembly)");
                 // One audit line per persisted mutation, covering both surfaces
                 // (web API handlers log their own request outcome; console
                 // commands only echo to the issuing telnet/console session,
                 // which never reaches the server log). Keeps state changes
                 // reconstructable from the log alone.
-                Log("config persist " + key + "=" + value);
+                Log("config persist " + Describe(fields));
             }
+        }
+
+        /// <summary>"key=value" pairs of a batch, comma separated, for the
+        /// persist audit line and the skipped warning.</summary>
+        static string Describe(KeyValuePair<string, object>[] fields)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < fields.Length; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(fields[i].Key).Append('=').Append(fields[i].Value);
+            }
+            return sb.ToString();
         }
     }
 }

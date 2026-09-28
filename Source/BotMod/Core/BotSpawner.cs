@@ -75,6 +75,11 @@ namespace BotMod.Core
         {
             if (player == null) return PickSpawnPosition(world, cfg);
             Vector3 pp = player.position;
+            // Positions of the bots already up, snapshotted once per call: the
+            // candidate loop below scores every spawnpoint against them, and
+            // resolving the roster inside that loop repeated a world-dictionary
+            // lookup per bot per candidate (10 x bots for one spawn).
+            var botPos = BotPositions(world);
             // Prefer DM spawnpoints that are near but not too near the player
             if (cfg.UseSpawnpoints)
             {
@@ -93,7 +98,8 @@ namespace BotMod.Core
                         if (!los) score += 9f;
                         score += 6f - Math.Abs(d - 22f) * 0.3f; // sweet spot ~22m
                         // Avoid stacking on other bots
-                        try { foreach (var b in BotManager.Instance.Bots) { var e = world.GetEntity(b.EntityId) as EntityAlive; if (e != null && Vector3.Distance(cand, e.position) < 9f) score -= 7f; } } catch {}
+                        for (int i = 0; i < botPos.Count; i++)
+                            if (Vector3.Distance(cand, botPos[i]) < 9f) score -= 7f;
                         if (score > bestScore) { bestScore = score; best = cand; }
                     }
                     if (best != Vector3.zero)
@@ -155,6 +161,28 @@ namespace BotMod.Core
             } catch { return false; }
         }
 
+        /// <summary>Positions of every live bot, resolved once per call. The
+        /// spawn pickers score several candidates against the same roster, so
+        /// each one snapshots it up front; resolving per candidate made a spawn
+        /// cost candidates x bots world-dictionary lookups, which is the N+1 the
+        /// picking loops above were shaped around. Returns an empty list (never
+        /// null) when the manager or the world lookup throws.</summary>
+        static List<Vector3> BotPositions(World world)
+        {
+            var positions = new List<Vector3>();
+            try
+            {
+                foreach (var b in BotManager.Instance.Bots)
+                {
+                    if (b == null) continue;
+                    var e = b.ResolveEntity(world);
+                    if (e != null) positions.Add(e.position);
+                }
+            }
+            catch { }
+            return positions;
+        }
+
         public static Vector3 PickSpawnPosition(World world, BotConfig cfg)
         {
             // DM: pick world spawnpoints first
@@ -167,20 +195,20 @@ namespace BotMod.Core
                     Vector3 best = dm[RngPick(dm.Count)]; float bestDist = -1f;
                     List<Vector3> playerPos = new List<Vector3>();
                     try { if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null && !p.IsDead()) playerPos.Add(p.position); } catch { }
-                    if (playerPos.Count > 0)
+                    // Resolved once, not once per candidate: the try loop scores
+                    // every spawnpoint against the same roster snapshot, and
+                    // resolving inside it repeated a world-dictionary lookup per
+                    // bot per candidate (6 x bots for one spawn).
+                    var botPos = BotPositions(world);
+                    if (playerPos.Count > 0 || botPos.Count > 0)
                     {
                         for (int tries = 0; tries < Math.Min(6, dm.Count); tries++)
                         {
                             var cand = dm[RngPick(dm.Count)];
                             float minDist = float.MaxValue;
-                            foreach (var pp in playerPos) minDist = Mathf.Min(minDist, Vector3.Distance(cand, pp));
+                            for (int i = 0; i < playerPos.Count; i++) minDist = Mathf.Min(minDist, Vector3.Distance(cand, playerPos[i]));
                             // Also avoid spawning on top of existing bots
-                            try
-                            {
-                                var bots = BotManager.Instance.Bots;
-                                foreach (var b in bots) { var e = world.GetEntity(b.EntityId) as EntityAlive; if (e != null) minDist = Mathf.Min(minDist, Vector3.Distance(cand, e.position)); }
-                            }
-                            catch { }
+                            for (int i = 0; i < botPos.Count; i++) minDist = Mathf.Min(minDist, Vector3.Distance(cand, botPos[i]));
                             if (minDist > bestDist) { bestDist = minDist; best = cand; }
                         }
                     }
