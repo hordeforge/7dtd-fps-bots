@@ -301,6 +301,18 @@ Under the 0.x policy above, these change what an existing consumer sees.
 
 ### Fixed
 
+- The bot panel formatted only some of its numbers through the runtime locale.
+  The spawned/done line, the team bucket head, the scoreboard heading, the
+  skill and team-count result lines, the `+N` buttons and the config row's
+  chance knobs reached the screen as raw `String(n)` or as a hardcoded
+  `Math.round(f * 100)%`, so a de-DE or ar-EG viewer read Latin digits and a
+  hand-placed percent sign, in a panel that already localized every other
+  number. All of them go through `Intl` formatters now, the two timeout
+  sentences included, and the `+1` button's tooltip picks the singular form
+  through the plural rules instead of saying "1 bots". The command-result line
+  carries `dir="auto"` for the same reason the scoreboard name column does: a
+  result that names a bot by its player-chosen name must resolve its own base
+  direction rather than borrow the panel's.
 - The shipped `WebMod/bundle.js` was 14489 bytes, over the 14336-byte wire
   budget `scripts/lint-webui.sh` enforces, so `make check` failed on a clean
   tree. The read-only note span that ends each control row and the localized

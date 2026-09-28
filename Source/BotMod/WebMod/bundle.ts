@@ -166,6 +166,19 @@ const COUNT_FORMAT: Intl.NumberFormat = new Intl.NumberFormat();
 // measured, so the unit is pinned and only the number is localized.
 const METER_FORMAT: Intl.NumberFormat = new Intl.NumberFormat(undefined, { style: "unit", unit: "meter" });
 
+// Poll and command timeouts are wall-clock seconds in every deployment, so
+// the same reasoning as the meter applies: the unit is pinned, and the
+// formatter supplies the digits, the abbreviation and its spacing. A hardcoded
+// "5s" or "every 5 seconds" reads as foreign text under an ar-EG or ja-JP
+// viewer.
+const SECONDS_FORMAT: Intl.NumberFormat = new Intl.NumberFormat(undefined, { style: "unit", unit: "second" });
+
+// The chance knobs arrive as fractions, not as already-scaled percents: the
+// percent style does the scaling itself and supplies the locale's digits,
+// separator and sign placement ("35%" in en-US, "35 %" in de-DE), so the panel
+// never hardcodes the "35%" shape.
+const PERCENT_FORMAT: Intl.NumberFormat = new Intl.NumberFormat(undefined, { style: "percent" });
+
 // Plural category for n in the viewer's locale. `n === 1` is an English rule:
 // Polish has one/few/many, Arabic zero/one/two/few/many/other, and the category
 // is what picks the noun form. The panel's English labels only need one and
@@ -179,6 +192,8 @@ const PLURAL_RULES: Intl.PluralRules = new Intl.PluralRules();
 // scoreboard and status-line call sites is bytes the panel pays on every load.
 const formatCount = (n: number): string => COUNT_FORMAT.format(n);
 const formatMeters = (n: number): string => METER_FORMAT.format(n);
+const formatPercent = (fraction: number): string => PERCENT_FORMAT.format(fraction);
+const formatSeconds = (n: number): string => SECONDS_FORMAT.format(n);
 
 function isSingular(n: number): boolean {
   return PLURAL_RULES.select(n) === "one";
@@ -260,7 +275,7 @@ function actionLabel(body: BotAction): string {
     case "disable":
       return "Disable bots";
     case "skill":
-      return `Skill ${num(body.level)}`;
+      return `Skill ${formatCount(num(body.level))}`;
     case "neural":
       return body.on === true ? "GA brain on" : "GA brain off";
     case "team":
@@ -270,7 +285,7 @@ function actionLabel(body: BotAction): string {
     case "setTeam":
       return `${strOrEmpty(body.name)} to ${teamLabel(body.team)}`;
     case "teamCount":
-      return `Teams: ${num(body.count)}`;
+      return `Teams: ${formatCount(num(body.count))}`;
     case "clearTeams":
       return "Clear teams";
     default:
@@ -324,8 +339,8 @@ function outcome(body: BotAction, label: string, response: unknown): { text: str
   const n = numOr(d.spawned, 0);
   const want = numOr(body.count, 1);
   return n < want
-    ? { text: `${label}: partial, ${n}/${want} spawned.`, bad: true }
-    : { text: `${label}: done, ${n} spawned.`, bad: false };
+    ? { text: `${label}: partial, ${formatCount(n)}/${formatCount(want)} spawned.`, bad: true }
+    : { text: `${label}: done, ${formatCount(n)} spawned.`, bad: false };
 }
 
 // Fire a bot command. The 5s poll shows the real state after the call, so the
@@ -360,7 +375,7 @@ function postAction(opts: {
   const giveUp = setTimeout((): void => {
     abandoned = true;
     opts.setBusy(false);
-    opts.setStatus({ text: `${label}: no answer after ${COMMAND_TIMEOUT_MS / 1000}s. Read the scoreboard below before repeating it.`, bad: true });
+    opts.setStatus({ text: `${label}: no answer after ${formatSeconds(COMMAND_TIMEOUT_MS / 1000)}. Read the scoreboard below before repeating it.`, bad: true });
     void opts.refetch();
   }, COMMAND_TIMEOUT_MS);
   const settle = (report: CommandStatus): void => {
@@ -515,7 +530,10 @@ function renderCommandStatus(h: CreateElement, status: CommandStatus | null, onD
     return null;
   }
   return h("div", { className: `botmod-status${status.bad ? " botmod-status-bad" : ""}`, role: status.bad ? "alert" : "status" },
-    h("span", { className: "botmod-status-text" }, status.text),
+    // dir=auto: the result line names a bot by its player-chosen name ("setTeam"
+    // leads with it), so a mixed Arabic/CJK run in an English sentence resolves
+    // its own base direction instead of borrowing the panel's.
+    h("span", { className: "botmod-status-text", dir: "auto" }, status.text),
     h("button", { className: BTN, onClick: onDismiss }, "Dismiss"));
 }
 
@@ -536,9 +554,9 @@ function renderSpawnRow(h: CreateElement, enabled: boolean, busy: boolean, spawn
     [1, 4, 8].map((n): unknown =>
       h("button", {
         key: n, className: BTN, disabled: busy,
-        title: `Spawn ${n} bots at the default spot`,
+        title: `Spawn ${botCount(n)} at the default spot`,
         onClick: (): void => post({ action: "spawn", count: n })
-      }, `+${n}`)));
+      }, `+${formatCount(n)}`)));
 }
 
 // The row class every brain-family row shares (skill, brain, squad, vs, teams).
@@ -654,7 +672,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
           setDragName(null);
         }
       },
-      h("span", { className: "botmod-bucket-head", style: { color: bkt.color } }, `${bkt.label} · ${bkt.members.length}`),
+      h("span", { className: "botmod-bucket-head", style: { color: bkt.color } }, `${bkt.label} · ${formatCount(bkt.members.length)}`),
       bkt.members.length === 0
         ? h("span", { className: "botmod-bucket-empty" }, "drag a bot here")
         : bkt.members.map((b): unknown =>
@@ -681,7 +699,7 @@ function renderConfigRow(h: CreateElement, s: BotStatus): unknown {
   return h("div", { className: `${ROW} botmod-cfg` },
     note(h,
       `vision ${formatMeters(num(s.visionRange))} · attack ${formatMeters(num(s.attackRange))} · spawn r ${formatMeters(num(s.spawnRadius))}` +
-      ` · strafe ${Math.round(num(s.strafeChance) * 100)}% · dodge ${Math.round(num(s.dodgeOnHitChance) * 100)}%` +
+      ` · strafe ${formatPercent(num(s.strafeChance))} · dodge ${formatPercent(num(s.dodgeOnHitChance))}` +
       `${s.botVsBot === true ? " · vsBot" : ""} · hp ${formatCount(num(s.botHealth))}`));
 }
 
@@ -815,7 +833,7 @@ function renderScoreboard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, 
   };
   prevRowSigs = sigs;
   return h("div", { className: "botmod-scoreboard" },
-    h("h3", null, `Scoreboard (${bots.length}) · drag a row onto a team`),
+    h("h3", null, `Scoreboard (${formatCount(bots.length)}) · drag a row onto a team`),
     bots.length === 0
       ? h("p", { className: "botmod-empty" }, "No bots alive. Set a count above and press Spawn to add some.")
       : h("div", { className: "botmod-tablescroll" },
@@ -841,7 +859,7 @@ function renderQueryError(h: CreateElement, errStatus: number, onRetry: () => vo
     h("span", { className: `botmod-pill ${auth ? "botmod-bad" : "botmod-off"}`, role: "status" }, auth ? "AUTH REQUIRED" : "API ERROR"),
     h("p", { role: "alert" }, auth
       ? "Authentication required: log in to the dashboard as an admin to control bots."
-      : `The bot API is not responding (HTTP ${errStatus === 0 ? "error" : String(errStatus)}). The panel keeps retrying every ${POLL_INTERVAL_MS / 1000} seconds.`),
+      : `The bot API is not responding (HTTP ${errStatus === 0 ? "error" : String(errStatus)}). The panel keeps retrying every ${formatSeconds(POLL_INTERVAL_MS / 1000)}.`),
     auth
       ? h("button", { className: BTN, onClick: (): void => { location.href = "/"; } }, "Log in")
       : h("button", { className: BTN, onClick: onRetry }, "Retry now"));
