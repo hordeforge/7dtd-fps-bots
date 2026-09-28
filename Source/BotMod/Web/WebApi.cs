@@ -109,12 +109,12 @@ namespace BotMod.Web
         {
             MarkNoStore(context);
             PrepareEnvelopedResult(out JsonWriter writer);
-            string action = GetString(_jsonInput, "action")?.ToLowerInvariant();
+            string action = RequestFields.OptString(_jsonInput, "action")?.ToLowerInvariant();
             // Optional idempotency key: one per logical request, reused across
             // retries (see class doc + IdempotencyLedger). Present but unusable
             // is a 400: silently degrading to keyless execution would leave the
             // caller believing retries replay when they would re-execute.
-            string requestId = GetString(_jsonInput, "requestId");
+            string requestId = RequestFields.OptString(_jsonInput, "requestId");
             bool keyed = requestId != null;
             // One audit line per executed/replayed/rejected mutation; GET stays
             // unlogged because the dashboard polls it continuously.
@@ -222,7 +222,7 @@ namespace BotMod.Web
                             // Same path as `bot player <name>`: bots spawn near the
                             // target player, out-of-sight preferred (11-42m via DM
                             // spawnpoints with a ~22m sweet spot, else a 14-30m ring).
-                            string ident = GetString(_jsonInput, "player");
+                            string ident = RequestFields.OptString(_jsonInput, "player");
                             // Absent player is a client bug, not "player not found":
                             // both used to answer 200 {"found":false}, which made a
                             // malformed body indistinguishable from a left player.
@@ -230,7 +230,7 @@ namespace BotMod.Web
                             if (!OptCount(_jsonInput, out int count)) { errorCode = "INVALID_COUNT"; break; }
                             string weapon = null;
                             {
-                                string wv = GetString(_jsonInput, "weapon");
+                                string wv = RequestFields.OptString(_jsonInput, "weapon");
                                 if (!string.IsNullOrEmpty(wv))
                                 {
                                     // Same grammar as `bot player <name> [count]
@@ -322,7 +322,7 @@ namespace BotMod.Web
                         {
                             // {"action":"vs","target":"bot|zombie|player","on":bool} -
                             // bots shoot that target class (same as `bot vs`). Persisted.
-                            string target = GetString(_jsonInput, "target")?.ToLowerInvariant() ?? "";
+                            string target = RequestFields.OptString(_jsonInput, "target")?.ToLowerInvariant() ?? "";
                             if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
                             if (ModApi.Config.SetVsTarget(target, on, out string field))
                             {
@@ -337,7 +337,7 @@ namespace BotMod.Web
                             // {"action":"setTeam","name":"<botName>","team":N} - assign
                             // a bot to a team (0 = free-for-all). Keyed by base name,
                             // persists to config, applies to live bots immediately.
-                            string name = GetString(_jsonInput, "name") ?? "";
+                            string name = RequestFields.OptString(_jsonInput, "name") ?? "";
                             int team = 0;
                             FieldRead teamRead = RequestFields.OptInt(_jsonInput, "team", out int teamParsed);
                             if (teamRead == FieldRead.Invalid) { errorCode = "INVALID_TEAM"; break; }
@@ -475,16 +475,6 @@ namespace BotMod.Web
             return MainThreadDispatch.Execute(fn,
                 task => ThreadManager.AddSingleTaskMainThread("bot-web-api", task),
                 TimeSpan.FromSeconds(15), op);
-        }
-
-        /// <summary>Optional string field of the POST body; null when absent.
-        /// Invariant conversion, shared with the typed readers: the body is
-        /// protocol, so a value that is not already a string is rendered the
-        /// same way on every host, and a de-DE server cannot hand the ledger a
-        /// requestId spelled "1234,5" for the number 1234.5.</summary>
-        static string GetString(IDictionary<string, object> body, string key)
-        {
-            return RequestFields.OptString(body, key);
         }
 
         /// <summary>Spawn-count field: absent means 1, present-but-malformed is

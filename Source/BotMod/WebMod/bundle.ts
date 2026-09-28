@@ -450,14 +450,14 @@ function renderNearRow(h: CreateElement, onlinePlayers: Array<BotPlayer>, nearPl
     }, "botmod-primary", noPlayers));
 }
 
-function renderBrainRow(h: CreateElement, s: BotStatus, busy: string, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
+function renderBrainRow(h: CreateElement, s: BotStatus, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
   return h("div", { className: "botmod-row botmod-brain" },
     h("span", { className: "botmod-label" }, "Brain:"),
     btn(s.neural === true ? "Static AI" : "GA brain", { action: "neural", on: s.neural !== true }),
     s.neuralPath !== undefined && s.neuralPath !== "" ? h("span", { className: "botmod-window" }, `weights: ${s.neuralPath}`) : null);
 }
 
-function renderTeamRow(h: CreateElement, s: BotStatus, busy: string, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
+function renderTeamRow(h: CreateElement, s: BotStatus, btn: (label: string, body: BotAction, cls?: string) => unknown): unknown {
   const team = s.botTeam === true;
   return h("div", { className: "botmod-row botmod-brain" },
     h("span", { className: "botmod-label" }, "Squad:"),
@@ -775,8 +775,8 @@ function BotPanel({ React, HTTP, useQuery }: PanelProps): unknown {
     renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn),
     renderSkillRow(h, s, busy, post),
     renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn),
-    renderBrainRow(h, s, busy, btn),
-    renderTeamRow(h, s, busy, btn),
+    renderBrainRow(h, s, btn),
+    renderTeamRow(h, s, btn),
     renderVsRow(h, s, busy, post),
     renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver),
     renderConfigRow(h, s),

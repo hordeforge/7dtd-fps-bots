@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using BotMod.Config;
+using BotMod.Foundation;
 
 namespace BotMod.Web
 {

@@ -13,7 +13,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using BotMod.Config;
+using BotMod.Foundation;
 using BotMod.Web;
 
 static class IdempotencyLedgerFuzzTests
