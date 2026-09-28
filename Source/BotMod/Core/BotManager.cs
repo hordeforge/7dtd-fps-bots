@@ -34,7 +34,24 @@ namespace BotMod.Core
         public bool IsBotEntity(int entityId) => _botEntityIds.Contains(entityId);
         public Bot GetBot(int entityId) => _botById.TryGetValue(entityId, out var b) ? b : null;
 
-        /// <summary>Resolve a player by entity id, client id, or (partial) name.
+        /// <summary>Whether a player is a legal target of a bot operation: in
+        /// the world, alive, and not a corpse. One definition, because the two
+        /// surfaces that name players have to agree on the answer. The status
+        /// roster already filtered on this; the lookup below did not, so the
+        /// same id resolved through `bot player` / the web API's spawnNear
+        /// where the dashboard's player list omits it, and spawnNear's
+        /// response then echoed a dead player's real name back as
+        /// "found":true. One predicate, both callers.</summary>
+        public static bool IsSelectablePlayer(EntityPlayer p)
+        {
+            // Main-thread only (reads entity state), which is where every
+            // caller runs: console commands execute on the main thread and the
+            // web API dispatches to it before resolving a target.
+            return p != null && !p.IsDead() && p.IsSpawned();
+        }
+
+        /// <summary>Resolve a player by entity id, client id, or (partial) name,
+        /// accepting only players <see cref="IsSelectablePlayer"/> admits.
         /// Shared by the `bot player` console command and the web API's spawnNear
         /// so both surfaces accept the same identifiers.</summary>
         public static EntityPlayer FindPlayerByNameOrId(World world, string ident)
@@ -45,12 +62,12 @@ namespace BotMod.Core
             // (same convention as coordinate parsing in ConsoleCmdBot.DoSpawn).
             if (int.TryParse(ident, NumberStyles.Integer, CultureInfo.InvariantCulture, out int eid)) {
                 var e = world.GetEntity(eid) as EntityPlayer;
-                if (e != null) return e;
+                if (IsSelectablePlayer(e)) return e;
                 // also try ClientInfo entityId lookup
                 var cm = ConnectionManager.Instance;
                 if (cm != null) {
                     var ci = cm.Clients.ForEntityId(eid);
-                    if (ci != null) { var ep = world.GetEntity(ci.entityId) as EntityPlayer; if (ep != null) return ep; }
+                    if (ci != null) { var ep = world.GetEntity(ci.entityId) as EntityPlayer; if (IsSelectablePlayer(ep)) return ep; }
                 }
             }
             // Name match: BotText.NameMatches canonicalizes both sides to NFC
@@ -58,13 +75,13 @@ namespace BotMod.Core
             // finds the NFC name the server holds, without host-locale traps
             // (a tr-TR ToLower would turn "Kira" into "kıra" and miss).
             if (world.Players != null && world.Players.list != null) {
-                foreach (var p in world.Players.list) if (p != null) {
+                foreach (var p in world.Players.list) if (IsSelectablePlayer(p)) {
                     string name = p.EntityName ?? p.PlayerDisplayName ?? "";
                     if (BotText.NameMatches(name, ident)) return p;
                 }
                 // Numeric lookup above resolves the id through ClientInfo, which
                 // misses when the connection is gone but the player is still listed.
-                foreach (var p in world.Players.list) if (p != null) {
+                foreach (var p in world.Players.list) if (IsSelectablePlayer(p)) {
                     if (p.entityId.ToString(CultureInfo.InvariantCulture) == ident) return p;
                 }
             }

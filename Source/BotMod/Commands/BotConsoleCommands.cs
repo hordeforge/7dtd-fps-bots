@@ -239,7 +239,7 @@ namespace BotMod.Commands
                 var ci = sender.RemoteClientInfo;
                 if (ci != null) {
                     var e = world.GetEntity(ci.entityId) as EntityPlayer;
-                    if (e != null) return e;
+                    if (BotManager.IsSelectablePlayer(e)) return e;
                 }
             }
             // Reported, not silent: the caller treats null as "resolve me by
@@ -253,13 +253,15 @@ namespace BotMod.Commands
         /// world order, each name through <see cref="LogSanitizer"/>. The
         /// entity id is what `bot player` actually matches on, so the listing
         /// is also the way an operator finds the id for a player whose name is
-        /// not what they typed.</summary>
+        /// not what they typed. Same
+        /// <see cref="BotManager.IsSelectablePlayer"/> gate the lookup applies,
+        /// so an id copied from this listing always resolves.</summary>
         static List<string> OnlinePlayerList(World world)
         {
             var names = new List<string>();
             if (world.Players != null && world.Players.list != null)
                 foreach (var p in world.Players.list)
-                    if (p != null) names.Add($"{LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
+                    if (BotManager.IsSelectablePlayer(p)) names.Add($"{LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
             return names;
         }
         void DoWeapon(List<string> p)

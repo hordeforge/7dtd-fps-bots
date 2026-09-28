@@ -609,13 +609,16 @@ namespace BotMod.Web
                 // IsDead/IsSpawned test on every connected player inside that
                 // loop made the status build bots x players instead of
                 // bots + players.
+                // BotManager.IsSelectablePlayer is the same predicate the
+                // spawnNear/console player lookup applies, so a name or id this
+                // roster omits is not one those surfaces will resolve either.
                 var live = new List<EntityPlayer>();
                 var plist = world.Players != null ? world.Players.list : null;
                 if (plist != null)
                 {
                     foreach (var p in plist)
                     {
-                        if (p == null || p.IsDead() || !p.IsSpawned()) continue;
+                        if (!BotManager.IsSelectablePlayer(p)) continue;
                         live.Add(p);
                         players.Add(new
                         {
