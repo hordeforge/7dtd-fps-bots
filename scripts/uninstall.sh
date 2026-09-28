@@ -2,9 +2,11 @@
 # Remove the mod from the dedicated server's Mods dir.
 #
 # This deletes operator state (Config/botmod.json, team assignments, bot
-# enable/disable); docs/recovery.md records that as intentional destruction.
-# It only requires a Mods dir, not a valid server install, so a half-installed
-# server can still be cleaned up.
+# enable/disable), so it snapshots it first via scripts/backup-state.sh and
+# refuses to delete if the snapshot cannot be written. Set
+# BOTMOD_SKIP_BACKUP=1 to delete anyway (the state is then gone; see
+# docs/recovery.md). It only requires a Mods dir, not a valid server
+# install, so a half-installed server can still be cleaned up.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/server-dir.sh"
@@ -24,6 +26,14 @@ fi
 if [[ ! -d "$DST" ]]; then
   echo "Not installed -> $DST"
   exit 0
+fi
+
+if [[ ! -f "$DST/Config/botmod.json" && ! -f "$DST/Config/botmod.json.bak" ]]; then
+  echo "No operator config in $DST/Config; nothing to snapshot."
+elif [[ "${BOTMOD_SKIP_BACKUP:-0}" == 1 ]]; then
+  echo "WARNING: BOTMOD_SKIP_BACKUP=1, deleting $DST/Config/botmod.json unrecoverably" >&2
+else
+  bash "$ROOT/scripts/backup-state.sh"
 fi
 
 rm -rf "$DST"

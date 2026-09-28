@@ -48,7 +48,9 @@ def _evolution(seed: int) -> list[bytes]:
 
 def check_evolution() -> None:
     a, b = _evolution(SEED), _evolution(SEED)
-    for g, (x, y) in enumerate(zip(a, b)):
+    # strict: both walks run the same fixed GENS, so a length mismatch is a
+    # real divergence, not a shorter run to zip past silently.
+    for g, (x, y) in enumerate(zip(a, b, strict=True)):
         if x != y:
             _fail(f"ga operators, generation {g}: same seed diverged "
                   f"({len(x)} vs {len(y)} bytes)")

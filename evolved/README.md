@@ -33,6 +33,11 @@ git commit -m "evolved: promote gen <N> fit <x>"
 git push
 ```
 
+Before a multi-day run, `make backup` (see `docs/recovery.md`): it snapshots
+the champion `evolve.py` is overwriting in place, so a run that dies before
+promotion still leaves a restorable copy. `evolve.py` itself only writes
+`evolved/best.json`; `runs/<ts>/` stays unbacked.
+
 Operators then `git pull` and `bot neural reload`.
 
 ## Git

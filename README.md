@@ -27,10 +27,11 @@ Server-side mod that spawns real FPS bots in 7 Days to Die dedicated servers. Na
 ```bash
 make build        # mcs (or dotnet SDK) against your Steam Dedicated Managed DLLs
 make install      # copies to Dedicated Server Mods/BotMod
+make backup       # snapshots Mods/BotMod/Config + evolved champions to backups/<stamp>
 # then restart the dedicated server (EAC must be off for code mods)
 ```
 
-Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`). Edit and `bot reload` live. EAC off: `<property name="EACEnabled" value="false"/>`. Offline LAN/loadgen clients with synthetic Steam ids additionally need `"AllowSyntheticAuthBypass": true` (off by default; the bypass accepts ids in a fixed test range without Steam auth).
+Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`). Edit and `bot reload` live. EAC off: `<property name="EACEnabled" value="false"/>`. Offline LAN/loadgen clients with synthetic Steam ids additionally need `"AllowSyntheticAuthBypass": true` (off by default; the bypass accepts ids in a fixed test range without Steam auth). `make uninstall` snapshots the config before deleting it; `make backup` (point `BOTMOD_STATE_BACKUP_DIR` off-host) is the copy that also survives host loss, and `make restore SNAPSHOT=backups/<stamp>` puts it back. Details in `docs/recovery.md`.
 
 ## Web dashboard
 

@@ -1,7 +1,7 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell lint-python lint-yaml check
+.PHONY: help build build-mcs test package install uninstall backup clean lint-html lint-webui lint-shell lint-python lint-yaml check
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -18,11 +18,14 @@ Targets:
   make lint-html    Nu HTML checker over shipped/generated HTML (needs java; tools via bunx)
   make lint-webui   tsc strict type-check, oxlint, committed-bundle freshness gate (needs bun/bunx)
   make install      copy dist/BotMod into the dedicated server's Mods dir
-  make uninstall    remove Mods/BotMod from the server
+  make uninstall    remove Mods/BotMod from the server (snapshots operator config first)
+  make backup       snapshot operator config + champion weights into backups/<utc>/ (make restore SNAPSHOT=... puts config back)
   make clean        remove dist/ and C# obj/bin intermediates
 Overrides: SEVENDTD_DS_DIR (server root), SEVENDTD_GAME_DIR (client root),
 SEVENDTD_BUILD_BACKEND=auto|mcs|dotnet, SOURCE_DATE_EPOCH (package zip
-timestamps; defaults to the HEAD commit time). CI runs `make check` plus
+timestamps; defaults to the HEAD commit time). BOTMOD_STATE_BACKUP_DIR (where
+`make backup` writes; defaults to ./backups, point it off-host for host-loss
+protection), SNAPSHOT (directory passed to restore-state.sh). CI runs `make check` plus
 `scripts/test-idempotency.sh` (mono installed in the workflow; ruff via uv tool
 for lint-python); `make build`
 additionally needs the game install locally.
@@ -54,5 +57,13 @@ install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:
 	bash "$(SCRIPTS)/uninstall.sh"
+backup:
+	bash "$(SCRIPTS)/backup-state.sh"
+restore:
+	@test -n "$(SNAPSHOT)" || { echo "usage: make restore SNAPSHOT=backups/<utc-stamp>" >&2; exit 1; }
+	bash "$(SCRIPTS)/restore-state.sh" "$(SNAPSHOT)" --apply
+verify-snapshot:
+	@test -n "$(SNAPSHOT)" || { echo "usage: make verify-snapshot SNAPSHOT=backups/<utc-stamp>" >&2; exit 1; }
+	bash "$(SCRIPTS)/restore-state.sh" "$(SNAPSHOT)"
 clean:
 	rm -rf "$(ROOT)/dist" "$(ROOT)/Source/BotMod/bin" "$(ROOT)/Source/BotMod/obj"

@@ -11,5 +11,6 @@ __pycache__/
 .idea/
 
 .scratch/
+backups/
 *.lock
 coverage.cobertura.xml
