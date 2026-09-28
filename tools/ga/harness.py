@@ -42,7 +42,7 @@ DRAWS_PER_CONFIG = 2
 # Snapshot at import so training-time mutations of the module knobs above
 # cannot leak into held-out scoring; canonical_scores() pins these values for
 # the duration of its evaluation and restores the caller's knobs afterwards.
-_CANONICAL_STICK = (0, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, "mixed", 1)
+CANONICAL_STICK = (0, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, "mixed", 1)
 
 # The seven knobs above are process globals, and evaluate() reads them from
 # the pool threads _pmap spawns. Anything that swaps them has to hold this
@@ -58,23 +58,16 @@ KNOB_NAMES = ("ACTIVATION", "FIT_ELO", "FIT_ECON", "FIT_SURV", "FIT_STUCK",
 
 
 @contextmanager
-def pinned_stick(values: tuple):
-    """Install the module knobs named in `values` (parallel to KNOB_NAMES)
-    for the duration of the block, then put back whatever was there.
-
-    The one way to change a knob from a caller: evaluate() fans out across
-    threads, so a bare assign is only safe while no other caller is in flight,
-    and a bare restore is a check-then-act that loses a concurrent caller's
-    pin. The window is exclusive instead."""
+def _stick_window(overrides: dict):
+    """The one place a knob is read, written or restored. The snapshot is
+    taken under _STICK_LOCK and the restore is the same one, so every caller
+    goes through this window and a caller never acts on globals it read
+    outside the lock."""
     globals_ = globals()
-    # Snapshot only once the window is ours: reading before the acquire would
-    # capture the canonical stick another caller still has pinned, and that
-    # probe would then "restore" it on the way out and strand the training
-    # knobs as the new baseline.
     _STICK_LOCK.acquire()
     try:
         saved = tuple(globals_[name] for name in KNOB_NAMES)
-        for name, value in zip(KNOB_NAMES, values, strict=True):
+        for name, value in overrides.items():
             globals_[name] = value
         yield
     finally:
@@ -86,16 +79,34 @@ def pinned_stick(values: tuple):
 
 
 @contextmanager
+def pinned_stick(values: tuple):
+    """Install the module knobs named in `values` (parallel to KNOB_NAMES)
+    for the duration of the block, then put back whatever was there.
+
+    The one way to change a knob from a caller: evaluate() fans out across
+    threads, so a bare assign is only safe while no other caller is in flight,
+    and a bare restore is a check-then-act that loses a concurrent caller's
+    pin. The window is exclusive instead."""
+    # dict() before the window: a length or name mismatch raises with no
+    # knob touched.
+    with _stick_window(dict(zip(KNOB_NAMES, values, strict=True))):
+        yield
+
+
+@contextmanager
 def pinned_knobs(**overrides):
     """pinned_stick for a partial override: the named knobs take the given
-    values, the rest keep whatever the caller had set."""
-    index = {name: i for i, name in enumerate(KNOB_NAMES)}
-    values = [globals()[name] for name in KNOB_NAMES]
-    for name, value in overrides.items():
-        if name not in index:
+    values, the rest keep whatever the caller had set.
+
+    The partial window is the same exclusive one: the knobs left alone are
+    snapshotted under the lock, not read before it, so a caller that entered
+    while another had the canonical stick pinned restores that caller's
+    training knobs on the way out instead of stranding the canonical stick as
+    the new baseline."""
+    for name in overrides:
+        if name not in KNOB_NAMES:
             raise KeyError(f"unknown harness knob {name!r}; known: {', '.join(KNOB_NAMES)}")
-        values[index[name]] = value
-    with pinned_stick(tuple(values)):
+    with _stick_window(overrides):
         yield
 
 
@@ -108,7 +119,7 @@ def canonical_scores(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -
     a caller are pinned for the duration (pinned_stick, so a probe running
     beside another caller cannot have its stick swapped mid-flight) and
     restored afterwards."""
-    with pinned_stick(_CANONICAL_STICK):
+    with pinned_stick(CANONICAL_STICK):
         return evaluate_many(w, gen_key, run_seed, matches)
 
 

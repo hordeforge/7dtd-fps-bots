@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -189,6 +190,66 @@ def check_concurrent_canonical_stick() -> None:
     print("  ok  harness: concurrent canonical probes each kept the canonical stick")
 
 
+def check_concurrent_pinned_knobs() -> None:
+    """A partial pin (pinned_knobs, what replay.py and sweep.py take) has to
+    read the knobs it leaves alone under the same exclusive window. Reading
+    them before the acquire lets a probe that overlaps a canonical pin
+    snapshot the canonical stick and restore it on the way out, stranding the
+    training knobs as the process baseline: the next generation then trains
+    against held-out settings with no error anywhere."""
+    training = {"ACTIVATION": 1, "FIT_ELO": 0.9, "FIT_ECON": 0.3, "FIT_SURV": 0.2,
+                "FIT_STUCK": 0.4, "CURRICULUM": "horde_first", "DRAWS_PER_CONFIG": 3}
+    for name, value in training.items():
+        setattr(harness, name, value)
+    errors: list[BaseException] = []
+    seen: list[tuple] = []
+    # Sequencing, not a race of hopes: the pin holder opens its window first and
+    # only lets the partial pin start inside it, so the partial pin's read of
+    # the knobs it leaves alone provably happens while the canonical stick is
+    # installed.
+    pinned = threading.Event()
+    partial_started = threading.Event()
+
+    def holder() -> None:
+        try:
+            with harness.pinned_stick(harness.CANONICAL_STICK):
+                pinned.set()
+                partial_started.wait(timeout=60)
+                time.sleep(0.05)  # hold the window past the partial pin's entry
+        except BaseException as ex:  # reported by the driver, not swallowed
+            errors.append(ex)
+
+    def probe() -> None:
+        try:
+            pinned.wait(timeout=60)
+            partial_started.set()
+            with harness.pinned_knobs(ACTIVATION=0):
+                seen.append(tuple(getattr(harness, name) for name in harness.KNOB_NAMES))
+        except BaseException as ex:  # reported by the driver, not swallowed
+            errors.append(ex)
+
+    threads = [threading.Thread(target=holder), threading.Thread(target=probe)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=120)
+    if errors:
+        _fail(f"harness.pinned_knobs: a concurrent probe raised {errors[0]!r}")
+    if any(t.is_alive() for t in threads):
+        _fail("harness.pinned_knobs: a concurrent probe did not finish (deadlock)")
+    # Inside a partial pin every knob except ACTIVATION is the training value,
+    # and ACTIVATION is the override: a partial pin must not carry another
+    # caller's stick in with it.
+    if seen != [(0,) + tuple(training[name] for name in harness.KNOB_NAMES[1:])]:
+        _fail(f"harness.pinned_knobs: the partial pin ran on {seen[0] if seen else None}, "
+              f"not the training knobs with ACTIVATION overridden")
+    after = {name: getattr(harness, name) for name in training}
+    if after != training:
+        _fail(f"harness.pinned_knobs: a concurrent pin lost the training "
+              f"knobs ({after} != {training})")
+    print("  ok  harness: a concurrent partial pin kept the training knobs")
+
+
 def _fail(msg: str) -> None:
     # stderr: the passing checks are the report on stdout, a failure is status.
     print(f"FAIL  {msg}", file=sys.stderr)
@@ -205,6 +266,7 @@ if __name__ == "__main__":
         raise SystemExit(2)
     for step in (check_evolution, check_rng_checkpoint, check_match_kernel,
                  check_loadout_draw, check_threaded_harness,
-                 check_canonical_stick, check_concurrent_canonical_stick):
+                 check_canonical_stick, check_concurrent_canonical_stick,
+                 check_concurrent_pinned_knobs):
         step()
     print("determinism: every layer replays from the seed")
