@@ -132,7 +132,11 @@ namespace BotMod.Commands
                 && !float.IsNaN(v) && !float.IsInfinity(v);
         }
 
-        static int ClampCount(int c)
+        /// <summary>Clamp a spawn count into [MinSpawnCount, MaxSpawnCount].
+        /// Public because the web `spawn` / `spawnNear` actions clamp through
+        /// this, so the two admin surfaces cannot drift apart on the range
+        /// (it used to be a second literal copy of 1..16 in WebApi).</summary>
+        public static int ClampCount(int c)
         {
             return Math.Max(MinSpawnCount, Math.Min(MaxSpawnCount, c));
         }

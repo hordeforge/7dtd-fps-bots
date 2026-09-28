@@ -221,6 +221,22 @@ function actionLabel(body: BotAction): string {
   }
 }
 
+// The server names every rejection it returns (meta.errorCode in the stock
+// webserver error envelope), and the panel's HTTP client leaves that body on
+// the rejected promise. Walk the unknown error to that one string so a refused
+// command says which field was wrong instead of a blanket "rejected".
+function rejectionCode(err: unknown): string {
+  let cur: unknown = err;
+  for (const key of ["response", "data", "meta", "errorCode"]) {
+    if (typeof cur !== "object" || cur === null) {
+      return "";
+    }
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- deliberate: untyped HTTP error at the panel boundary; SAFETY: the typeof guard on the line above proves cur is a non-null object
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return strOrEmpty(cur);
+}
+
 // Fire a bot command. The 5s poll shows the real state after the call, so the
 // result line carries the outcome: a rejected POST is reported instead of the
 // button silently springing back. The result line is its own live region, so
@@ -249,8 +265,9 @@ function postAction(opts: {
       opts.setStatus({ text: `${label}: done`, bad: false });
       void opts.refetch();
     })
-    .catch((): void => {
-      opts.setStatus({ text: `${label}: failed, the server rejected the command.`, bad: true });
+    .catch((error: unknown): void => {
+      const code = rejectionCode(error);
+      opts.setStatus({ text: code === "" ? `${label}: failed, the server rejected the command.` : `${label}: rejected, ${code}.`, bad: true });
     })
     .then((): void => {
       opts.setBusy("");

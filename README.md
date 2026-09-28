@@ -96,7 +96,10 @@ Request validation: optional numeric fields (`count`, `level`, `team`) fall
 back to their documented defaults only when omitted; a value that is present
 but malformed rejects the request with `400` and a named code instead of
 executing something else, as do missing required fields (`spawnNear`
-`player`, `removeOne` `entityId`) and the toggles' required `on` flag.
+`player`, `removeOne` `entityId`, `setTeam` `name`, `vs` `target`) and the
+toggles' required `on` flag. Each action checks the field that names its
+target before the fields that qualify it, so a body missing several reports
+the one identifying the target.
 Rejection codes: `INVALID_ACTION`, `INVALID_COUNT`, `INVALID_ENTITY_ID`,
 `INVALID_LEVEL`, `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`,
 `INVALID_REQUEST_ID`, `INVALID_TARGET`, `INVALID_TEAM`, `INVALID_WEAPON`.
@@ -131,6 +134,14 @@ config or the world, so nothing here may be replayed from a cache.
 | `setTeam` | `{"name":"<base name>","team":N}` (post-clamp bucket) |
 | `teamCount` | `{"teamCount":N}` (post-clamp value actually applied) |
 | `clearTeams` | `{"cleared":true}` |
+
+`removed` is a count on `remove` and a flag on `removeOne`; read it as the
+action's own table row says, not as one shared field.
+
+Every `POST` response, on every status, carries `X-BotMod-Request-Id`: the
+client's `requestId` when one was sent, else a server-side `auto-N` tag. The
+same tag is on the server's audit line for that request, so a rejected call is
+traceable to the log entry that recorded it.
 
 `GET` returns the config summary (`enabled`, `alive`, `difficulty`, `neural`,
 range/chance settings, the three `botVs*` toggles, `botTeam`, `teamCount`,

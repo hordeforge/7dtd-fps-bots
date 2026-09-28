@@ -43,8 +43,10 @@ namespace BotMod.Web
     /// defaults only when absent (JSON null counts as absent); a value that
     /// is present but malformed rejects the whole request with 400 and a
     /// named INVALID_* code instead of silently executing something else.
-    /// Required fields (spawnNear's player, removeOne's entityId, the toggles'
-    /// on flag) reject absence the same way. A requestId that is present but
+    /// Required fields (spawnNear's player, removeOne's entityId, setTeam's
+    /// name, vs's target, the toggles' on flag) reject absence the same way,
+    /// each action checking the field that names its target before the ones
+    /// that qualify it. A requestId that is present but
     /// unusable (empty or over the ledger key limit) is INVALID_REQUEST_ID:
     /// the caller must learn its retry protection is not active. Range
     /// clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
@@ -322,7 +324,12 @@ namespace BotMod.Web
                         {
                             // {"action":"vs","target":"bot|zombie|player","on":bool} -
                             // bots shoot that target class (same as `bot vs`). Persisted.
+                            // The target names the field being set, so it is
+                            // checked before the flag, as spawnNear checks
+                            // `player` before `count`: a body missing both
+                            // reports the missing target, not a missing flag.
                             string target = RequestFields.OptString(_jsonInput, "target")?.ToLowerInvariant() ?? "";
+                            if (string.IsNullOrEmpty(target)) { errorCode = "INVALID_TARGET"; break; }
                             if (RequestFields.RequireBool(_jsonInput, "on", out bool on) != FieldRead.Ok) { errorCode = "INVALID_ON"; break; }
                             if (ModApi.Config.SetVsTarget(target, on, out string field))
                             {
@@ -337,12 +344,15 @@ namespace BotMod.Web
                             // {"action":"setTeam","name":"<botName>","team":N} - assign
                             // a bot to a team (0 = free-for-all). Keyed by base name,
                             // persists to config, applies to live bots immediately.
+                            // `name` identifies the bot, so it is validated first
+                            // (same order as spawnNear's player and removeOne's
+                            // entityId): a body missing both reports INVALID_NAME.
                             string name = RequestFields.OptString(_jsonInput, "name") ?? "";
+                            if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
                             int team = 0;
                             FieldRead teamRead = RequestFields.OptInt(_jsonInput, "team", out int teamParsed);
                             if (teamRead == FieldRead.Invalid) { errorCode = "INVALID_TEAM"; break; }
                             if (teamRead == FieldRead.Ok) team = teamParsed;
-                            if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
                             string baseName = BotText.BaseName(name);
                             var cfg = ModApi.Config;
                             team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
@@ -478,14 +488,15 @@ namespace BotMod.Web
         }
 
         /// <summary>Spawn-count field: absent means 1, present-but-malformed is
-        /// false so the caller rejects with INVALID_COUNT. Range clamps 1..16
-        /// like the console parser's ClampCount.</summary>
+        /// false so the caller rejects with INVALID_COUNT. Range clamps
+        /// through the console parser's ClampCount, so `bot spawn 99` and
+        /// `{"action":"spawn","count":99}` cap at the same number.</summary>
         static bool OptCount(IDictionary<string, object> body, out int count)
         {
             FieldRead read = RequestFields.OptInt(body, "count", out count);
             if (read == FieldRead.Absent) { count = 1; return true; }
             if (read != FieldRead.Ok) { count = 0; return false; }
-            count = Math.Max(1, Math.Min(16, count));
+            count = BotMod.Commands.BotArgParser.ClampCount(count);
             return true;
         }
 

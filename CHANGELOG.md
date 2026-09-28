@@ -64,7 +64,7 @@ of them removes a config key or a console command.
   of a `using`; they now match the rest of the tree.
 - The shipped web dashboard panel (`Mods/BotMod/WebMod/bundle.js`) is minified
   at build time by `scripts/webmod-minify.sh` (terser, pinned in
-  `scripts/tool-versions.sh`): 24,583 -> 13,668 bytes. The stock webserver
+  `scripts/tool-versions.sh`): 24,583 -> 13,844 bytes. The stock webserver
   serves it uncompressed, so that is the download every admin panel open paid;
   the panel now fits one initial congestion window instead of needing a second
   round trip. `make lint-webui` compares the committed bundle against a fresh
@@ -125,6 +125,23 @@ of them removes a config key or a console command.
 
 ### Fixed
 
+- `IdempotencyLedger.cs` and `IdempotencyLedgerFuzzTests.cs` imported
+  `BotMod.Config` for the `BotText` character count they call, which lives in
+  `BotMod.Foundation`. The suites compile a reduced source set without
+  `Config/`, so mcs failed on the unknown namespace and the `idempotency` and
+  `idempotencyfuzz` suites had not run since.
+- The web `spawn` and `spawnNear` actions clamped their `count` with a second
+  copy of the console parser's 1..16 range. They call
+  `BotArgParser.ClampCount` now, so the two surfaces cannot drift apart on the
+  bound.
+- `vs` and `setTeam` validated their optional/flag fields before the field
+  naming the target, so a body missing both `target` and `on` (or `name` and
+  `team`) was told the flag was missing. Both check the identifying field
+  first, as `spawnNear` and `removeOne` already did.
+- The dashboard reported every rejected command as "the server rejected the
+  command" and dropped the server's `meta.errorCode`, so a mistyped field was
+  indistinguishable from any other rejection. The result line now names the
+  code.
 - The `mixed` weapon literal was matched case-sensitively in
   `WeaponProfile.ForGun` and `BotSpawner.PickWeapon` while every surface that
   accepts it (`BotArgParser.LooksLikeWeapon`, `bot weapon`, the web `spawnNear`

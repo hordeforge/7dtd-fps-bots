@@ -55,6 +55,14 @@ static class BotArgParserTests
         Spawn(new[] { "17" }, out int c5b, out _, out _, out _, out _, out _);
         Check("count 17 clamps to 16", c5b == 16);
 
+        // The clamp the web spawn/spawnNear actions call directly: both admin
+        // surfaces share this range, so it is pinned on its own.
+        Check("ClampCount(0) is the minimum", BotArgParser.ClampCount(0) == BotArgParser.MinSpawnCount);
+        Check("ClampCount(-5) is the minimum", BotArgParser.ClampCount(-5) == BotArgParser.MinSpawnCount);
+        Check("ClampCount(16) is the maximum", BotArgParser.ClampCount(BotArgParser.MaxSpawnCount) == BotArgParser.MaxSpawnCount);
+        Check("ClampCount(99) is the maximum", BotArgParser.ClampCount(99) == BotArgParser.MaxSpawnCount);
+        Check("ClampCount(4) is in range", BotArgParser.ClampCount(4) == 4);
+
         // The documented coordinate form: two numbers are x z with count 1,
         // never "count plus dangling junk".
         bool ok6 = Spawn(new[] { "1200", "-1300" }, out int c6, out float x6, out float z6, out bool p6, out _, out _);
