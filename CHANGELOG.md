@@ -12,6 +12,17 @@ fails on drift between them.
 
 ## [Unreleased]
 
+### Changed
+
+- The shipped web dashboard panel (`Mods/BotMod/WebMod/bundle.js`) is minified
+  at build time by `scripts/webmod-minify.sh` (terser, pinned in
+  `scripts/tool-versions.sh`): 24,583 -> 13,668 bytes. The stock webserver
+  serves it uncompressed, so that is the download every admin panel open paid;
+  the panel now fits one initial congestion window instead of needing a second
+  round trip. `make lint-webui` compares the committed bundle against a fresh
+  compile run through the same minifier, and holds both `bundle.js` (14 KiB)
+  and `styling.css` (12 KiB) to a wire budget.
+
 ### Added
 
 - `make lint-yaml` runs `yamllint --strict` over `.github/workflows` and joins

@@ -12,8 +12,13 @@
 # shipped WebMod/bundle.js with it and lint-webui.sh's freshness gate
 # re-compiles with the same version to detect a stale bundle. Both read the
 # one variable here, so they cannot drift apart.
+#
+# TERSER_VERSION is load-bearing in the same way, one step later: both callers
+# minify through scripts/webmod-minify.sh, so a terser upgrade can never make
+# the committed bundle.js differ from what the gate computes.
 
 : "${TSC_VERSION:=5.9.3}"
+: "${TERSER_VERSION:=5.51.2}"
 : "${OXLINT_VERSION:=1.79.0}"
 : "${OXLINT_STANDARDS_VERSION:=0.8.1}"
 : "${OXLINT_TSGOLINT_VERSION:=7.0.2001}"
@@ -38,7 +43,7 @@
 # the finding set is .yamllint.yml.
 : "${YAMLLINT_VERSION:=1.38.0}"
 
-export TSC_VERSION OXLINT_VERSION OXLINT_STANDARDS_VERSION \
+export TSC_VERSION TERSER_VERSION OXLINT_VERSION OXLINT_STANDARDS_VERSION \
   OXLINT_TSGOLINT_VERSION OXLINT_PLUGINS_VERSION ANTI_SLOP_SHA \
   ANTI_SLOP_SHA256 VNU_VERSION \
   RUFF_VERSION YAMLLINT_VERSION

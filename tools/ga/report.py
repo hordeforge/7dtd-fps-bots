@@ -39,15 +39,14 @@ ACCENT = "#0284c7"
 # Charts are flat-color line/bar/heatmap figures: an adaptive-palette PNG runs
 # ~3-4x smaller than matplotlib's default RGBA at identical visual quality, and
 # these base64 blobs are the entire weight of the generated report.
-def optimized_png_bytes(fig) -> bytes:
-    bio = io.BytesIO()
-    fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    raw = bio.getvalue()
+def quantized_png_bytes(raw: bytes) -> bytes:
+    """Adaptive 256-color palette PNG of already-encoded PNG bytes. Same
+    fallback contract as optimized_png_bytes: without Pillow the input is
+    returned unchanged, so the caller always embeds a valid image."""
     try:
         from PIL import Image
     except ImportError:
-        return raw  # palette optimization unavailable; ship the plain PNG
+        return raw
     im = Image.open(io.BytesIO(raw))
     if im.mode != "RGBA":
         im = im.convert("RGBA")
@@ -55,6 +54,13 @@ def optimized_png_bytes(fig) -> bytes:
     out = io.BytesIO()
     q.save(out, "PNG", optimize=True)
     return out.getvalue()
+
+
+def optimized_png_bytes(fig) -> bytes:
+    bio = io.BytesIO()
+    fig.savefig(bio, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return quantized_png_bytes(bio.getvalue())
 
 
 def png_dimensions(data: bytes) -> tuple[int, int]:

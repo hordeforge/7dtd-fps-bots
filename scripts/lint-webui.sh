@@ -7,9 +7,12 @@
 #   1. tsc --noEmit: the type gate (per WebMod/tsconfig.json, strict).
 #   2. oxlint over bundle.ts with the anti-slop rule set in .oxlintrc.jsonc
 #      (warnings fail via --deny-warnings).
-#   3. Freshness: the committed bundle.js must equal a fresh compilation, so a
-#      .ts edit that was not compiled and committed fails the gate.
-#   4. Wire budget: bundle.js must stay under BUNDLE_MAX_BYTES (default 32 KiB).
+#   3. Freshness: the committed bundle.js must equal a fresh compilation
+#      minified through scripts/webmod-minify.sh, so a .ts edit that was not
+#      compiled and committed fails the gate.
+#   4. Wire budget: bundle.js and styling.css must each stay under their
+#      budget (14 KiB for the bundle, 12 KiB for the stylesheet), because the
+#      stock webserver serves both uncompressed.
 #
 # tsc/oxlint run through bunx pinned by the versions in scripts/tool-versions.sh
 # (sourced below; environment overrides win). That file is the single source
@@ -98,25 +101,35 @@ cp "$root/.oxlintrc.jsonc" "$cache_dir/oxlintrc.jsonc"
     bunx "oxlint@$OXLINT_VERSION" --config oxlintrc.jsonc --deny-warnings "$webmod_dir/bundle.ts"
 )
 
-# 3. Freshness: the committed bundle.js must equal a fresh compilation.
-#    tsc versions differ on whether they emit a leading "use strict" for this
-#    classic script (both forms are equivalent), so the check strips it.
+# 3. Freshness: the committed bundle.js must equal a fresh compile run through
+#    the same minifier the build applies (scripts/webmod-minify.sh), so a .ts
+#    edit that was not compiled and committed fails the gate.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 bunx -p "typescript@$TSC_VERSION" tsc -p "$webmod_dir/tsconfig.json" --outDir "$tmp" >/dev/null
-if ! diff -q <(sed '1{/^"use strict";$/d}' "$tmp/bundle.js") \
-             <(sed '1{/^"use strict";$/d}' "$webmod_dir/bundle.js") >/dev/null; then
+bash "$root/scripts/webmod-minify.sh" "$tmp/bundle.js" "$tmp/bundle.min.js" >/dev/null
+if ! diff -q "$tmp/bundle.min.js" "$webmod_dir/bundle.js" >/dev/null; then
   echo "BotMod: lint-webui: committed bundle.js is stale (bundle.ts changed without regeneration). Run: make build" >&2
   exit 1
 fi
 
 # 4. Wire budget: the stock dashboard loads bundle.js as a plain <script> tag
 #    and its webserver serves it uncompressed, so every panel open pays the
-#    full byte cost. Keep the delivered weight bounded (~1.5x current size).
-max_bytes="${BUNDLE_MAX_BYTES:-32768}"
-size="$(wc -c <"$webmod_dir/bundle.js")"
-if [ "$size" -gt "$max_bytes" ]; then
-  echo "BotMod: lint-webui: bundle.js is $size bytes, over the $max_bytes wire budget. Trim or lazy-load before adding." >&2
+#    full byte cost. 14 KiB is the initial TCP congestion window: over it the
+#    panel needs a second round trip before it can register, on the admin
+#    connections that are the slowest thing in its path. styling.css is
+#    render-blocking for the same page and ships uncompressed too, so it gets
+#    a budget of its own.
+js_max_bytes="${BUNDLE_MAX_BYTES:-14336}"
+css_max_bytes="${STYLESHEET_MAX_BYTES:-12288}"
+js_size="$(wc -c <"$webmod_dir/bundle.js")"
+css_size="$(wc -c <"$webmod_dir/styling.css")"
+if [ "$js_size" -gt "$js_max_bytes" ]; then
+  echo "BotMod: lint-webui: bundle.js is $js_size bytes, over the $js_max_bytes wire budget. Trim, defer, or split before adding." >&2
   exit 1
 fi
-echo "BotMod: lint-webui: tsc type-check, oxlint, bundle freshness, and wire budget ($size/$max_bytes bytes) ok"
+if [ "$css_size" -gt "$css_max_bytes" ]; then
+  echo "BotMod: lint-webui: styling.css is $css_size bytes, over the $css_max_bytes wire budget. Trim before adding." >&2
+  exit 1
+fi
+echo "BotMod: lint-webui: tsc type-check, oxlint, bundle freshness, and wire budget (bundle.js $js_size/$js_max_bytes, styling.css $css_size/$css_max_bytes bytes) ok"

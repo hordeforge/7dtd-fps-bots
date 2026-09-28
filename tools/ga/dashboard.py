@@ -181,7 +181,10 @@ def best_net_b64():
     png.parent.mkdir(parents=True, exist_ok=True)
     # render to a matplotlib figure via viz.draw (saves PNG); embed that PNG as b64.
     draw_net(w, hidden, 14, title="Champion controller", out=png)
-    return base64.b64encode(png.read_bytes()).decode()
+    # The diagram is the largest single blob in the page and viz.draw writes a
+    # plain RGBA PNG; run it through the same palette quantizer the charts use
+    # (report.quantized_png_bytes) instead of embedding it raw.
+    return base64.b64encode(_report.quantized_png_bytes(png.read_bytes())).decode()
 
 
 def build(runs, out: Path, replays):

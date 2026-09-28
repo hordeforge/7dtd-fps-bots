@@ -62,8 +62,12 @@ copy_payload() {
 build_webmod() {
   # Compile the TypeScript panel to bundle.js (dashboard loads
   # /webmods/BotMod/bundle.js); emit lands next to bundle.ts per
-  # WebMod/tsconfig.json, then bundle.js + styling.css ship in the payload.
+  # WebMod/tsconfig.json, then the minified bundle.js + styling.css ship in
+  # the payload. The webserver serves them uncompressed, so the shipped bytes
+  # are the whole download; scripts/webmod-minify.sh is the same step the
+  # lint-webui freshness gate runs.
   bunx -p "typescript@$TSC_VERSION" tsc -p "$SRC/WebMod/tsconfig.json"
+  bash "$ROOT/scripts/webmod-minify.sh" "$SRC/WebMod/bundle.js" "$SRC/WebMod/bundle.js"
   mkdir -p "$OUT/WebMod"
   cp "$SRC/WebMod/bundle.js" "$OUT/WebMod/bundle.js"
   cp "$SRC/WebMod/styling.css" "$OUT/WebMod/styling.css"
