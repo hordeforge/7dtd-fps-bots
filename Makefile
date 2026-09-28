@@ -1,6 +1,4 @@
 ROOT := $(CURDIR)
-# Same override as scripts/install.sh: SEVENDTD_DS_DIR wins over the default.
-DS ?= $(if $(SEVENDTD_DS_DIR),$(SEVENDTD_DS_DIR),$(HOME)/.local/share/Steam/steamapps/common/7 Days to Die Dedicated Server)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
 .PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell lint-python check
@@ -51,6 +49,6 @@ check: lint-shell lint-html lint-webui lint-python
 install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:
-	rm -rf "$(DS)/Mods/BotMod"
+	bash "$(SCRIPTS)/uninstall.sh"
 clean:
 	rm -rf "$(ROOT)/dist" "$(ROOT)/Source/BotMod/bin" "$(ROOT)/Source/BotMod/obj"

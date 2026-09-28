@@ -26,8 +26,10 @@ Every admin mutation persists: `bot count`, `bot skill`, `bot weapon`,
 
 ## Disasters and what they cost
 
-- **Bad deploy / reinstall** (`make install`): zero loss. install.sh stages
-  `Config/botmod.json(.bak)` out before replacing the mod dir and puts it back.
+- **Bad deploy / reinstall** (`make install`): zero loss. install.sh stages the
+  whole payload in a sibling of `Mods/BotMod`, copies the live
+  `Config/botmod.json(.bak)` into the staged copy, and swaps it in with a
+  single rename, so a failed copy leaves the running install untouched.
 - **Torn or corrupt config file** (crash/power cut mid-persist, bad manual
   edit): at most one mutation lost. Persists go through `AtomicTextFile`
   (fsynced temp file, previous content kept at `.bak`, then move over the
