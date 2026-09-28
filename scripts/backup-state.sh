@@ -17,6 +17,24 @@
 #   bash scripts/backup-state.sh [destination-root]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+case "${1:-}" in
+  -h | --help)
+    sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  -*)
+    echo "ERROR: unknown option '$1' (see --help)" >&2
+    echo "usage: bash scripts/backup-state.sh [destination-root]" >&2
+    exit 2
+    ;;
+esac
+if (($# > 1)); then
+  echo "ERROR: takes at most one argument (destination-root), got $#" >&2
+  echo "usage: bash scripts/backup-state.sh [destination-root]" >&2
+  exit 2
+fi
+
 source "$ROOT/scripts/server-dir.sh"
 
 DEST_ROOT="${1:-${BOTMOD_STATE_BACKUP_DIR:-$ROOT/backups}}"

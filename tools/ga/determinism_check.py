@@ -111,11 +111,19 @@ def check_canonical_stick() -> None:
 
 
 def _fail(msg: str) -> None:
-    print(f"FAIL  {msg}")
+    # stderr: the passing checks are the report on stdout, a failure is status.
+    print(f"FAIL  {msg}", file=sys.stderr)
     raise SystemExit(1)
 
 
 if __name__ == "__main__":
+    if set(sys.argv[1:]) & {"-h", "--help"}:
+        print(__doc__.strip())
+        raise SystemExit(0)
+    if sys.argv[1:]:
+        print(f"error: unexpected argument {sys.argv[1]!r}; this check takes none "
+              f"(see --help)", file=sys.stderr)
+        raise SystemExit(2)
     for step in (check_evolution, check_rng_checkpoint, check_match_kernel,
                  check_threaded_harness, check_canonical_stick):
         step()

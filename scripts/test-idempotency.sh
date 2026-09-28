@@ -15,13 +15,6 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-for tool in mcs mono; do
-  if ! command -v "$tool" > /dev/null; then
-    echo "error: $tool not found; the C# suites need mono (apt: mono-mcs mono-runtime)" >&2
-    exit 127
-  fi
-done
-
 # Every suite the script can run, in execution order. `want` and the drift
 # check at the end keep this list and the actual run_suite calls in step.
 all_suites=(
@@ -42,7 +35,7 @@ while (($#)); do
       exit 0
       ;;
     -h | --help)
-      sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     -*)
@@ -58,6 +51,16 @@ while (($#)); do
   fi
   filter+=("$1")
   shift
+done
+
+# The toolchain probe runs after the argument parse: --list and --help answer
+# without compiling anything, so a box without mono must still be able to ask
+# what the suites are.
+for tool in mcs mono; do
+  if ! command -v "$tool" > /dev/null; then
+    echo "error: $tool not found; the C# suites need mono (apt: mono-mcs mono-runtime)" >&2
+    exit 127
+  fi
 done
 
 # Suite names each run_suite* call declares, for the drift check against

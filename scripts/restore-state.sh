@@ -16,6 +16,43 @@
 # this script's job is to say what the snapshot holds.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+usage() {
+  cat >&2 <<EOF
+usage: bash scripts/restore-state.sh <snapshot-dir> [--apply]
+
+  <snapshot-dir>  directory written by scripts/backup-state.sh
+  --apply         write the config back; without it the snapshot is only verified
+  -h, --help      print this help
+
+exit status:
+  0  the snapshot verified (and was written, with --apply)
+  1  the snapshot failed verification, or nothing could be restored
+  2  bad command line
+EOF
+}
+
+# Options parse before the server-root guard: --help and a bad flag name are
+# answered the same way whatever SEVENDTD_DS_DIR says.
+SNAP=""
+apply=0
+for arg in "$@"; do
+  case "$arg" in
+    --apply) apply=1 ;;
+    -h | --help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)
+      echo "ERROR: unknown option '$arg' (see --help)" >&2
+      usage
+      exit 2
+      ;;
+    *) SNAP="$arg" ;;
+  esac
+done
+if [[ -z "$SNAP" ]]; then
+  usage
+  exit 2
+fi
+
 source "$ROOT/scripts/server-dir.sh"
 
 if [[ -z "$DS" || "$DS" == "/" ]]; then
@@ -24,17 +61,8 @@ if [[ -z "$DS" || "$DS" == "/" ]]; then
   exit 1
 fi
 
-SNAP=""
-apply=0
-for arg in "$@"; do
-  case "$arg" in
-    --apply) apply=1 ;;
-    -*) echo "ERROR: unknown option '$arg'" >&2; exit 1 ;;
-    *) SNAP="$arg" ;;
-  esac
-done
-if [[ -z "$SNAP" || ! -d "$SNAP" ]]; then
-  echo "usage: bash scripts/restore-state.sh <snapshot-dir> [--apply]" >&2
+if [[ ! -d "$SNAP" ]]; then
+  echo "ERROR: snapshot dir not found: '$SNAP' (see 'make backup' for the path)" >&2
   exit 1
 fi
 MANIFEST="$SNAP/MANIFEST"

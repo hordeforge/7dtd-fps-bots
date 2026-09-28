@@ -318,6 +318,10 @@ exit status:
     ap.add_argument("--out", default="docs/ga-dashboard.html", help="output HTML path (default: %(default)s)")
     ap.add_argument("--replays", action="store_true", help="include arena replays (deterministic, ~seconds)")
     args = ap.parse_args()
+    if args.all and args.runs:
+        # --all wins silently otherwise, so a typo'd --runs builds a dashboard
+        # over every run and the caller never learns their selection was dropped.
+        ap.error("--all and --runs are mutually exclusive; pass one or the other")
 
     if args.all or not args.runs:
         # Only directories are runs; a stray sweep PNG or a report.html sitting

@@ -173,8 +173,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
         raise SystemExit(f"activation must be tanh or relu, got {activation}")
     if curriculum not in ("mixed", "pvp_first", "horde_first"):
         raise SystemExit(f"curriculum must be mixed/pvp_first/horde_first, got {curriculum}")
-    if islands < 1 or islands > 8:
-        raise SystemExit(f"islands must be 1..8, got {islands}")
     if resume == "auto":
         raise SystemExit("--resume needs a run dir (e.g. evolved/runs/<ts>); 'auto' is not supported")
     harness.ACTIVATION = 1 if activation == "relu" else 0
@@ -551,6 +549,21 @@ exit status:
     s.set_defaults(func=lambda a: cmd_static_vs_neural(a.best, a.seeds, a.matches))
 
     args = ap.parse_args()
+    if args.cmd is None:
+        for flag, value, low, high in (("--pop", args.pop, 1, None),
+                                        ("--gens", args.gens, 0, None),
+                                        ("--islands", args.islands, 1, 8)):
+            if value < low or (high is not None and value > high):
+                span = f"{low}..{high}" if high is not None else f">= {low}"
+                ap.error(f"{flag} must be {span}, got {value}")
+    else:
+        # An empty --seeds or a 0-match run makes the gate vacuously true:
+        # all() over no rows reports GOAL MET and exits 0, so a CI step would
+        # read a command that measured nothing as a pass.
+        for flag, value in (("--matches", getattr(args, "matches", 1)),
+                            ("--seeds", len(getattr(args, "seeds", ()) or ()))):
+            if value < 1:
+                ap.error(f"{flag} needs at least 1 value, got {value}")
     # Sub-commands report success/failure through their return code; without
     # this a failing promotion gate still exits 0 and a CI step reading it
     # silently treats a failed gate as a pass.

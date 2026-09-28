@@ -142,6 +142,30 @@ of them removes a config key or a console command.
   command" and dropped the server's `meta.errorCode`, so a mistyped field was
   indistinguishable from any other rejection. The result line now names the
   code.
+- The developer CLIs disagreed about what a bad command line is. The shell
+  scripts used exit 1 for usage errors (test-idempotency.sh used 2), so a
+  script could not tell "you typed it wrong" from "it failed", and
+  `restore-state.sh` answered `--help` with `ERROR: unknown option`. Bad flags
+  and a missing argument now exit 2 everywhere,
+  `backup-state.sh` and `restore-state.sh` take `-h`/`--help` and print their
+  usage and exit statuses, `backup-state.sh` rejects a second argument instead
+  of ignoring it, and both answer before the `SEVENDTD_DS_DIR` guard so help
+  works on any host.
+- `scripts/test-idempotency.sh --list` and `--help` probed for `mcs`/`mono`
+  before parsing arguments, so on a host without mono they exited 127 with a
+  toolchain error instead of printing. The probe now runs after the parse.
+- `evolve.py static-vs-neural` with an empty `--seeds` (or `--matches 0`)
+  reported `GOAL MET: True` and exited 0: the gate is `all()` over the rows it
+  measured, and it had measured none. An empty or 0-sized selection is now a
+  usage error (exit 2), as are `--pop` below 1, `--gens` below 0 and
+  `--islands` outside 1..8, which previously failed deeper in with a numpy
+  traceback (or, for `--islands`, a different exit code from the same check).
+- `dashboard.py --all --runs <dir>` silently ignored `--runs` and built over
+  every run. The two are now mutually exclusive and say so.
+- `determinism_check.py` printed its `FAIL` line to stdout, where a caller
+  collecting the run's report would read a failure as a passing check's
+  output. Failures go to stderr; `--help` is accepted and an unexpected
+  argument exits 2.
 - The `mixed` weapon literal was matched case-sensitively in
   `WeaponProfile.ForGun` and `BotSpawner.PickWeapon` while every surface that
   accepts it (`BotArgParser.LooksLikeWeapon`, `bot weapon`, the web `spawnNear`
