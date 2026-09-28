@@ -149,6 +149,30 @@ def config_hash(obj: dict) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def genome_from_json(raw) -> np.ndarray:
+    """One stored genome (a JSON number list, as checkpoints and best.json
+    hold them) as the float32 array every consumer runs.
+
+    float32 is the dtype init_population builds, the njit kernels specialize
+    on and the mod's forward pass uses. A reader that widens to float64 gets
+    a second numba specialization whose tanh rounds differently, so the same
+    champion scores differently depending on which reader produced it, and a
+    resumed run stops being a replay of the run it continues. Widen at the
+    boundary on purpose (W is a few hundred numbers, float32 is exact through
+    JSON) and nowhere else."""
+    return np.array(raw, dtype=np.float32)
+
+
+def genome_to_json(w: np.ndarray) -> list:
+    """One genome as a JSON number list, the shape every artifact stores it in
+    (best.json weights, a checkpoint's top3 and pop).
+
+    The float32 -> float64 -> JSON widening is exact for a float32 value, so
+    genome_from_json(genome_to_json(w)) round-trips bit-for-bit; only the
+    dtype has to be restored, which is what genome_from_json is for."""
+    return w.astype(float).tolist()
+
+
 def load_best(path: Path) -> tuple[np.ndarray, dict]:
     """Read a best.json into its float32 genome and metadata: the one reading
     of the artifact for every consumer (promotion gate, eval, replay, viz,
@@ -164,7 +188,7 @@ def load_best(path: Path) -> tuple[np.ndarray, dict]:
     Raises ValueError naming what the file must look like; the caller decides
     what that means (SystemExit for a CLI, an unmatched gate for promotion)."""
     obj = json.loads(path.read_text(encoding="utf-8"))
-    w = np.array(obj["weights"], dtype=np.float32)
+    w = genome_from_json(obj["weights"])
     if w.size != W:
         raise ValueError(f"weights size {w.size} != want {W}")
     return w, obj
@@ -213,7 +237,7 @@ def save_best(path: Path, w: np.ndarray, generation: int, fitness: float, config
         "version": 1,
         "inputs": INPUTS, "hidden": HIDDEN, "outputs": OUTPUTS,
         "activation": str(config.get("activation", "tanh")),
-        "weights": w.astype(float).tolist(),
+        "weights": genome_to_json(w),
         "configHash": config_hash(config),
         "fitness": float(fitness),
         "generation": generation,

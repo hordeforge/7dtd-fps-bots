@@ -253,6 +253,33 @@ def check_concurrent_pinned_knobs() -> None:
     print("  ok  harness: a concurrent partial pin kept the training knobs")
 
 
+def check_checkpoint_dtype() -> None:
+    """A checkpoint round-trip must restore float32 genomes, not float64.
+
+    Checkpoints store genomes as JSON lists (ga.genome_to_json), and
+    the reader used to rebuild them with `dtype=float`. That is lossless in
+    value but changes the dtype, so the resumed run's first generation ran the
+    njit kernel's float64 specialization: a second compilation whose tanh
+    rounds differently, and a fitness number for the same (genome, seed) pair
+    that the interrupted run never produced. `--resume` is documented as a
+    replay of the interrupted run, so the restore has to land on the same
+    dtype init_population builds."""
+    pop = ga.init_population(np.random.default_rng(SEED), P=6, sigma=0.02)
+    stored = json.dumps([ga.genome_to_json(w) for w in pop])
+    restored = [ga.genome_from_json(w) for w in json.loads(stored)]
+    if any(r.dtype != np.float32 for r in restored):
+        _fail("evolve --resume: checkpoint genomes came back as "
+              f"{restored[0].dtype}, not float32")
+    if any(a.tobytes() != b.tobytes() for a, b in zip(pop, restored, strict=True)):
+        _fail("evolve --resume: the checkpoint round-trip changed the weights")
+    seed = 0xC0FFEE
+    if any(harness.evaluate(a, 3, 0, seed) != harness.evaluate(b, 3, 0, seed)
+           for a, b in zip(pop, restored, strict=True)):
+        _fail("evolve --resume: a restored genome scored differently from "
+              "the one that was checkpointed")
+    print("  ok  checkpoint: genomes round-trip as float32 and score unchanged")
+
+
 def _fail(msg: str) -> None:
     # stderr: the passing checks are the report on stdout, a failure is status.
     print(f"FAIL  {msg}", file=sys.stderr)
@@ -268,7 +295,8 @@ if __name__ == "__main__":
               f"(see --help)", file=sys.stderr)
         raise SystemExit(2)
     for step in (check_evolution, check_rng_checkpoint, check_match_kernel,
-                 check_loadout_draw, check_threaded_harness,
+                 check_loadout_draw, check_checkpoint_dtype,
+                 check_threaded_harness,
                  check_canonical_stick, check_concurrent_canonical_stick,
                  check_concurrent_pinned_knobs):
         step()

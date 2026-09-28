@@ -142,7 +142,7 @@ def _last_best(run_dir: Path):
     last = json.loads(cand[-1].read_text(encoding="utf-8"))
     if "top3" not in last or not last["top3"]:
         return None, None
-    return np.array(last["top3"][0], dtype=float), last
+    return ga.genome_from_json(last["top3"][0]), last
 
 
 def weight_hist(run_dir: Path) -> bytes | None:

@@ -156,7 +156,14 @@ def _load_resume(resume: str, seed: int, pop: int, stick: dict):
             raw_top3 = parsed.get("top3") or []
             if not raw_top3:
                 raise ValueError("checkpoint has no top3")
-            top3 = [np.array(w, dtype=float) for w in raw_top3]
+            # float32, the dtype init_population builds and the njit kernels
+            # and the mod's forward pass run in. Checkpoints hold JSON lists, so
+            # a bare `dtype=float` restored float64 genomes: numba then compiled
+            # a second float64 specialization of _simulate, whose tanh rounds
+            # differently, and the first resumed generation scored differently
+            # from the interrupted run it is supposed to replay (same reason
+            # ga.load_best reads float32).
+            top3 = [ga.genome_from_json(w) for w in raw_top3]
             ckpt = parsed
             chosen = cand
             break
@@ -175,7 +182,7 @@ def _load_resume(resume: str, seed: int, pop: int, stick: dict):
     rng2 = np.random.default_rng(seed ^ 0x9E3779B9)
     raw_pop = ckpt.get("pop") or []
     if len(raw_pop) == pop:
-        pop_w = [np.array(w, dtype=float) for w in raw_pop]
+        pop_w = [ga.genome_from_json(w) for w in raw_pop]
     else:
         pop_w = []
         for i in range(pop):
@@ -183,7 +190,7 @@ def _load_resume(resume: str, seed: int, pop: int, stick: dict):
             if i < len(top3):
                 pop_w.append(base.copy())
             else:
-                pop_w.append(base + rng2.normal(0, 0.03, base.size).astype(float))
+                pop_w.append(base + rng2.normal(0, 0.03, base.size).astype(np.float32))
     best_f = float(ckpt.get("best_fitness", float("-inf")))
     # `nextGen` is the generation the stored pool and rng state belong to; older
     # checkpoints predate it and stored the pool one generation earlier.
@@ -409,7 +416,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 pending_ckpt = {
                     "gen": g,
                     "best_fitness": f,
-                    "top3": [w.astype(float).tolist() for w in top3],
+                    "top3": [ga.genome_to_json(w) for w in top3],
                     "fitness": all_fitness,
                     "activation": activation,
                     "curriculum": curriculum,
@@ -489,7 +496,7 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
                 next_pool = island_pops[0] if islands == 1 else [w for ip in island_pops for w in ip]
                 pending_ckpt["nextGen"] = g + 1
                 pending_ckpt["rngState"] = ga.rng_state(rng)
-                pending_ckpt["pop"] = [w.astype(float).tolist() for w in next_pool]
+                pending_ckpt["pop"] = [ga.genome_to_json(w) for w in next_pool]
                 # Atomic: --resume sorts by name and walks back only when a file
                 # fails to parse, but a torn newest checkpoint would still cost
                 # every generation after the last good one.

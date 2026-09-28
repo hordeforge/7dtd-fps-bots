@@ -195,7 +195,7 @@ exit status:
             raise SystemExit(f"no gen_*.json in {args.run}")
         try:
             obj = json.loads(path.read_text(encoding="utf-8"))
-            w = np.array(obj["top3"][0], dtype=float)
+            w = ga.genome_from_json(obj["top3"][0])
         except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as ex:
             raise SystemExit(f"{path} is not a gen_*.json checkpoint: {ex.__class__.__name__}: {ex}") from None
         hidden, inputs = 16, 14
