@@ -10,7 +10,42 @@ The version lives in `Source/BotMod/Core/BotModVersion.cs` (canonical) and
 must match `<Version>` in `Source/BotMod/ModInfo.xml`; `scripts/build.sh`
 fails on drift between them.
 
+Cutting a release, in this order:
+
+1. Rename `## [Unreleased]` to `## [<version>]` with the date, and fix the
+   `###` grouping for what actually shipped. Anything left in `[Unreleased]`
+   is still on the next one.
+2. Set `BotModVersion.Number` and the `ModInfo.xml` `<Version>` to that
+   version.
+3. `make ci`, then tag `v<version>` and attach `make package`'s zip.
+   `.github/workflows/release.yml` rejects a tag that disagrees with
+   `ModInfo.xml` or that has no notes in this file.
+
 ## [Unreleased]
+
+### Breaking
+
+Under the 0.x policy above, these change what an existing consumer sees. None
+of them removes a config key or a console command.
+
+- `POST /api/bot` now binds an idempotency `requestId` to the request it was
+  issued for. Before: a retry under a live key whose body differed was answered
+  with the earlier response and the new operation was dropped. Now: the
+  mismatch is `409 REQUEST_ID_REUSED`, and the request that owns the key still
+  replays. A client that reused one key per session for a varying body has to
+  send a fresh key per logical request.
+- Every `/api/bot` response, on both verbs and on 200/400/409/500, now carries
+  `Cache-Control: no-store` (the body contract is documented in the README).
+  Before: the header was absent, so an intermediary or the browser HTTP cache
+  could hand back a stale roster. Nothing in the shipped panel depended on
+  caching, but an external consumer reading the scoreboard through a shared
+  cache has to revalidate.
+- `BotNeuralBrain.TryLoad` now rejects any champion whose `activation` is not
+  `tanh`, and a champion declaring a hidden width outside 1..4096. Before: such
+  a file loaded and every network output was wrong, with nothing logged. An
+  operator whose `evolved/best.json` came from a `--activation relu` run gets
+  the rejection message and the heuristic brain until a tanh champion is
+  promoted into that slot.
 
 ### Changed
 
@@ -38,6 +73,25 @@ fails on drift between them.
 
 ### Added
 
+- `BOTMOD_CONFIG` overrides the config path for both the read and the persist
+  side, so a deployment that mounts `botmod.json` outside the mod directory
+  (a container config map, a read-only image with a writable copy elsewhere)
+  no longer has to also mount it into `Config/`. Unset or blank means the path
+  beside the assembly, as before. `characters.json` is looked up next to
+  whichever `botmod.json` is in use, and a `BOTMOD_CONFIG` that resolves to
+  nothing logs a WARN naming every path tried instead of silently running on
+  the C# property defaults.
+- `bot config` (alias `cfg`) prints the file the server read and the effective
+  values after `Normalize` clamped them, including fields the file never set
+  and values the difficulty preset moved. The same dump is logged at startup
+  and on `bot reload`. `bot status` still answers the six fields an admin
+  watches per tick.
+- `make backup` snapshots the recovery surface (deployed `botmod.json` and its
+  `.bak`, or the `BOTMOD_CONFIG` file, plus the champion weights) into
+  `$BOTMOD_STATE_BACKUP_DIR/<utc-timestamp>/`, git-ignored by default at
+  `backups/`. `make verify-snapshot` checks the `MANIFEST` digests and writes
+  nothing; `make restore` verifies first, then writes. RPO/RTO per failure
+  mode is in `docs/recovery.md`.
 - `make test SUITE=<name>` (names from `make test-list`, or
   `scripts/test-idempotency.sh <name> ...`) runs a single C# suite instead of
   all of them, and `scripts/test-idempotency.sh` now names the missing tool
@@ -45,13 +99,13 @@ fails on drift between them.
   the `run_suite` calls.
 - `make ci` runs the full local gate (`make check` plus `make test`), and
   `make preflight` names the tools `make check` needs.
-- `tests/BotMod.Web.Tests/BotTextFuzzTests.cs` fuzzes the identity-text layer
+- `tests/BotMod.Tests/BotTextFuzzTests.cs` fuzzes the identity-text layer
   (`Canon`, `WithoutInvisible`, `IdentityKey`, `BaseName`, `NameMatches`) with
   lone surrogates, hostile UTF-8, invisible and combining characters, seeded
   with the string literals of the shipped config files, and asserts the
   contract (totality, fixed points, NFC output, NFC/NFD key equality) rather
   than only the absence of a throw.
-- `tests/BotMod.Web.Tests/BotAdminSettersFuzzTests.cs` fuzzes the admin setters
+- `tests/BotMod.Tests/BotAdminSettersFuzzTests.cs` fuzzes the admin setters
   the web API and console share: every `setTeam` write must be readable back
   under each spelling of that name, an unknown `vs` target must change no
   flag, and the difficulty and team-count setters must clamp at both ends of
@@ -163,6 +217,59 @@ fails on drift between them.
   replay-window entries never aged out and only the capacity cap retired
   them. `Stopwatch.GetTimestamp` always counts in `Stopwatch.Frequency`
   units, so the single frequency division is now the only conversion.
+- `BotCharacterDB.Load` builds the character table privately and publishes it
+  with one reference store. Before, the map was mutated in place while the game
+  tick read it per bot, so a concurrent `bot reload` could hand a reader a
+  half-filled table or a character whose traits were half difficulty-lerped.
+  The DM spawnpoint memo is now dropped with the rest of the per-world state on
+  shutdown and on a manager start, instead of being keyed on the world name and
+  handing a new world the previous world's coordinates.
+- `WeaponProfile.ForGun` matched the machine-gun branch on `pipe` alone in
+  some paths and `"pipe" && "machine"` in others, so `gunPipeRifle` resolved to
+  the pistol default (fire rate, damage, range of a pistol, holding a rifle).
+  The test is parenthesized once and `pipe` joins the rifle branch.
+- The scoreboard's `health`, `score` and `nearestPlayerDist` truncated their
+  float instead of rounding (a 99.9 hp bot read as 99), and a value outside
+  `int` range, NaN or Infinity went through an undefined float-to-int cast.
+  They now round and clamp, with NaN as 0.
+- `BotNeuralBrain.TryLoad` multiplied the file-declared hidden width without
+  bounding it, so a large `hidden` wrapped the size check's own arithmetic.
+  The width is now range-checked (1..4096) before it is used, and the reason is
+  logged, like every other artifact rejection.
+- The synthetic-auth-bypass audit line logged the client's SteamId and IP. The
+  SteamId is one value out of a fixed block the bypass matches on, so it
+  carried no diagnostic information, and the IP is personal data. The line now
+  names the connection's in-world `entityId`, the key `lp` and every other
+  session line already uses, so the bypassed join still correlates.
+- `tools/ga/replay.py` wrote caller-supplied text (a run label, a seed caption)
+  into the generated page unescaped, and embedded its frame and wall payloads
+  in a `<script>` element where a `</script>` inside a string value ended the
+  element and turned the rest of the JSON into markup. The title is escaped and
+  the two payloads escape `</`. `dashboard.py` escaped the replay label the same
+  way. A crafted run-directory name could otherwise inject markup into a
+  report the operator opens in a browser.
+- `evolve.py` wrote `config.json` before the island split and recorded the
+  requested `--pop`: `--pop 8 --islands 4` trained 32 genomes and logged 8, so
+  replaying the run's own logged config produced a different run. It now
+  records the population actually evolved, with `pop_requested` and
+  `pop_per_island` beside it.
+- `tools/ga/report.py`'s CSV loader accepted `nan` as a fitness value. It
+  parses fine, then poisons every `max()`, mean and delta downstream (`max()`
+  over a list holding NaN returns NaN) and the chart silently dropped the
+  series. Non-finite values are now treated like any other torn row: that
+  generation is skipped and counted.
+- `tools/ga/dashboard.py`'s held-strip figure was closed on the success path
+  and leaked on the empty-data path, keeping the figure, its axes and its
+  canvas in pyplot's global registry for the rest of the process.
+- Entity ids render into kill lines, the shot-failure warning, the death-patch
+  warning and the `bot player <id>` lookup under the server's current culture.
+  On a culture whose digit or negative sign differs from the invariant one, a
+  player named by id on the console missed the prefix match and the log lines
+  carried a spelling the rest of the session does not use. Those surfaces now
+  render invariantly, matching the invariant `int.TryParse` every id surface
+  already used. `WeaponProfile.ForGun`'s machine-gun test is parenthesized the
+  same commit: `smg || pipe && machine` bound tighter than it read, so a gun id
+  containing both spelled differently from what the branch intended.
 
 ### Changed
 
@@ -195,6 +302,30 @@ fails on drift between them.
   directory deleted concurrent instances' in-flight writes, which showed up
   as spurious "concurrent writes complete without errors" and torn-write
   failures when two checkouts ran the suite at once.
+- `make install` stages the whole payload in a sibling of `Mods/BotMod`,
+  copies the live `Config/botmod.json(.bak)` into the staged copy, and swaps it
+  in with a single rename, so a failed copy leaves the running install
+  untouched. `make uninstall` takes its own backup first and aborts if it
+  cannot write one (`BOTMOD_SKIP_BACKUP=1` overrides, and then the operator
+  state is gone).
+- `WeaponProfile.SpreadDeg` is gone. The field was never read by the aim or
+  fire path, so no behavior changes; the per-shot spread bots actually apply
+  comes from the neural aim bias and `AimJitterDegrees`. `characters.json` is
+  unaffected: it binds `BotCharacter`, not `WeaponProfile`.
+- `tools/ga`'s duplicated rank, burst and logistic code now lives once, in
+  `ga.py` and `harness.py`, and every entry point calls it. The sim's stuck
+  accounting changed with the dedup: `stuck_ticks` now counts from the first
+  tick a bot is detected stuck, where it previously skipped that first tick, so
+  a run's fitness values are not comparable with a pre-dedup run of the same
+  seed. Seeded runs remain byte-identical run to run on the current code.
+- `BotBrain.FindTarget` rejects a candidate on a distance-only lower bound
+  before its line-of-sight `Physics.Raycast` (plus up to 64 voxel `GetBlock`
+  calls) runs, and the `hpFrac` divisor is hoisted out of the scan. The bound
+  is `dist * minMult`, computed with slack for the float rounding that the
+  health term and the grudge multiplier introduce, so it only ever skips a
+  candidate that cannot out-score the incumbent: every gate is a skip, so the
+  pick is unchanged. `Bot.Status(EntityAlive)` is the overload the dashboard
+  uses, which no longer re-runs the entity lookup per bot per poll.
 
 ## [0.7.1] - 2026-09-21
 

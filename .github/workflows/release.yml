@@ -9,8 +9,9 @@ name: release
 # The mod archive is deliberately NOT built here. `make package` compiles
 # against the dedicated server's own assemblies, which a hosted runner does
 # not have; a maintainer with a game install runs `make package` and attaches
-# the zip. Gating the tag is the half that can be proven automatically, and
-# asserting the other half here would be a claim, not evidence.
+# the zip. Gating the tag and the notes are the halves that can be proven
+# automatically; asserting the packaging half here would be a claim, not
+# evidence.
 
 on:
   push:
@@ -44,3 +45,29 @@ jobs:
             exit 1
           fi
           echo "ok: tag $TAG matches $MANIFEST ($SHIPPED)"
+      - name: Check CHANGELOG.md has notes for the tagged version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          # A tag that ships with no section in the changelog is a release
+          # whose consumers cannot find out what changed for them, and it is
+          # the one part of the release contract this repo can prove. Cutting
+          # the section is the step that also renames [Unreleased] to the
+          # version, so the version and the notes move together.
+          BODY="$(awk -v want="## [$VERSION]" '
+            $0 == want || index($0, want " - ") == 1 { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md)"
+          if [ -z "$BODY" ]; then
+            echo "ERROR: CHANGELOG.md has no '## [$VERSION]' section with notes" >&2
+            echo "       cut the [Unreleased] entries into one before tagging" >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$BODY" | grep -qE '^(### |- )'; then
+            echo "ERROR: '## [$VERSION]' in CHANGELOG.md is empty" >&2
+            exit 1
+          fi
+          echo "ok: CHANGELOG.md has notes for $VERSION"
