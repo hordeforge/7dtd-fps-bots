@@ -15,7 +15,10 @@
 // for is a privileged action with no escalation trail. CheckConsoleAudit-
 // Classification therefore pins the console surface's audit rule (every
 // subcommand not declared read-only leaves an issuer-attributed line), which
-// is what keeps a mutation added later from shipping unlogged.
+// is what keeps a mutation added later from shipping unlogged. CheckCsrfOrigin
+// pins the third leg: the browser session cookie rides along on a cross-origin
+// POST, so the Origin comparison is what actually keeps another site from
+// driving these mutations.
 //
 // Slot semantics (verified against the game binary): AdminWebModules'
 // WebModule ctor normalizes a declared array shorter than ERequestMethod.Count
@@ -90,9 +93,46 @@ static class WebApiAuthzTests
             Check("response header " + headers[i][0] + " carries a value", headers[i].Length == 2 && headers[i][1] != "");
 
         CheckConsoleAuditClassification();
+        CheckCsrfOrigin();
 
         Console.WriteLine(_failures == 0 ? "all web api authz matrix tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>The third leg of the matrix: the dashboard authenticates with
+    /// the stock `sid` session cookie, which a browser attaches to a
+    /// cross-origin POST exactly as it does to a same-origin one, so cookie
+    /// auth alone proves nothing about who sent the request. Every POST is a
+    /// mutation, so the Origin comparison is what keeps another origin from
+    /// driving them. The direction that costs security is the refusing side:
+    /// a bypass here is an attacker page, a same-origin page is the dashboard.
+    ///
+    /// The prefix cases matter most. "https://admin.example.evil.test" starts
+    /// with "https://admin.example", so any check that compared the Origin to
+    /// the Host as a string prefix would wave it through; a parsed host
+    /// comparison does not.</summary>
+    static void CheckCsrfOrigin()
+    {
+        var origin = BotMod.Web.Bot.OriginAllowed;
+        Check("no Origin header is allowed (scripted/API-token callers)", origin(null, "admin.example:26900"));
+        Check("empty Origin header is allowed", origin("", "admin.example:26900"));
+        Check("same origin over http is allowed", origin("http://admin.example:26900", "admin.example:26900"));
+        Check("same origin over https is allowed", origin("https://admin.example", "admin.example"));
+        Check("same host, default port spelled out, is allowed", origin("http://admin.example:80", "admin.example"));
+
+        Check("a foreign origin is refused", !origin("https://evil.test", "admin.example:26900"));
+        Check("a foreign origin with a matching port is refused", !origin("http://evil.test:26900", "admin.example:26900"));
+        Check("a same-host different-port origin is refused", !origin("http://admin.example:8080", "admin.example:26900"));
+        // The two prefix bypasses, one per side.
+        Check("a host that starts with the server's host is refused", !origin("https://admin.example.evil.test", "admin.example"));
+        Check("a host the server's host starts with is refused", !origin("https://admin.ex", "admin.example.attacker.test"));
+        Check("a userinfo trick is refused", !origin("https://admin.example@evil.test", "admin.example"));
+        // What a sandboxed iframe, a data: document or a malformed value sends.
+        Check("the literal null origin is refused", !origin("null", "admin.example"));
+        Check("a relative origin is refused", !origin("/api/bot", "admin.example"));
+        Check("a non-http scheme is refused", !origin("file://admin.example", "admin.example"));
+        // A throw in the header store must refuse, never admit.
+        Check("a missing Host header refuses a present Origin", !origin("https://admin.example", null));
     }
 
     /// <summary>Second half of the matrix: who may act is only half of it,

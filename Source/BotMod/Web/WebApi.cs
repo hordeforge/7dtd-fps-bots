@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Utf8Json;
@@ -70,6 +71,17 @@ namespace BotMod.Web
     /// webtoken has to be attributable to the token row an operator can
     /// revoke. The `bot` console command logs its issuer the same way, so both
     /// admin surfaces reconstruct alike.
+    ///
+    /// CSRF: the dashboard authenticates with the stock `sid` session cookie,
+    /// which a browser attaches to a cross-origin POST just as it does to a
+    /// same-origin one, so cookie auth alone does not prove the call came from
+    /// this dashboard. Every POST here is a mutation (spawn, remove, enable,
+    /// config writes), so a page on any origin could otherwise drive an admin's
+    /// server. The POST handler therefore refuses a request whose Origin does
+    /// not name the host the request arrived on (see OriginAllowed). An absent
+    /// Origin is allowed, because the non-browser callers (curl, the API-token
+    /// shape) send none and refusing them would break every scripted admin path
+    /// to close a browser-only hole. GET is not gated: it mutates nothing.
     ///
     /// Caching: every response (200, 400, 409, 500, on both verbs) carries
     /// Cache-Control: no-store plus X-Content-Type-Options: nosniff; see
@@ -180,6 +192,38 @@ namespace BotMod.Web
             // keyless request carries no other identifier. Sanitized value, so
             // a request-supplied key cannot inject header structure.
             context.Response.Headers["X-BotMod-Request-Id"] = logTag;
+            // Cross-site request forgery. Every POST here is a mutation an
+            // authenticated admin owns (spawn, remove, enable, config writes),
+            // and the dashboard authenticates with the stock `sid` session
+            // cookie, which the browser attaches to a cross-origin POST exactly
+            // as it does to a same-origin one. Nothing else in the request
+            // proves the call came from this dashboard: AbsRestApi's own
+            // dispatch reads the cookie and the permission level, and the
+            // attacker does not need either, because the victim's browser
+            // supplies them. So a page on any origin could spawn bots, remove
+            // them, or flip the mod off, and the victim would see a normal
+            // dashboard and a 200 the script cannot read. The Origin check below
+            // is the standard answer and needs no token in the panel: a browser
+            // always sends Origin on a cross-origin POST, and sends it as the
+            // panel's own origin on a same-origin one.
+            //
+            // The mod is a server plugin with no way to read the stock
+            // webserver's cookie flags, so this cannot be delegated upward; it
+            // has to hold here. An absent Origin stays allowed, because the
+            // non-browser callers (curl, the API-token shape named in
+            // CallerTag, a health probe) send none, and refusing them would
+            // break every scripted admin path for a browser-only threat. A
+            // present-but-unparseable Origin is refused: "null" (a sandboxed
+            // iframe, a data: document) and a relative value are what a
+            // cross-origin forger falls back to when a strict origin refuses to
+            // emit the real one.
+            if (!OriginAllowed(context))
+            {
+                ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller
+                    + " rejected CROSS_ORIGIN (Origin: " + LogSanitizer.Clean(RequestHeader(context, "Origin")) + ")");
+                SendEmptyResponse(context, HttpStatusCode.Forbidden, null, "CROSS_ORIGIN", null);
+                return;
+            }
             if (keyed && !IdempotencyLedger.IsValidKey(requestId))
             {
                 ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " rejected INVALID_REQUEST_ID");
@@ -600,6 +644,113 @@ namespace BotMod.Web
                 return "api-token " + (string.IsNullOrEmpty(token) ? "(unnamed)" : token);
             }
             catch (Exception) { return "unknown"; }
+        }
+
+        /// <summary>Well-known scheme default ports, named because
+        /// <c>Uri.DefaultPort</c> is not public on net48 (the target framework
+        /// the mod compiles against).</summary>
+        internal const int HttpDefaultPort = 80;
+        internal const int HttpsDefaultPort = 443;
+
+        /// <summary>Request header lookup that never throws: a header store
+        /// that is null (a token-authenticated request) or a name the store
+        /// rejects reads as absent, and the caller applies its own
+        /// absent-means-allowed default.</summary>
+        static string RequestHeader(RequestContext context, string name)
+        {
+            try
+            {
+                var headers = context.Request != null ? context.Request.Headers : null;
+                return headers == null ? null : headers[name];
+            }
+            catch (Exception) { return null; }
+        }
+
+        /// <summary>Whether a request may drive a mutation. True when the
+        /// browser did not label the call cross-origin (no Origin header: the
+        /// API-token and scripted shapes, which have no ambient authority to
+        /// abuse), or when the Origin's scheme+host+port names the host the
+        /// request itself arrived on. Ports are compared, not dropped: an
+        /// attacker page served from the same host on a different port is a
+        /// different origin and does get to mutate an admin console if the
+        /// check ignores it. Public so the CSRF contract is assertable without
+        /// a live RequestContext, which only exists inside a running server.</summary>
+        public static bool OriginAllowed(string origin, string host)
+        {
+            if (string.IsNullOrEmpty(origin)) return true;
+            if (string.IsNullOrEmpty(host)) return false;
+            string o = origin.Trim();
+            // Parse rather than compare strings: "https://good.example" and
+            // "https://good.example.evil.test" share a prefix, and so does
+            // "https://admin.example" against a host header of
+            // "admin.example.attacker.test". A prefix test on either side turns
+            // the check into a bypass, so the URL has to be decomposed and only
+            // its scheme, host and port compared.
+            if (!Uri.TryCreate(o, UriKind.Absolute, out Uri parsed)) return false;
+            if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps) return false;
+            if (parsed.UserInfo.Length > 0) return false;
+            string h = host.Trim();
+            // Strip the port the Host header carries; it is compared separately.
+            string hostName = h;
+            string hostPort = null;
+            int colon = h.LastIndexOf(':');
+            int bracket = h.LastIndexOf(']');
+            if (colon > bracket)
+            {
+                hostName = h.Substring(0, colon);
+                hostPort = h.Substring(colon + 1);
+            }
+            if (!string.Equals(parsed.Host, hostName, StringComparison.OrdinalIgnoreCase)) return false;
+            // Uri.DefaultPort is not public on net48, so the scheme's default
+            // port is named here. The two schemes allowed above are the only
+            // ones that reach this line.
+            int defaultPort = parsed.Scheme == Uri.UriSchemeHttps ? HttpsDefaultPort : HttpDefaultPort;
+            if (parsed.Port == defaultPort) return hostPort == null || hostPort.Length == 0 || hostPort == parsed.Port.ToString(CultureInfo.InvariantCulture);
+            return string.Equals(hostPort, parsed.Port.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        }
+
+        /// <summary>Host side of <see cref="OriginAllowed(string, string)"/>,
+        /// taken from the request itself. The Host header is the only host the
+        /// stock webserver surfaces on RequestContext, and it is what the
+        /// browser used to reach the server, which is the comparison the Origin
+        /// check is defined against.</summary>
+        static bool OriginAllowed(RequestContext context)
+        {
+            string origin = null, host = null;
+            try
+            {
+                origin = RequestHeader(context, "Origin");
+                host = RequestHeader(context, "Host");
+                // A reverse proxy in front of the server rewrites Host to the
+                // backend address and forwards the client's in
+                // X-Forwarded-Host. The browser's Origin matches the forwarded
+                // one, so check that too rather than refusing every proxied
+                // admin; the header is request-supplied, which costs nothing
+                // here because a match still has to name the same origin the
+                // browser claimed.
+                if (!OriginAllowed(origin, host))
+                {
+                    string fwd = RequestHeader(context, "X-Forwarded-Host");
+                    if (!string.IsNullOrEmpty(fwd))
+                    {
+                        // Comma-separated proxy chain; the first entry is the
+                        // original client-facing host.
+                        int comma = fwd.IndexOf(',');
+                        string first = (comma < 0 ? fwd : fwd.Substring(0, comma)).Trim();
+                        if (OriginAllowed(origin, first)) return true;
+                    }
+                    return false;
+                }
+                return true;
+            }
+            // A store that throws must not silently admit a cross-origin write.
+            // Refusing a same-origin admin is a visible, recoverable failure;
+            // admitting the attack is not.
+            catch (Exception ex)
+            {
+                ModApi.Warn("origin check failed, refusing the mutation: " + ex.Message);
+                return false;
+            }
         }
 
         /// <summary>Run a world-touching action on the game's main thread and
