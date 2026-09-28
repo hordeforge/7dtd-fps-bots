@@ -197,6 +197,21 @@ of them removes a config key or a console command.
   `ElementTree.parse` of this repo's own Cobertura output. `line-length` is
   now written down as the 100-column cap the debt count in `ruff.toml` is
   measured against.
+- `make lint-python` passes again. Selecting `SLF` in the same change that
+  promoted it left `tools/ga/determinism_check.py` red on three
+  `combat_sim._lcg01` / `combat_sim._loadout_pick` calls, so `ruff check .`
+  failed on a clean tree. Reaching into the kernel is what that probe is for,
+  so each site now carries a rule-scoped `noqa` saying so.
+- `ruff` selects four more whole categories in `ruff.toml`, each proven clean
+  over `tools/ga` and `scripts` in the same change: `EXE` (flake8-executable),
+  `PT` (flake8-pytest-style), `FLY` (flynt) and `FURB` (refurb). `EXE` is why
+  the six shebanged `tools/ga` entry points that sat at mode 644 next to
+  `evolve.py`'s 755 are now all executable.
+- `ruff.toml` records the rule groups that are still out, each with its
+  measured finding count (`PL` 109, `ANN` 207, `D` 115, `E7` 145, `T20` 58,
+  `TRY` 19, `N` 18, `EM` 16, `UP` 16, `FBT` 14, `CPY` 12, `SIM` 9, `I` 9,
+  `BLE` 8, `RUF` 13, `E501` 98), so a rule cannot be promoted with the debt
+  silently growing back behind it.
 
 ### Performance
 

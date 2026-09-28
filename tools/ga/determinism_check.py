@@ -104,11 +104,11 @@ def check_loadout_draw() -> None:
         rng = SEED & 0xFFFFFFFF
         for _ in range(12):
             if gap <= 0.0:
-                _, rng = combat_sim._lcg01(rng)   # the two position draws
-                _, rng = combat_sim._lcg01(rng)
-            # The kernel's own draw, so this check fails if the roll regresses
-            # rather than re-asserting a correct copy of it here.
-            pick, rng = combat_sim._loadout_pick(rng, 6)
+                # The kernel's own draws, so this check fails if the roll
+                # regresses rather than re-asserting a correct copy of it here.
+                _, rng = combat_sim._lcg01(rng)  # noqa: SLF001 -- the kernel's own stream
+                _, rng = combat_sim._lcg01(rng)  # noqa: SLF001 -- the kernel's own stream
+            pick, rng = combat_sim._loadout_pick(rng, 6)  # noqa: SLF001 -- the kernel's own draw
             picks.append(pick)
         if len(set(picks)) < 2:
             _fail(f"combat_sim spawn loop: spawn_gap={gap} drew one weapon "

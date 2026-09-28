@@ -25,12 +25,29 @@
 # never read.
 #
 # Known debt, deliberately NOT selected yet (fix in code-review passes, then
-# move the rule up here): the default-preset style/modernization findings
-# (I001, PLR1730, EXE001, BLE001, UP006, SIM114, UP031, PLR0124, SIM103,
-# RUF019, RUF059, UP034), NPY002
+# move the rule up here; the counts are `ruff check --select <G> --output-format
+# concise .` over the whole Python surface as of 2026-09-28, so a rule cannot
+# be promoted with the debt silently growing back):
+#   PL  109   pylint: PLR2004 magic values dominate, then PLR0912/0915/0913
+#               (the three god-functions in combat_sim/evolve/replay); the
+#               complexity caps are a split, not a lint fix
+#   ANN 207   flake8-annotations: unannotated signatures, the typing ratchet
+#   D   115   pydocstyle docstring rules (the modules all have one already)
+#   E7  145   pycodestyle E7xx comparison/comment forms
+#   T20  58   flake8-print: these are operator-run CLI tools whose output is
+#               the product
+#   TRY  19   tryceratops, BLE  8  blind-except, FBT  14  boolean traps,
+#   CPY  12   copyright headers, N  18  pep8-naming, EM  16  exception
+#               messages, I   9  import order (auto-fixable, but the fix
+#               reorders dashboard.py's imports across its sys.path
+#               bootstrap, so it needs the hand edit that bootstrap wants),
+#   UP  16 / SIM  9 / RUF  13  pyupgrade, flake8-simplify, and the non-RUF100
+#               arms of RUF (12 ambiguous-unicode in report/viz, 1 RUF059)
+#   E501  98  line length (over-length lines at the 100-column cap)
+#   NPY002
 # (np.random.seed in evolve.py and sweep.py: switching to a Generator would
 # change every seeded run's results, so it is a behavior change, not a lint
-# fix), and E501 line length (98 over-length lines at a 100-column cap).
+# fix)
 #
 # Type checking is not a gate. mypy over tools/ga + scripts is clean of real
 # findings (the rest are missing third-party stubs for numpy, numba, matplotlib
@@ -52,10 +69,20 @@
 #   ERA  commented-out code (the one hit was a section marker reading as an
 #        assignment; the comment is now prose).
 #   ASYNC, DTZ, SLF, T10, G  async, datetime-naive, private-member,
-#        debugger-statement and logging-format defects: no findings today,
-#        and each is a whole category that was never switched on.
+#        debugger-statement and logging-format defects. SLF did raise three
+#        sites: determinism_check.py replaying combat_sim._lcg01 and
+#        combat_sim._loadout_pick to mirror the kernel's own draw. Reaching
+#        into the kernel is the point of that probe, so each site carries a
+#        rule-scoped noqa with that reason; the other two categories were
+#        clean on promotion.
+#   EXE  flake8-executable: every shebanged entry point is now mode 755, so
+#        the shebang is runnable rather than decorative (evolve.py already
+#        was; dashboard, determinism_check, replay, report, sweep and viz
+#        were 644 next to it).
+#   PT   flake8-pytest-style, FLY  flynt, FURB  refurb: categories that were
+#        never switched on and the tree passes today.
 # The cap the tree is being held to. E501 is not selected yet (the debt is
-# recorded below), so this value governs nothing today except a formatter run
+# recorded above), so this value governs nothing today except a formatter run
 # by hand; it is written down so the cap and the debt count cannot drift apart.
 # `ruff format` is not a gate either: 11 files would be reformatted, so
 # enforcing it now would red the build without a defect behind it.
@@ -66,4 +93,5 @@ target-version = "py310"
 select = [
   "E402", "E9", "F", "W605", "RUF100", "W", "A", "ARG", "PIE", "RET", "B",
   "S", "PTH", "PERF", "C4", "ERA", "ASYNC", "DTZ", "SLF", "T10", "G",
+  "EXE", "PT", "FLY", "FURB",
 ]
