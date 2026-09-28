@@ -137,7 +137,7 @@ static class IdempotencyLedgerTests
         // no sleeps. An entry replays up to the last instant of the window and
         // executes again one tick past it. First jump forward past test 5's
         // capacity-fill entries so they age out: boundary assertions must not
-        // share a full ledger, where the arbitrary oldest-tie eviction could
+        // share a full ledger, where the cap's oldest-entry eviction could
         // remove the entry under test instead of a filler.
         {
             _t += TimeSpan.FromMinutes(11);
@@ -334,6 +334,38 @@ static class IdempotencyLedgerTests
             Check("empty and null fingerprints are the same request",
                 IdempotencyLedger.TryBegin("reuse-4", "", out ignored) == IdempotencyLedger.BeginResult.Fresh
                 && IdempotencyLedger.TryBegin("reuse-4", null, out ignored) == IdempotencyLedger.BeginResult.InProgress);
+        }
+
+        // 14. Capacity eviction is reproducible: every key here is claimed at
+        //     the same virtual instant, so the "oldest" is a tie and the
+        //     dictionary's enumeration order must not decide which key pays.
+        //     The ordinal-smallest keys are the ones evicted, and two probes
+        //     run in a fixed order because each probe claim can itself trigger
+        //     the next eviction (see the walk-through below).
+        {
+            IdempotencyLedger.Retention = TimeSpan.FromHours(1);
+            _t += TimeSpan.FromHours(2); // age every earlier scenario out
+            for (int i = 0; i < IdempotencyLedger.Capacity; i++)
+            {
+                string k = "tie-" + i.ToString("D4");
+                Try(k);
+                IdempotencyLedger.Complete(k, "{}");
+            }
+            string overflow = "tie-9999";
+            Try(overflow);
+            // The overflow claim brought the ledger to Capacity+1, so the cap
+            // dropped the two ordinal-smallest tied keys: tie-0000, tie-0001.
+            // Probing tie-0000 fills its slot (Count back to Capacity); the
+            // next probe evicts it again as the new ordinal-smallest, which is
+            // why tie-0002 must be probed before tie-0001 is re-added.
+            Check("cap-eviction tie goes to the ordinal-smallest key",
+                Try("tie-0000") == IdempotencyLedger.BeginResult.Fresh);
+            Check("a surviving tied key still replays",
+                Try("tie-0002") == IdempotencyLedger.BeginResult.Replay);
+            Check("second ordinal-smallest tied key was evicted too",
+                Try("tie-0001") == IdempotencyLedger.BeginResult.Fresh);
+            Check("newest tied key survives the tie-break",
+                Try("tie-0255") == IdempotencyLedger.BeginResult.Replay);
         }
 
         Console.WriteLine(_failures == 0 ? "all idempotency ledger tests passed" : _failures + " test(s) FAILED");

@@ -101,7 +101,9 @@ namespace BotMod.Core
             _started = true; _tickAccum = 0f; _spawnRetryTimer = 0f;
             _bots.Clear(); _botEntityIds.Clear(); _botById.Clear();
             BotSpawner.InvalidateDmSpawnCache();
-            ModApi.Log("BotManager ready. TargetBots=" + ModApi.Config.TargetBotCount + " diff=" + ModApi.Config.Difficulty + " weapon=" + ModApi.Config.BotWeapon);
+            var cfg = ModApi.Config;
+            BotSpawner.Reseed((uint)cfg.Seed);
+            ModApi.Log("BotManager ready. TargetBots=" + cfg.TargetBotCount + " diff=" + cfg.Difficulty + " weapon=" + cfg.BotWeapon + " seed=0x" + ((uint)cfg.Seed).ToString("X8", CultureInfo.InvariantCulture));
         }
         public void OnWorldShuttingDown()
         {

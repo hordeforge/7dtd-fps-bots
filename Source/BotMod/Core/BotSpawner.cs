@@ -13,10 +13,23 @@ namespace BotMod.Core
         // Deterministic LCG (zdtd parity: no wall-clock noise). Spawn helpers advance this
         // monotonically so consecutive `bot spawn` in the same tick still pick distinct
         // names/weapons/spots. Not per-bot (no entity yet), global is fine for spawns.
-        static Lcg _rng = Lcg.Seeded(0xC0FFEEu);
+        static Lcg _rng = Lcg.Seeded((uint)BotConfig.DefaultSeed);
         static float Rng01() { return _rng.Next01(); }
         static int RngInt(int lo, int hi) { return _rng.Range(lo, hi); }
         static int RngPick(int n) { return _rng.Index(n); }
+
+        /// <summary>Reseed the spawn picks (and the mixed-loadout counter) from
+        /// <paramref name="seed"/>. Called once per world by
+        /// BotManager.OnGameStartDone with the configured BotConfig.Seed, so a
+        /// world's spawn sequence is a function of the logged seed plus the
+        /// order the spawn requests arrive in, and nothing else. Reseeding on a
+        /// config reload instead would shift the stream under a live world, so
+        /// it deliberately does not happen there.</summary>
+        public static void Reseed(uint seed)
+        {
+            _rng = Lcg.Seeded(seed);
+            WeaponProfile.ReseedPickCounter(seed);
+        }
         // Memoized spawnpoints.xml parse, keyed on the world name alone. The
         // name is the whole key, so anything that leaves the folder it was
         // parsed from behind the same name (a regenerated world, a world

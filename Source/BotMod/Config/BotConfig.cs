@@ -18,6 +18,21 @@ namespace BotMod.Config
         public bool AllowSyntheticAuthBypass { get; set; } = false;
         public int TargetBotCount { get; set; } = 6;
         public int MaxBots { get; set; } = 16;
+        /// <summary>Default spawn seed, and the value every consumer of the
+        /// spawn stream must agree on (BotSpawner and WeaponProfile seed their
+        /// streams from it).</summary>
+        public const int DefaultSeed = 0xC0FFEE;
+        /// <summary>Seed for the spawn-time picks: bot name, gun, spawn spot
+        /// and the mixed loadout counter. Everything a live bot decides on its
+        /// own comes from its entity id, so this seed is what makes the spawn
+        /// side of a run reproducible: the same seed and the same sequence of
+        /// spawn requests pick the same names, guns and spots. It is applied
+        /// once per world (BotManager.OnGameStartDone) and printed in the
+        /// startup config line, so a run that misbehaved can be reproduced by
+        /// starting another world with the same value. Replaying needs the same
+        /// world and the same spawn order too, since the stream is consumed in
+        /// request order. Any int is a valid seed, including 0.</summary>
+        public int Seed { get; set; } = DefaultSeed;
         // Bot body. "mixed" resolves to the one class this mod can spawn and
         // render: mod-spawned trader bodies (npcTraderJoel) render nothing on
         // this dedi and survivor classes come back negative, so zombieSoldier is

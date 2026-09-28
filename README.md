@@ -215,6 +215,12 @@ and the difficulty preset moved, which the file on disk does not.
 - `VisionRange/VisionAngle/LoseTargetRange/Time`, `AttackRange` per weapon, `StrafeChance/DodgeOnHitChance`.
 - `PathRecalcIntervalSec/StuckTimeoutSec/RandomWanderRadius/Interval`, `SpawnRadius/NearPlayerChance/UseSpawnpoints`, `SpawnProtectionSec`.
 - `TargetBotCount=6 MaxBots=16`.
+- `Seed` (any int, default `12648430` = `0xC0FFEE`) seeds the spawn picks (bot
+  name, gun, spawn spot, mixed loadout). Each bot's own decisions come from its
+  entity id, so this is the only randomness a world start introduces. It is
+  applied once per world start, printed in the `BotManager ready` log line, and
+  is not reapplied by `bot reload`, so a run is reproduced by starting the same
+  world with the same seed and issuing the same spawns in the same order.
 - Neural controller: `UseNeuralBrain` (built-in default `false`; the shipped
   config enables it) and `BotNeuralWeightPath` (default `evolved/best.json`,
   resolved against the mod folder, then the server working directory). A

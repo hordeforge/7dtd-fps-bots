@@ -4,6 +4,7 @@
   "AllowSyntheticAuthBypass": false,
   "TargetBotCount": 6,
   "MaxBots": 16,
+  "Seed": 12648430,
   "BotEntityClass": "mixed",
   "BotWeapon": "mixed",
   "BotAmmo": "ammo762mmBulletBall",

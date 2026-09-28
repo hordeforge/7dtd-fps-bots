@@ -170,6 +170,10 @@ namespace BotMod.Web
             }
             if (dead != null) for (int i = 0; i < dead.Count; i++) Entries.Remove(dead[i]);
             // Hard cap independent of age: drop oldest until one slot is free.
+            // Ties (entries claimed in the same clock tick) break on the ordinal
+            // key, not on the order the dictionary happens to enumerate: two runs
+            // that claim the same keys at the same instants must evict the same
+            // one, and dictionary order is a hash detail, not an input.
             int evicted = 0;
             while (Entries.Count >= Capacity)
             {
@@ -177,7 +181,10 @@ namespace BotMod.Web
                 TimeSpan oldest = TimeSpan.MaxValue;
                 foreach (var kv in Entries)
                 {
-                    if (kv.Value.StartedAt < oldest) { oldest = kv.Value.StartedAt; oldestKey = kv.Key; }
+                    if (oldestKey == null
+                        || kv.Value.StartedAt < oldest
+                        || (kv.Value.StartedAt == oldest && string.CompareOrdinal(kv.Key, oldestKey) < 0))
+                    { oldest = kv.Value.StartedAt; oldestKey = kv.Key; }
                 }
                 if (oldestKey == null) break;
                 Entries.Remove(oldestKey);

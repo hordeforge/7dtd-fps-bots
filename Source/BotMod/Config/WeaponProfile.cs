@@ -20,7 +20,14 @@ namespace BotMod.Config
         public int Pellets; // shotgun
         public int MagSize; // rounds per magazine (zdtd_bot ammo pacing parity)
         public float ReloadSec; // reload pause on empty (zdtd_bot parity)
-        static Lcg _pickCtr = Lcg.Seeded(0x5A17B243u);
+        // Salt keeps the mixed-loadout counter off the spawner's own stream, so
+        // one more gun pick cannot shift the name/spot picks that follow it.
+        const uint LoadoutCounterSalt = 0x5A17B243u;
+        static Lcg _pickCtr = Lcg.Seeded((uint)BotConfig.DefaultSeed ^ LoadoutCounterSalt);
+        /// <summary>Reseed the mixed-loadout counter. The spawner owns the
+        /// single entry point for this (BotSpawner.Reseed), so the gun picks
+        /// and the name/spot picks always restart from the same world seed.</summary>
+        public static void ReseedPickCounter(uint seed) { _pickCtr = Lcg.Seeded(seed ^ LoadoutCounterSalt); }
         /// <summary>Literal that selects a random LoadoutPool entry. Matched
         /// case-insensitively: every surface that accepts it (BotArgParser
         /// .LooksLikeWeapon, `bot weapon`, the web spawnNear weapon field) is
