@@ -28,8 +28,11 @@ namespace BotMod.Web
     /// "requestId" idempotency key. Retries reusing a key within the ledger
     /// retention window replay the recorded response instead of executing
     /// again (a retried spawn does not spawn twice); a concurrent duplicate
-    /// with the same key gets 409 REQUEST_IN_PROGRESS; failures are not
-    /// cached, so a retry may run again. The one ambiguous outcome is a
+    /// with the same key gets 409 REQUEST_IN_PROGRESS; a key reused for a
+    /// different body gets 409 REQUEST_ID_REUSED, because replaying the first
+    /// request's response would report an operation the caller never asked for
+    /// and drop the one it did; failures are not cached, so a retry may run
+    /// again. The one ambiguous outcome is a
     /// main-thread dispatch timeout: the queued work still runs afterwards,
     /// so that key stays claimed (retries get 409 until the entry ages out)
     /// rather than risking a second execution. Without a key, execution is
@@ -139,7 +142,8 @@ namespace BotMod.Web
             if (keyed)
             {
                 string cached;
-                IdempotencyLedger.BeginResult begin = IdempotencyLedger.TryBegin(requestId, out cached);
+                IdempotencyLedger.BeginResult begin = IdempotencyLedger.TryBegin(
+                    requestId, RequestFields.Fingerprint(_jsonInput, "requestId"), out cached);
                 if (begin == IdempotencyLedger.BeginResult.Replay)
                 {
                     ModApi.Log("web api action=" + logAction + " req=" + logTag + " replay (cached response resent)");
@@ -151,6 +155,17 @@ namespace BotMod.Web
                 {
                     ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected REQUEST_IN_PROGRESS");
                     SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_IN_PROGRESS", null);
+                    return;
+                }
+                // The key is live for a different request. Replaying the other
+                // request's response would report a spawn/enable/... that this
+                // body never asked for as this one's result and drop the actual
+                // operation; the original claim stays intact, so a retry of the
+                // original request still replays.
+                if (begin == IdempotencyLedger.BeginResult.Mismatched)
+                {
+                    ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected REQUEST_ID_REUSED (key already used for a different request)");
+                    SendEmptyResponse(context, HttpStatusCode.Conflict, null, "REQUEST_ID_REUSED", null);
                     return;
                 }
             }

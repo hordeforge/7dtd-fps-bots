@@ -19,10 +19,16 @@ namespace BotMod.Web
     /// deduplicated; entries claimed but never completed (crash between Begin
     /// and Complete/Fail) unblock when they age out. All access is
     /// thread-safe: web handlers run on thread pool threads.
+    ///
+    /// A key is bound to the request it was first used for (the caller's
+    /// fingerprint of the body). Reusing one key for a different request is
+    /// <see cref="BeginResult.Mismatched"/>, never a replay: replaying would
+    /// answer the new request with the old response and silently skip the
+    /// operation the caller actually asked for.
     /// </summary>
     internal static class IdempotencyLedger
     {
-        internal enum BeginResult { Fresh, InProgress, Replay }
+        internal enum BeginResult { Fresh, InProgress, Replay, Mismatched }
 
         internal const int Capacity = 256;
         internal const int MaxKeyLength = 128;
@@ -66,6 +72,7 @@ namespace BotMod.Web
         sealed class Entry
         {
             public TimeSpan StartedAt;
+            public string Fingerprint;
             public string Body;
             public bool Done;
         }
@@ -80,11 +87,14 @@ namespace BotMod.Web
             return !string.IsNullOrEmpty(key) && key.Length <= MaxKeyLength;
         }
 
-        /// <summary>Claim a key. Fresh: caller executes and must finish with
-        /// Complete or Fail. InProgress: another thread holds the claim
-        /// (concurrent duplicate). Replay: already executed; cachedBody is the
-        /// recorded response to resend verbatim.</summary>
-        internal static BeginResult TryBegin(string key, out string cachedBody)
+        /// <summary>Claim a key for one specific request. Fresh: caller
+        /// executes and must finish with Complete or Fail. InProgress: another
+        /// thread holds the claim (concurrent duplicate). Replay: this exact
+        /// request already executed; cachedBody is the recorded response to
+        /// resend verbatim. Mismatched: the key is live for a different
+        /// request (<paramref name="fingerprint"/> differs), so it neither
+        /// executes nor replays; the caller must issue a new key.</summary>
+        internal static BeginResult TryBegin(string key, string fingerprint, out string cachedBody)
         {
             lock (Gate)
             {
@@ -93,10 +103,18 @@ namespace BotMod.Web
                 Entry e;
                 if (Entries.TryGetValue(key, out e))
                 {
+                    // Key reuse for a different request. Answering it with the
+                    // recorded body would report the earlier operation as this
+                    // one's result and drop the requested one entirely.
+                    if (!string.Equals(e.Fingerprint, fingerprint ?? "", StringComparison.Ordinal))
+                    {
+                        cachedBody = null;
+                        return BeginResult.Mismatched;
+                    }
                     cachedBody = e.Body;
                     return e.Done ? BeginResult.Replay : BeginResult.InProgress;
                 }
-                Entries[key] = new Entry { StartedAt = now };
+                Entries[key] = new Entry { StartedAt = now, Fingerprint = fingerprint ?? "" };
                 cachedBody = null;
                 return BeginResult.Fresh;
             }

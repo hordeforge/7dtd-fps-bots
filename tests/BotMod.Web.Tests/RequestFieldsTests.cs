@@ -116,6 +116,40 @@ static class RequestFieldsTests
         RequestFields.RequireBool(d, "on", out r2a); RequestFields.RequireBool(d, "on", out r2b);
         Check("repeated reads are deterministic", r1a == r1b && r2a == r2b);
 
+        // Fingerprint: the canonical text an idempotency key is bound to. It
+        // must ignore field order and the key itself, and must change when any
+        // other field changes, or a retry of a different request would replay
+        // the first request's response.
+        {
+            var a1 = Body("action", "spawn", "count", 2, "requestId", "k1");
+            var a2 = Body("requestId", "k1", "count", 2, "action", "spawn");
+            var a3 = Body("action", "spawn", "count", 8, "requestId", "k1");
+            var a4 = Body("action", "spawn", "requestId", "k1");
+            string f1 = RequestFields.Fingerprint(a1, "requestId");
+            Check("fingerprint ignores field order", f1 == RequestFields.Fingerprint(a2, "requestId"));
+            Check("fingerprint changes with a changed field",
+                f1 != RequestFields.Fingerprint(a3, "requestId"));
+            Check("fingerprint changes when a field is dropped",
+                f1 != RequestFields.Fingerprint(a4, "requestId"));
+            Check("fingerprint ignores the excluded key",
+                f1 == RequestFields.Fingerprint(Body("action", "spawn", "count", 2, "requestId", "other"), "requestId"));
+            Check("fingerprint of an empty body is empty",
+                RequestFields.Fingerprint(Body(), "requestId") == ""
+                && RequestFields.Fingerprint(null, "requestId") == "");
+            Check("fingerprint is deterministic",
+                f1 == RequestFields.Fingerprint(Body("requestId", "k1", "action", "spawn", "count", 2), "requestId"));
+            // A JSON number and its digit text are the same field value to
+            // every action, so they must not read as two different requests.
+            Check("fingerprint treats a number and its text as one value",
+                RequestFields.Fingerprint(Body("count", 2), "requestId")
+                == RequestFields.Fingerprint(Body("count", "2"), "requestId"));
+            // Two keys differing only in case are two different fields, never
+            // one: a case-insensitive comparison would merge distinct requests.
+            Check("fingerprint is case-sensitive in key names",
+                RequestFields.Fingerprint(Body("On", true), "requestId")
+                != RequestFields.Fingerprint(Body("on", true), "requestId"));
+        }
+
         // Fuzz: arbitrary bodies never throw, only produce the three triage
         // states, and read identically on a second pass.
         var rng = new Random(0x706F5354); // fixed seed: failures are reproducible

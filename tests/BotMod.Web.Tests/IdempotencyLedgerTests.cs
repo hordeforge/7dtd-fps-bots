@@ -21,11 +21,19 @@ static class IdempotencyLedgerTests
         if (!ok) _failures++;
     }
 
-    // Begin without caring about the cached body.
+    // Begin without caring about the cached body. Body-less helper for the
+    // scenarios that do not vary the request; the key-reuse cases below pass
+    // their own fingerprint.
     static IdempotencyLedger.BeginResult Try(string key)
     {
         string ignored;
-        return IdempotencyLedger.TryBegin(key, out ignored);
+        return IdempotencyLedger.TryBegin(key, "fp", out ignored);
+    }
+
+    static IdempotencyLedger.BeginResult Try(string key, string fingerprint)
+    {
+        string ignored;
+        return IdempotencyLedger.TryBegin(key, fingerprint, out ignored);
     }
 
     static int Main()
@@ -39,10 +47,10 @@ static class IdempotencyLedgerTests
         // 1. Run twice == run once: the second Begin replays the recorded body.
         {
             string k = "replay-1";
-            var first = IdempotencyLedger.TryBegin(k, out string b1);
+            var first = IdempotencyLedger.TryBegin(k, "fp", out string b1);
             Check("first execution claims key", first == IdempotencyLedger.BeginResult.Fresh && b1 == null);
             IdempotencyLedger.Complete(k, "{\"spawned\":4}");
-            var second = IdempotencyLedger.TryBegin(k, out string b2);
+            var second = IdempotencyLedger.TryBegin(k, "fp", out string b2);
             Check("duplicate replays recorded response",
                 second == IdempotencyLedger.BeginResult.Replay && b2 == "{\"spawned\":4}");
         }
@@ -51,7 +59,7 @@ static class IdempotencyLedgerTests
         {
             string k = "concurrent-1";
             var a = Try(k);
-            var b = IdempotencyLedger.TryBegin(k, out string cached);
+            var b = IdempotencyLedger.TryBegin(k, "fp", out string cached);
             Check("in-flight duplicate is rejected, not executed",
                 a == IdempotencyLedger.BeginResult.Fresh
                 && b == IdempotencyLedger.BeginResult.InProgress && cached == null);
@@ -225,7 +233,7 @@ static class IdempotencyLedgerTests
                     try
                     {
                         start.WaitOne(30000);
-                        results[id] = IdempotencyLedger.TryBegin("race-1", out bodies[id]);
+                        results[id] = IdempotencyLedger.TryBegin("race-1", "fp", out bodies[id]);
                     }
                     catch (Exception ex) { lock (errors) errors.Add("racer" + id + ": " + ex); }
                     finally { if (System.Threading.Interlocked.Decrement(ref remaining) == 0) done.Set(); }
@@ -259,10 +267,62 @@ static class IdempotencyLedgerTests
                 IdempotencyLedger.Complete(k, "{\"spawned\":1}");
                 string replayed;
                 Check("post-race duplicate replays the winner's body",
-                    IdempotencyLedger.TryBegin(k, out replayed) == IdempotencyLedger.BeginResult.Replay
+                    IdempotencyLedger.TryBegin(k, "fp", out replayed) == IdempotencyLedger.BeginResult.Replay
                     && replayed == "{\"spawned\":1}");
             }
             finally { IdempotencyLedger.Retention = TimeSpan.FromMinutes(10); }
+        }
+
+        // 11. Key reuse for a different request. A key identifies one logical
+        //     request, so a body that differs under the same key must neither
+        //     execute nor replay: replaying would answer the new request with
+        //     the old response and silently drop the operation it asked for.
+        {
+            string k = "reuse-1";
+            Check("first request claims key",
+                Try(k, "action=spawn\ncount=2") == IdempotencyLedger.BeginResult.Fresh);
+            IdempotencyLedger.Complete(k, "{\"spawned\":2}");
+            string cached;
+            var reused = IdempotencyLedger.TryBegin(k, "action=spawn\ncount=8", out cached);
+            Check("same key + different body is rejected, not replayed",
+                reused == IdempotencyLedger.BeginResult.Mismatched && cached == null);
+            // The original claim survives the rejection, so the request that
+            // owns the key still replays for the rest of the window.
+            Check("original request still replays after a reuse attempt",
+                Try(k, "action=spawn\ncount=2") == IdempotencyLedger.BeginResult.Replay);
+        }
+
+        // 12. Reuse while the first request is still in flight takes the same
+        //     path: the concurrent duplicate is told the key is taken, never
+        //     handed the in-flight operation's response.
+        {
+            string k = "reuse-2";
+            Check("first request claims key",
+                Try(k, "a") == IdempotencyLedger.BeginResult.Fresh);
+            Check("in-flight key reused for another body is rejected",
+                Try(k, "b") == IdempotencyLedger.BeginResult.Mismatched);
+            Check("in-flight duplicate of the same body is still InProgress",
+                Try(k, "a") == IdempotencyLedger.BeginResult.InProgress);
+        }
+
+        // 13. A null fingerprint is a body-less request, not "any body": a
+        //     key claimed with one never matches a different fingerprint, and
+        //     a retry that sends the same null still replays. Null and the
+        //     empty string are the same body-less request (Fingerprint of a
+        //     null body is ""), so they must match each other.
+        {
+            string k = "reuse-3";
+            string ignored;
+            Check("null fingerprint claims key",
+                IdempotencyLedger.TryBegin(k, null, out ignored) == IdempotencyLedger.BeginResult.Fresh);
+            IdempotencyLedger.Complete(k, "{}");
+            Check("null fingerprint replayed by the same request",
+                IdempotencyLedger.TryBegin(k, null, out ignored) == IdempotencyLedger.BeginResult.Replay);
+            Check("null fingerprint does not match a real body",
+                IdempotencyLedger.TryBegin(k, "action=spawn", out ignored) == IdempotencyLedger.BeginResult.Mismatched);
+            Check("empty and null fingerprints are the same request",
+                IdempotencyLedger.TryBegin("reuse-4", "", out ignored) == IdempotencyLedger.BeginResult.Fresh
+                && IdempotencyLedger.TryBegin("reuse-4", null, out ignored) == IdempotencyLedger.BeginResult.InProgress);
         }
 
         Console.WriteLine(_failures == 0 ? "all idempotency ledger tests passed" : _failures + " test(s) FAILED");

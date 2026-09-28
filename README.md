@@ -95,7 +95,9 @@ Range clamps match
 the console (`count` 1..16, `skill` 0..4, teams 0..8). Send an optional
 client-generated `"requestId"` with mutations so a retried POST replays the
 recorded response instead of executing twice; a concurrent duplicate gets
-`409 REQUEST_IN_PROGRESS`, and a requestId that is present but empty or over
+`409 REQUEST_IN_PROGRESS`; the same requestId reused for a *different* body
+gets `409 REQUEST_ID_REUSED` (a key identifies one request, so the new one
+must carry a new key); and a requestId that is present but empty or over
 128 chars is rejected `400 INVALID_REQUEST_ID` (your retry protection would
 not be active). Failures return a generic `500 ERROR` envelope; detail goes
 to the server log only.

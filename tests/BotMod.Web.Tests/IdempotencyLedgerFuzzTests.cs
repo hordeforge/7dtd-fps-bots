@@ -2,7 +2,8 @@
 // /api/bot replay ledger against an independent spec model. The ledger takes
 // untrusted "requestId" strings straight from HTTP POST bodies; this harness
 // drives TryBegin/Complete/Fail with adversarial keys, a jittering virtual
-// clock and capacity/retention pressure, then asserts after every operation
+// clock, varying request fingerprints and capacity/retention pressure, then
+// asserts after every operation
 // that the implementation matches the model (result kind, cached body, entry
 // count) plus the global bounded-state invariant. Deterministic: fixed seed
 // list, virtual clock only, no wall time. Pure BCL; compiled and run by
@@ -38,7 +39,7 @@ static class IdempotencyLedgerFuzzTests
 
     // ---- spec model: an exact, independent restatement of the ledger ----
 
-    sealed class EntryModel { public TimeSpan StartedAt; public bool Done; public string Body; }
+    sealed class EntryModel { public TimeSpan StartedAt; public bool Done; public string Body; public string Fingerprint; }
 
     sealed class LedgerModel
     {
@@ -69,17 +70,19 @@ static class IdempotencyLedgerFuzzTests
         }
 
         public IdempotencyLedger.BeginResult TryBegin(
-            string key, TimeSpan now, TimeSpan retention, int capacity, out string body)
+            string key, string fingerprint, TimeSpan now, TimeSpan retention, int capacity, out string body)
         {
             body = null;
             Prune(now - retention, capacity);
             EntryModel e;
             if (Entries.TryGetValue(key, out e))
             {
+                if (!string.Equals(e.Fingerprint, fingerprint ?? "", StringComparison.Ordinal))
+                    return IdempotencyLedger.BeginResult.Mismatched;
                 body = e.Body;
                 return e.Done ? IdempotencyLedger.BeginResult.Replay : IdempotencyLedger.BeginResult.InProgress;
             }
-            Entries[key] = new EntryModel { StartedAt = now };
+            Entries[key] = new EntryModel { StartedAt = now, Fingerprint = fingerprint ?? "" };
             return IdempotencyLedger.BeginResult.Fresh;
         }
 
@@ -168,6 +171,10 @@ static class IdempotencyLedgerFuzzTests
     {
         string[] keys = KeyPool();
         string[] bodies = { null, "", "{}", "{\"spawned\":3}" };
+        // Request fingerprints, one of which is null (a body-less request) and
+        // two of which differ only in a control character, so a mismatch can
+        // never be a string-comparison accident.
+        string[] fingerprints = { "a", "b", "action=spawn\ncount=2", "actl", null };
 
         for (int seed = 1; seed <= Seeds; seed++)
         {
@@ -202,11 +209,16 @@ static class IdempotencyLedgerFuzzTests
                 double roll = op == 0 ? 0.0 : rng.NextDouble();
                 if (roll < 0.50)
                 {
+                    // Half the Begins reuse the fingerprint the key was last
+                    // claimed with and half pick a fresh one, so both the
+                    // replay/in-flight path and the key-reuse rejection are
+                    // driven against the same keys in the same states.
+                    string fingerprint = fingerprints[rng.Next(fingerprints.Length)];
                     string realBody, modelBody;
-                    var real = IdempotencyLedger.TryBegin(key, out realBody);
-                    var expected = model.TryBegin(key, _t, retention, IdempotencyLedger.Capacity, out modelBody);
+                    var real = IdempotencyLedger.TryBegin(key, fingerprint, out realBody);
+                    var expected = model.TryBegin(key, fingerprint, _t, retention, IdempotencyLedger.Capacity, out modelBody);
                     Check(real == expected && string.Equals(realBody, modelBody, StringComparison.Ordinal),
-                        "seed=" + seed + " op=" + op + " begin " + Show(key)
+                        "seed=" + seed + " op=" + op + " begin " + Show(key) + " fp=" + Show(fingerprint)
                         + ": expected " + expected + "/" + Show(modelBody)
                         + " got " + real + "/" + Show(realBody));
                 }

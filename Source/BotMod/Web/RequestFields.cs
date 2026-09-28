@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 
 namespace BotMod.Web
 {
@@ -71,6 +72,39 @@ namespace BotMod.Web
                 return FieldRead.Invalid;
             }
             return FieldRead.Ok;
+        }
+
+        /// <summary>Canonical text of the whole request body, used to bind an
+        /// idempotency key to the operation it was issued for. Keys are sorted
+        /// ordinal so field order in the JSON text does not change the result
+        /// (a byte-for-byte hash of the raw body would reject an otherwise
+        /// identical retry that re-serialized the fields in another order);
+        /// "requestId" itself is excluded because it is the ledger key, not
+        /// part of the operation. Values go through the same invariant
+        /// conversion as the readers above, so a JSON number and its digit text
+        /// fingerprint alike (they mean the same field value to every action).
+        /// A retry that changes any field yields a different fingerprint, which
+        /// the ledger reports as a key reuse instead of replaying the previous
+        /// response. Never throws; nested values render as their invariant
+        /// text, which no current action accepts, so a nested body is rejected
+        /// as INVALID_* by the action itself before it can matter.</summary>
+        public static string Fingerprint(IDictionary<string, object> body, string excludeKey)
+        {
+            if (body == null) return "";
+            var keys = new List<string>();
+            foreach (var kv in body)
+            {
+                if (kv.Key == excludeKey) continue;
+                keys.Add(kv.Key);
+            }
+            keys.Sort(StringComparer.Ordinal);
+            var sb = new StringBuilder();
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (i > 0) sb.Append('\n');
+                sb.Append(keys[i]).Append('=').Append(Raw(body, keys[i]) ?? "null");
+            }
+            return sb.ToString();
         }
 
         /// <summary>Field as invariant text, or null when the key is missing or

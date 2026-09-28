@@ -33,6 +33,12 @@ fails on drift between them.
   checkpoint that set `top3` without narrowing `ckpt`. The loop now uses
   `all_fitness` directly, and the resume guard checks the whole triple it
   depends on.
+- The `requestId` idempotency key is now bound to the request it was issued
+  for: a retry whose body differs under a live key is rejected
+  `409 REQUEST_ID_REUSED` instead of replaying the earlier response. Reusing a
+  key across requests answered the new one with the old response and silently
+  dropped the operation it asked for. The original claim is untouched, so a
+  retry of the request that owns the key still replays.
 - `tools/ga/evolve.py static-vs-neural` exits 1 when the promotion gate is not
   met instead of printing `GOAL MET: False` and exiting 0, and `tools/ga/sweep.py`
   exits 1 when no activation produced a curve. A CI step reading either exit code

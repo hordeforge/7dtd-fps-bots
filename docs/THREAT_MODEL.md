@@ -35,7 +35,7 @@ not reviewed here), the host OS, and the dev-side GA training tools
 
 - **A1 Dedicated server availability** - the game main thread is the chokepoint;
   the code records that touching Unity/world state off it segfaulted the server
-  (`Source/BotMod/Web/WebApi.cs:169-171`). Loss: whole server down.
+  (`Source/BotMod/Web/WebApi.cs:184-186`). Loss: whole server down.
 - **A2 Game-world fairness** - bots shoot players; admins can retarget them at a
   specific player (`spawnNear`, `vs player`). Loss: griefing at scale, PvP
   balance destroyed.
@@ -48,7 +48,7 @@ not reviewed here), the host OS, and the dev-side GA training tools
   mutation is the investigation record (`Source/BotMod/Web/WebApi.cs:104-131`).
   Loss: repudiation, hidden actions.
 - **A5 Player identity data** - online player names + entity ids served by
-  `GET /api/bot` (`BuildStatus`, `Source/BotMod/Web/WebApi.cs:432-519`).
+  `GET /api/bot` (`BuildStatus`, `Source/BotMod/Web/WebApi.cs:447-534`).
   Exposure limited to permission-0 holders.
 - **A6 Admin browser session** - the dashboard runs in the admin's browser
   against the stock webserver; server-controlled strings (player and bot names)
@@ -66,9 +66,9 @@ not reviewed here), the host OS, and the dev-side GA training tools
   `AllowSyntheticAuthBypass=true` (`Source/BotMod/Patches/BotPatches.cs:11-44`).
   Deployments running code mods have EAC disabled anyway (README, Install).
 - **TB2 Admin browser <-> stock webserver <-> BotMod REST API.**
-  `GET/POST /api/bot` (`Source/BotMod/Web/WebApi.cs:72,94`) is discovered by the
+  `GET/POST /api/bot` (`Source/BotMod/Web/WebApi.cs:75,97`) is discovered by the
   game's webserver as an `AbsRestApi` subclass; the mod declares permission
-  level 0 for all methods (`WebApi.cs:389`) and performs **no** authentication,
+  level 0 for all methods (`WebApi.cs:404`) and performs **no** authentication,
   authorization, or rate limiting of its own. Enforcement point is entirely in
   game-owned code/config.
 - **TB3 Operator filesystem <-> mod.** Config (`BotConfig.Load`,
@@ -164,7 +164,7 @@ player names echoed into responses (G3, now sanitized).
 
 **TB5 (web thread -> main thread)**
 - *DoS/crash:* wrong-thread world access historically segfaulted the dedi
-  (`WebApi.cs:169-171`); mitigated by mandatory `RunOnMain` marshaling and the
+  (`WebApi.cs:184-186`); mitigated by mandatory `RunOnMain` marshaling and the
   ambiguous-timeout rule preventing double execution
   (`WebApi.cs:353-371`, `MainThreadDispatch.cs:38-60`). A dispatch that ran
   after its caller gave up is now logged through the `Abandoned` sink
@@ -180,7 +180,7 @@ player names echoed into responses (G3, now sanitized).
 
 - **Hostile-but-authenticated admin (griefing at scale).** An authenticated
   permission-0 user can aim bots at a chosen player (`POST /api/bot`
-  `action=spawnNear`, `WebApi.cs:182-218`) and keep them there across respawns,
+  `action=spawnNear`, `WebApi.cs:197-233`) and keep them there across respawns,
   or flip `vs player on`. Bounded only by MaxBots <= 64. This is the tool's
   intended power; the mitigation is webserver credential hygiene (game-owned),
   not mod code.
@@ -202,7 +202,7 @@ player names echoed into responses (G3, now sanitized).
 
 | Control | Covers | Reference |
 |---|---|---|
-| Webserver authn + permission level 0 declaration | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:389` |
+| Webserver authn + permission level 0 declaration | all TB2 spoofing/EoP (sole gate, G1) | `Source/BotMod/Web/WebApi.cs:404` |
 | Deny-side matrix tests: web API method levels and console default level pinned to 0 | TB2 gate regression (widened declaration fails `make test`) | `tests/BotMod.Web.Tests/WebApiAuthzTests.cs` |
 | Bypass flag default-off + startup visibility | TB1 spoofing blast radius (G2) | `BotConfig.cs:17`, `ModApi.cs:34` |
 | Per-join bypass logging (id + peer IP) | TB1 attribution | `BotPatches.cs:27` |
