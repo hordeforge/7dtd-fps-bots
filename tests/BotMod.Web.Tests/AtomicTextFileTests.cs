@@ -14,6 +14,17 @@ static class AtomicTextFileTests
 {
     static int _failures;
 
+    // Run-scoped tag: the end-of-run cleanup must delete THIS process's
+    // directories and nothing else. Globbing a fixed "botmod-atomictest-*"
+    // pattern in the shared temp root let any other run of this suite (a
+    // second worktree or a local run beside CI, same machine) delete a live
+    // run's directory mid-test, which surfaced as writers failing with "could
+    // not find a part of the path" for a .tmp file that existed a moment
+    // earlier. The prefix is deliberately not "botmod-atomictest-*": a run of
+    // an older build sharing this temp root still globs that name, and it
+    // must not be able to reach this run's directories either.
+    static readonly string RunTag = "botmod-atomic-" + Guid.NewGuid().ToString("N") + "-";
+
     static void Check(string name, bool ok)
     {
         Console.WriteLine((ok ? "ok   " : "FAIL ") + name);
@@ -22,7 +33,7 @@ static class AtomicTextFileTests
 
     static string TempDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "botmod-atomictest-" + Guid.NewGuid().ToString("N"));
+        string dir = Path.Combine(Path.GetTempPath(), RunTag + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         return dir;
     }
@@ -206,7 +217,7 @@ static class AtomicTextFileTests
             foreach (string e in errors) Console.WriteLine("     " + e);
         }
 
-        foreach (string dir in Directory.GetDirectories(Path.GetTempPath(), "botmod-atomictest-*"))
+        foreach (string dir in Directory.GetDirectories(Path.GetTempPath(), RunTag + "*"))
             try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
 
         Console.WriteLine(_failures == 0 ? "all atomic text file tests passed" : _failures + " test(s) FAILED");
