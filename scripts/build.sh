@@ -30,6 +30,13 @@ fi
 OUT="$ROOT/dist/BotMod"
 SRC="$ROOT/Source/BotMod"
 
+# bun compiles the web panel; without it the C# build below would run to
+# completion and then fail on a `bunx: command not found` after the work.
+if ! command -v bun >/dev/null 2>&1; then
+  echo "ERROR: bun not found; the web panel compiles through bunx (https://bun.sh)" >&2
+  exit 1
+fi
+
 # Version drift guard: BotModVersion.Number is canonical. ModInfo.xml is what
 # the engine's mod listing shows and cannot reference the C# constant, so the
 # build fails when they disagree instead of shipping mismatched versions.

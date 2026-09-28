@@ -1,7 +1,7 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test package install uninstall backup clean lint-html lint-webui lint-shell lint-python lint-yaml check
+.PHONY: help build build-mcs test test-list ci package install uninstall backup restore verify-snapshot clean lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -10,8 +10,12 @@ Targets:
   make build        compile BotMod.dll + web bundle into dist/BotMod (needs game DLLs or dotnet SDK)
   make build-mcs    same, forcing the mono mcs backend
   make test         run tests/BotMod.Web.Tests via scripts/test-idempotency.sh (needs mcs + mono; CI runs it after installing mono)
+  make test SUITE=x run one suite by name (make test-list prints the names)
+  make test-list    print the C# suite names SUITE= accepts
+  make ci           everything CI runs: make check then make test
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
   make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness
+  make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff)
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
   make lint-yaml    yamllint over the CI workflows (config: .yamllint.yml, --strict)
@@ -38,7 +42,10 @@ build:
 build-mcs:
 	SEVENDTD_BUILD_BACKEND=mcs bash "$(SCRIPTS)/build.sh"
 test:
-	bash "$(SCRIPTS)/test-idempotency.sh"
+	bash "$(SCRIPTS)/test-idempotency.sh" $(SUITE)
+test-list:
+	bash "$(SCRIPTS)/test-idempotency.sh" --list
+ci: check test
 package:
 	bash "$(SCRIPTS)/package.sh"
 lint-html:
@@ -52,7 +59,17 @@ lint-python:
 lint-yaml:
 	yamllint -c "$(ROOT)/.yamllint.yml" --strict "$(ROOT)/.github/workflows"
 
-check: lint-shell lint-yaml lint-html lint-webui lint-python
+preflight:
+	@missing=""; \
+	for tool in shellcheck yamllint java bun ruff; do \
+	  command -v "$$tool" > /dev/null || missing="$$missing $$tool"; \
+	done; \
+	if [ -n "$$missing" ]; then \
+	  echo "make check needs these on PATH:$$missing" >&2; \
+	  echo "Pinned versions for the fetched ones live in scripts/tool-versions.sh" >&2; \
+	  exit 1; \
+	fi
+check: preflight lint-shell lint-yaml lint-html lint-webui lint-python
 install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:

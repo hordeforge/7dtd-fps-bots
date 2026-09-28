@@ -25,6 +25,13 @@ fails on drift between them.
 
 ### Added
 
+- `make test SUITE=<name>` (names from `make test-list`, or
+  `scripts/test-idempotency.sh <name> ...`) runs a single C# suite instead of
+  all of them, and `scripts/test-idempotency.sh` now names the missing tool
+  when mcs or mono is absent. The script fails if its suite list drifts from
+  the `run_suite` calls.
+- `make ci` runs the full local gate (`make check` plus `make test`), and
+  `make preflight` names the tools `make check` needs.
 - `make lint-yaml` runs `yamllint --strict` over `.github/workflows` and joins
   `make check`, so the CI definitions are held to the same blocking bar as the
   shell, Python, TypeScript and HTML sources. Config: `.yamllint.yml`; the

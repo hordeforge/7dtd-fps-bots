@@ -24,9 +24,12 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 ## Commands
 
 - `make check` is what CI runs: shellcheck, yamllint, vnu HTML lint, tsc + oxlint +
-  committed-bundle freshness, ruff.
+  committed-bundle freshness, ruff. `make preflight` names the tools it needs;
+  `make ci` is `make check` plus `make test`, the full local gate.
 - `make test` is not part of `make check`. CI installs mono and runs
-  `bash scripts/test-idempotency.sh` separately. `make lint-yaml` is
+  `bash scripts/test-idempotency.sh` separately. `make test SUITE=<name>` (names
+  from `make test-list`) runs one suite, which is the edit-test loop; the script
+  fails if its suite list drifts from the `run_suite` calls. `make lint-yaml` is
   `yamllint --strict` over `.github/workflows` (config: `.yamllint.yml`); CI
   installs the pin from `scripts/tool-versions.sh`.
 - C# is `net48` at `LangVersion 7.2` (mcs `-langversion:7.2 -warnaserror`).

@@ -223,10 +223,18 @@ reported as a WARN line at load and ignored.
 
 ```bash
 make test          # C# unit tests (tests/BotMod.Web.Tests, mcs + mono)
+make test-list     # names of the individual C# suites
+make test SUITE=lcg # one suite (SUITE=lcg bottext for several)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod
 make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip
 make check         # what CI runs (shellcheck, yamllint, vnu HTML lint, tsc/oxlint/bundle freshness, ruff)
+make ci            # the full local gate: make check then make test
 ```
+
+`make test` with no `SUITE=` runs every C# suite (~1 minute, longer with a game
+install); a single suite is a fraction of a second, so name it while iterating.
+Suites that need the game DLLs (`neuralfuzz` and later in `make test-list`)
+self-skip without a game install and say so.
 
 `make package` output is byte-stable: entry order is sorted, every archive
 timestamp is `SOURCE_DATE_EPOCH` (default: the HEAD commit time), and uid/gid
@@ -237,9 +245,11 @@ MANIFEST.sha256` inside the extracted directory to verify it offline.
 
 Released versions and upgrade notes are documented in `CHANGELOG.md`.
 
-CI runs `make check` plus `scripts/test-idempotency.sh` (the workflow installs
+CI runs `make check` plus `scripts/test-idempotency.sh`; `make ci` is the same
+pair locally. The workflow installs
 mono for it, and the pinned ruff and yamllint for `make lint-python` and
-`make lint-yaml` via `uv tool install`); locally
+`make lint-yaml` via `uv tool install`; `make preflight` names the tools
+`make check` needs and where their pins live. Locally
 `make test` needs mono, and
 `make build` needs the game's Managed DLLs (`SEVENDTD_DS_DIR`/`SEVENDTD_GAME_DIR`
 override the Steam paths scripts/build.sh probes). After editing
