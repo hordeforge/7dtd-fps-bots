@@ -42,8 +42,17 @@ namespace BotMod.Web
         /// dedup is silently lost for those keys. Null in headless unit runs;
         /// WebApi wires it to the server log so sustained overflow (runaway
         /// client generating unique keys, or abuse) is visible to operators.
-        /// Receives the number of entries evicted in one prune pass.</summary>
-        internal static Action<int> CapacityEvicted = null;
+        /// Receives the number of entries evicted in one prune pass. Wired on a
+        /// web thread and read on any thread that calls TryBegin, so the field
+        /// is volatile: a plain write can leave other threads on a stale (null)
+        /// sink and the evictions go unreported.</summary>
+        internal static Action<int> CapacityEvicted
+        {
+            get { return System.Threading.Volatile.Read(ref _capacityEvicted); }
+            set { System.Threading.Volatile.Write(ref _capacityEvicted, value); }
+        }
+
+        static Action<int> _capacityEvicted;
 
         /// <summary>Monotonic elapsed-time source for retention/pruning
         /// decisions. Retention is a pure duration, so it must not ride the

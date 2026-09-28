@@ -13,7 +13,16 @@ namespace BotMod
     {
         public const string HarmonyId = "com.7dtd.botmod";
         static Harmony _harmony;
-        public static BotConfig Config { get; private set; } = new BotConfig();
+        static volatile BotConfig _config = new BotConfig();
+        /// <summary>Live config instance. Volatile because it is not a
+        /// main-thread-only value: `bot reload` swaps the whole instance on the
+        /// main thread, while the auth patch (Patch_SteamAuthServer_SyntheticBypass)
+        /// reads AllowSyntheticAuthBypass from the connection thread and web
+        /// handlers reach the fields from their own dispatch. Without the
+        /// barrier neither side is guaranteed to see the other's instance, so a
+        /// reload could leave the auth path reading a pre-reload config (or a
+        /// half-published one) indefinitely.</summary>
+        public static BotConfig Config { get { return _config; } private set { _config = value; } }
         public static string ModPath { get; private set; } = "";
         public static bool Active { get; private set; }
 

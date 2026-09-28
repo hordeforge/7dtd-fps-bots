@@ -7,6 +7,7 @@
 //   bash scripts/test-idempotency.sh
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using BotMod.Config;
 
@@ -26,6 +27,17 @@ static class AtomicTextFileTests
     // must not be able to reach this run's directories either.
     static readonly string RunTag = "botmod-atomic-" + Guid.NewGuid().ToString("N") + "-";
 
+    // Every directory this process created is recorded in _tempDirs, so cleanup
+    // removes exactly those and nothing else. The temp path is shared with any
+    // other run of this suite (a parallel CI job, a second developer on the
+    // same box), and the writers hammer the directory for seconds at a time: a
+    // sweep over a common prefix deletes a live run's directory out from under
+    // its writers, which surfaces as FileNotFoundException on the staging .tmp
+    // and as a missing primary - a failure that looks like a torn-write bug in
+    // AtomicTextFile. The run tag also keeps another process sweeping the old
+    // shared prefix from reaching these directories while their writers are
+    // mid-flight.
+
     static void Check(string name, bool ok)
     {
         Console.WriteLine((ok ? "ok   " : "FAIL ") + name);
@@ -41,7 +53,12 @@ static class AtomicTextFileTests
     // final primary). Two checkouts of this repo on one machine hit that.
     static string TempDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), RunTag + Guid.NewGuid().ToString("N"));
+        // Private namespace: the run tag keeps a concurrent run of this suite
+        // out of each other's cleanup and keeps any other process sweeping the
+        // old shared prefix from deleting these directories while their writers
+        // are mid-flight; the per-process id separates the two namespaces.
+        string dir = Path.Combine(Path.GetTempPath(),
+            RunTag + Process.GetCurrentProcess().Id + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         lock (_tempDirs) _tempDirs.Add(dir);
         return dir;
@@ -281,6 +298,8 @@ static class AtomicTextFileTests
             foreach (string e in errors) Console.WriteLine("     " + e);
         }
 
+        // Only this run's directories, and a concurrent remover is not a
+        // failure: an already-gone directory is the desired end state.
         Cleanup();
 
         Console.WriteLine(_failures == 0 ? "all atomic text file tests passed" : _failures + " test(s) FAILED");

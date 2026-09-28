@@ -195,6 +195,58 @@ static class MainThreadDispatchTests
             finally { MainThreadDispatch.Abandoned = null; }
         }
 
+        // 10. Timeout/report boundary under repetition. Completion and
+        //    abandonment settle under one gate, so a work that completes inside
+        //    the deadline race returns its result and reports nothing, and a
+        //    genuinely late work reports exactly once after the caller's
+        //    TimeoutException. The work body is jittered around the wait window
+        //    so both orderings occur many times per run.
+        {
+            int reports = 0, timeouts = 0, completions = 0;
+            bool falseReport = false, missingReport = false, lostResult = false;
+            MainThreadDispatch.Abandoned = (op, error) => Interlocked.Increment(ref reports);
+            try
+            {
+                var jitter = new Random(1234);
+                for (int i = 0; i < 400; i++)
+                {
+                    // Let the previous iteration's late task report first, so the
+                    // count around this dispatch is only about this dispatch.
+                    Thread.Sleep(2);
+                    int before = Volatile.Read(ref reports);
+                    int spin = jitter.Next(0, 6);
+                    bool timedOut = false;
+                    int got = -1;
+                    try
+                    {
+                        got = MainThreadDispatch.Execute(() => spin,
+                            task => { var t = new Thread(() => { if (spin > 0) Thread.Sleep(spin); task(); }); t.Start(); },
+                            TimeSpan.FromMilliseconds(2), "boundary");
+                        completions++;
+                    }
+                    catch (TimeoutException) { timedOut = true; timeouts++; }
+                    if (timedOut)
+                    {
+                        // The late task may take a moment; the report must arrive.
+                        SpinWait.SpinUntil(() => Volatile.Read(ref reports) > before, 200);
+                        if (Volatile.Read(ref reports) != before + 1) { missingReport = true; break; }
+                    }
+                    else
+                    {
+                        if (Volatile.Read(ref reports) != before) { falseReport = true; break; }
+                        // A work that finished after the wait expired still owes
+                        // the caller its result, never a default(T).
+                        if (got != spin) { lostResult = true; break; }
+                    }
+                }
+                Check("no report for a dispatch that returned its result", !falseReport);
+                Check("a dispatch that returns after the race keeps its result", !lostResult);
+                Check("every timeout reports its late work exactly once (" + timeouts + " timed out, " + completions + " in window)",
+                    timeouts > 0 && !missingReport);
+            }
+            finally { MainThreadDispatch.Abandoned = null; }
+        }
+
         Console.WriteLine(_failures == 0 ? "all main-thread dispatch tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
     }

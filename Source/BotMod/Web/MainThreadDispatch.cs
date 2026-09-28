@@ -21,32 +21,46 @@ namespace BotMod.Web
     /// </summary>
     internal static class MainThreadDispatch
     {
+        static Action<string, Exception> _abandoned;
+
         /// <summary>Host-side sink for outcomes of dispatches whose caller already
         /// timed out. Receives (op, error); error is null when the late work
         /// completed successfully. Null in headless unit runs; WebApi wires it to
         /// the server log. Exceptions thrown by the sink are swallowed: the
-        /// abandoned task must never break the main-thread loop that runs it.</summary>
-        internal static Action<string, Exception> Abandoned = null;
+        /// abandoned task must never break the main-thread loop that runs it.
+        /// Written by the web thread that constructs the REST API and read by the
+        /// main thread that runs the late work, so the field is volatile.</summary>
+        internal static Action<string, Exception> Abandoned
+        {
+            get { return System.Threading.Volatile.Read(ref _abandoned); }
+            set { System.Threading.Volatile.Write(ref _abandoned, value); }
+        }
 
         /// <summary>Hand <paramref name="work"/> to the main thread via
         /// <paramref name="enqueue"/> and block for at most
         /// <paramref name="timeout"/>, then surface the work's result or its
-        /// exception. Throws TimeoutException when the work does not complete
-        /// in time (<paramref name="op"/> names it in the message); the
-        /// enqueued work still runs later and reports through
-        /// <see cref="Abandoned"/>.</summary>
+        /// exception. Throws TimeoutException when the work has not completed by
+        /// the time the wait expires (<paramref name="op"/> names it in the
+        /// message); a work that completes in the same race returns its result
+        /// instead of timing out. A timed-out task still runs later and reports
+        /// through <see cref="Abandoned"/>.</summary>
         public static T Execute<T>(Func<T> work, Action<Action> enqueue, TimeSpan timeout, string op)
         {
             T result = default(T);
             Exception error = null;
             var done = new System.Threading.ManualResetEventSlim(false);
-            // Volatile flag: set by the caller only after Wait returned false
-            // (timeout won). A worker that completed before the timeout reads it
-            // as false; one completing after reads true. The window where the
-            // worker finished its body but not yet its finally while the caller
-            // times out still reports correctly: the caller cannot have seen a
-            // result at that point, so from its side the outcome was lost.
-            bool abandoned = false;
+            // Completion and abandonment are settled under one gate, so exactly
+            // one of them happens and neither can be observed before the other:
+            // the task sets finished under the gate once its body (and therefore
+            // result/error) is written, the caller sets abandoned under the same
+            // gate when its wait expires. A bare flag + volatile read could not
+            // order them - Wait(timeout) may return false even for a task that
+            // signalled microseconds earlier - which lost the report whenever
+            // the work finished in that window: the caller had already thrown
+            // its 500, the flag still read false, and an action that took effect
+            // (or failed) after that 500 was never logged.
+            var gate = new object();
+            bool finished = false, abandoned = false;
             try
             {
                 enqueue(() =>
@@ -55,18 +69,33 @@ namespace BotMod.Web
                     catch (Exception ex) { error = ex; }
                     finally
                     {
-                        if (System.Threading.Volatile.Read(ref abandoned) && Abandoned != null)
-                            try { Abandoned(op, error); } catch (Exception) { }
+                        bool callerGone;
+                        lock (gate)
+                        {
+                            finished = true;
+                            callerGone = abandoned;
+                        }
                         // A timed-out caller has already disposed this event while
                         // this queued task still holds it; Set must not throw into
                         // the main-thread loop on that abandoned-dispatch path.
                         try { done.Set(); } catch (Exception) { }
+                        if (callerGone && Abandoned != null)
+                            try { Abandoned(op, error); } catch (Exception) { }
                     }
                 });
                 if (!done.Wait(timeout))
                 {
-                    System.Threading.Volatile.Write(ref abandoned, true);
-                    throw new TimeoutException("main-thread dispatch timeout after " + timeout.TotalSeconds + "s: " + op);
+                    bool stillRunning;
+                    lock (gate)
+                    {
+                        // The work finished inside the deadline race: its result
+                        // (or its exception) is already there, so hand it back
+                        // instead of reporting a timeout for an action that ran.
+                        stillRunning = !finished;
+                        if (stillRunning) abandoned = true;
+                    }
+                    if (stillRunning)
+                        throw new TimeoutException("main-thread dispatch timeout after " + timeout.TotalSeconds + "s: " + op);
                 }
             }
             finally { done.Dispose(); }
