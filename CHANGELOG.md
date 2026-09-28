@@ -92,6 +92,10 @@ of them removes a config key or a console command.
   `backups/`. `make verify-snapshot` checks the `MANIFEST` digests and writes
   nothing; `make restore` verifies first, then writes. RPO/RTO per failure
   mode is in `docs/recovery.md`.
+- `bot players` lists the online players as `name#id`, the identifiers
+  `bot player` matches on. It replaces the roster the failed-lookup message
+  used to print: a mistyped name now discloses nothing about who else is
+  connected, and asking for the roster is a separate, deliberate command.
 - `make test SUITE=<name>` (names from `make test-list`, or
   `scripts/test-idempotency.sh <name> ...`) runs a single C# suite instead of
   all of them, and `scripts/test-idempotency.sh` now names the missing tool

@@ -145,8 +145,10 @@ Clanker holds no player records of its own. The only personal data it touches is
 what the game already holds for connected players, and only on an admin surface:
 
 - **Read**: online player display name + entity id, read live from the world
-  for the dashboard's spawn-near target list, for `bot player <name|id>`, and
-  for the kill feed. Both surfaces are permission level 0.
+  for the dashboard's spawn-near target list, for `bot player <name|id>`, for
+  `bot players`, and for the kill feed. All of them are permission level 0 and
+  operator-run. A `bot player` miss names no one: it points at `bot players`
+  (or the vanilla `lp`) instead of printing the roster of everyone connected.
 - **Not stored**: nothing player-derived is written to disk.
   `config/botmod.json` holds bot names, team assignments and tuning only.
 - **Not transferred**: the panel is served same-origin, keeps nothing in
@@ -168,6 +170,7 @@ what the game already holds for connected players, and only on an admin surface:
 bot help
 bot status            # config + alive (class/weapon/diff/vision/attack/BotVs)
 bot list              # id, weapon, state, pos, target, hp, burst
+bot players           # online players (name#id), the ids `bot player` accepts
 bot spawn [n] [x z] [weapon] | bot player <name|id> [n] [weapon]  # e.g. bot spawn 2 gunShotgunT1DoubleBarrel
 bot player Kira              # 1 bot near Kira (out-of-sight preferred, ~22m ideal)
 bot player Kira 3 gunMGT1AK47 # 3 AK bots near Kira

@@ -19,6 +19,7 @@ namespace BotMod.Commands
             "  bot player <nameOrId> [count] [weapon] - spawn near that player ('me' = commanding player)\n" +
             "  bot remove all | bot remove <id> - despawn all / one bot\n" +
             "  bot list                         - alive bots (weapon/state/target/hp/burst)\n" +
+            "  bot players                      - online players (name#id), the ids `bot player` accepts\n" +
             "  bot status                       - config summary + alive count\n" +
             "Config (persisted to Config/botmod.json):\n" +
             "  bot config                       - effective config (post-clamp) + the file it was read from\n" +
@@ -44,7 +45,7 @@ namespace BotMod.Commands
 
         static readonly string[] Subcommands =
         {
-            "help", "status", "config", "list", "spawn", "player", "remove", "count", "weapon",
+            "help", "status", "config", "list", "players", "spawn", "player", "remove", "count", "weapon",
             "skill", "neural", "vs", "team", "teams", "reload", "enable", "disable"
         };
 
@@ -77,6 +78,7 @@ namespace BotMod.Commands
                         SdtdConsole.Instance.Output("Effective: " + ModApi.Config.EffectiveSummary());
                         break;
                     case "list": case "ls": DoList(); break;
+                    case "players": case "who": DoPlayers(); break;
                     case "spawn": case "add": DoSpawn(_params); break;
                     case "remove": case "rm": case "kick": case "clear": DoRemove(_params); break;
                     case "count": case "set": DoCount(_params); break;
@@ -107,6 +109,20 @@ namespace BotMod.Commands
             var mgr = BotManager.Instance; var world = GameManager.Instance?.World;
             if (mgr.BotCount == 0) { SdtdConsole.Instance.Output("No bots alive."); return; }
             foreach (var b in mgr.Bots) SdtdConsole.Instance.Output(b.Status(world));
+        }
+        /// <summary>Online players, the identifiers `bot player` accepts. This
+        /// listing is the operator's own action: the names are the data, not a
+        /// side effect of another command, so nothing else in the command set
+        /// prints them (a miss in `bot player` points here instead of dumping
+        /// the roster of everyone who happens to be connected).</summary>
+        void DoPlayers()
+        {
+            var world = GameManager.Instance?.World;
+            if (world == null) { SdtdConsole.Instance.Output("No world."); return; }
+            var roster = OnlinePlayerList(world);
+            SdtdConsole.Instance.Output(roster.Count == 0
+                ? "No players online."
+                : "Online (" + roster.Count + "): " + string.Join(", ", roster.ToArray()));
         }
         void DoSpawn(List<string> p)
         {
@@ -176,7 +192,7 @@ namespace BotMod.Commands
             // instead of the sender documented in `bot help`.
             EntityPlayer target = ident == "me" || ident == "self" ? FindPlayerBySender(world, sender) : null;
             if (target == null) target = BotManager.FindPlayerByNameOrId(world, ident);
-            if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game).\n  Online: " + ListPlayerNames(world)); return; }
+            if (target == null) { SdtdConsole.Instance.Output($"Player not found: {ident}. Try: bot player <name>, bot player 171, or bot player me (when you type it in-game), or run 'bot players' for the online list."); return; }
             int spawned = BotManager.Instance.SpawnNearPlayer(target, count, weapon);
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {LogSanitizer.Clean(target.EntityName ?? target.PlayerDisplayName ?? ident)} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
         }
@@ -196,16 +212,18 @@ namespace BotMod.Commands
             catch (Exception ex) { ModApi.Warn("`bot player me` sender lookup failed, falling back to a name match: " + ex); }
             return null;
         }
-        static string ListPlayerNames(World world)
+        /// <summary>Display name and entity id of every connected player, in
+        /// world order, each name through <see cref="LogSanitizer"/>. The
+        /// entity id is what `bot player` actually matches on, so the listing
+        /// is also the way an operator finds the id for a player whose name is
+        /// not what they typed.</summary>
+        static List<string> OnlinePlayerList(World world)
         {
-            try {
-                var names = new List<string>();
-                if (world.Players != null && world.Players.list != null) foreach (var p in world.Players.list) if (p != null) names.Add($"{LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
-                return names.Count > 0 ? string.Join(", ", names.ToArray()) : "(none online)";
-            }
-            // The "(unknown)" the console prints is not diagnosable on its own;
-            // say what failed so the empty-looking roster is traceable.
-            catch (Exception ex) { ModApi.Warn("player list for the 'player not found' hint failed: " + ex); return "(unknown)"; }
+            var names = new List<string>();
+            if (world.Players != null && world.Players.list != null)
+                foreach (var p in world.Players.list)
+                    if (p != null) names.Add($"{LogSanitizer.Clean(p.EntityName ?? p.PlayerDisplayName ?? "?")}#{p.entityId}");
+            return names;
         }
         void DoWeapon(List<string> p)
         {
