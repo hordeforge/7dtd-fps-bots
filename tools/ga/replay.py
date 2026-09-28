@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 
 import ga
+import theme
 
 INPUTS = 14
 WEAPON_DAMAGE = [16, 14, 16, 42, 9, 9]
@@ -385,35 +386,34 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
     page = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>@TITLE@</title>
 <style>
- body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e2e8f0;margin:0}
- .wrap{max-width:980px;margin:20px auto;padding:0 16px}
- h1{font-size:20px}
- .sum{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0}
- .sum div{background:#1e293b;padding:8px 14px;border-radius:8px;font-size:13px}
- .sum b{color:#38bdf8}
- canvas{background:#0f172a;border:1px solid #334155;border-radius:8px;width:100%}
- .ctl{display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap}
- button{background:#0369a1;color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
- button:hover{background:#075985}
- input[type=range]{flex:1;min-width:180px}
- .legend{display:flex;gap:16px;font-size:12px;margin:8px 0}
+@THEME@
+ h1{font-size:19px;line-height:1.3;font-weight:600;margin:0}
+ .sum{display:flex;gap:22px;flex-wrap:wrap;margin:14px 0 0;font-family:var(--mono);font-size:12px}
+ .sum span{color:var(--muted)}
+ .sum b{color:var(--accent-text);font-weight:600}
+ canvas{background:#14110e;border:1px solid var(--line);border-radius:3px;width:100%;display:block;margin-top:16px}
+ .ctl{display:flex;gap:10px;align-items:center;margin:12px 0 0;flex-wrap:wrap}
+ button{background:transparent;color:var(--accent-text);border:1px solid var(--line);border-radius:3px;padding:7px 14px;cursor:pointer;font:inherit;font-size:13px;min-height:32px}
+ button:hover{border-color:var(--accent)}
+ input[type=range]{flex:1;min-width:180px;accent-color:var(--accent)}
+ .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:12px 0 0;color:var(--muted)}
  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
- #log{background:#111827;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:12px;max-height:80px;overflow:auto;margin-top:8px}
+ #log{background:#14110e;padding:8px 12px;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:12px;color:var(--muted);max-height:80px;overflow:auto;margin-top:10px}
 </style></head><body><div class="wrap">
 <h1>@TITLE@</h1>
 <div class="sum">
- <div>Kills <b>@KILLS@</b></div>
- <div>Deaths <b>@DEATHS@</b></div>
- <div>Shots <b>@SHOTS@</b></div>
- <div>Hits <b>@HITS@</b></div>
- <div>Ticks <b>@TICKS@</b></div>
+ <div><span>kills</span> <b>@KILLS@</b></div>
+ <div><span>deaths</span> <b>@DEATHS@</b></div>
+ <div><span>shots</span> <b>@SHOTS@</b></div>
+ <div><span>hits</span> <b>@HITS@</b></div>
+ <div><span>ticks</span> <b>@TICKS@</b></div>
 </div>
 <div class="legend">
- <span><span class="dot" style="background:#f87171" aria-hidden="true"></span>Bots (tag=weapon)</span>
+ <span><span class="dot" style="background:#e2643f" aria-hidden="true"></span>Bots (tag = weapon)</span>
  <span><span class="dot" style="background:#34d399" aria-hidden="true"></span>Zombies</span>
  <span><span class="dot" style="background:#fde047" aria-hidden="true"></span>Shots</span>
- <span style="color:#94a3b8">Weapon tags: Pistol P · Shotgun S · AK AK · Sniper Sn · AutoShotgun Au · SMG SM</span>
- <span style="color:#94a3b8">Walls block LOS (aim around them)</span>
+ <span>Weapon tags: Pistol P &middot; Shotgun S &middot; AK AK &middot; Sniper Sn &middot; AutoShotgun Au &middot; SMG SM</span>
+ <span>Walls block LOS (aim around them)</span>
 </div>
 <div class="ctl">
  <button onclick="play()">&#9654; Play</button>
@@ -437,8 +437,8 @@ scrub.max = Math.max(0, F.length-1); scrub.value = 0;
 let fi = 0, playing = true;
 function draw(fr){
   ctx.clearRect(0,0,c.width,c.height);
-  ctx.strokeStyle='#334155'; ctx.lineWidth=2; ctx.strokeRect(2,2,c.width-4,c.height-4);
-  ctx.strokeStyle='#64748b'; ctx.lineWidth=7; ctx.lineCap='round';
+  ctx.strokeStyle='#4a433c'; ctx.lineWidth=2; ctx.strokeRect(2,2,c.width-4,c.height-4);
+  ctx.strokeStyle='#8c8378'; ctx.lineWidth=7; ctx.lineCap='round';
   for(const w of WALLS){
     ctx.beginPath();
     ctx.moveTo(w[0]*S,(80-w[1])*S); ctx.lineTo(w[2]*S,(80-w[3])*S);
@@ -449,14 +449,14 @@ function draw(fr){
   for(const b of fr.bots){
     if(!b.alive){ continue; }
     if(b.fire){ ctx.strokeStyle='rgba(253,224,71,0.85)'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(b.x*S,(80-b.y)*S); ctx.lineTo(b.tx*S,(80-b.ty)*S); ctx.stroke(); }
-    else if(b.tx||b.ty){ ctx.strokeStyle='rgba(56,189,248,0.22)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(b.x*S,(80-b.y)*S); ctx.lineTo(b.tx*S,(80-b.ty)*S); ctx.stroke(); }
+    else if(b.tx||b.ty){ ctx.strokeStyle='rgba(242,149,74,0.25)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(b.x*S,(80-b.y)*S); ctx.lineTo(b.tx*S,(80-b.ty)*S); ctx.stroke(); }
     // weapon ring: unique color per loadout, tag letter inside
     const wc=WCOL[(b.w||0)%6];
     ctx.fillStyle=wc; ctx.beginPath(); ctx.arc(b.x*S,(80-b.y)*S,8,0,7); ctx.fill();
-    ctx.strokeStyle='#0f172a'; ctx.lineWidth=2; ctx.stroke();
-    ctx.fillStyle='#0f172a'; ctx.font='9px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.strokeStyle='#14110e'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#14110e'; ctx.font='9px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(WTAG[(b.w||0)%6], b.x*S, (80-b.y)*S);
-    ctx.fillStyle='rgba(15,23,42,0.85)'; ctx.fillRect(b.x*S-11,(80-b.y)*S-18,22,5);
+    ctx.fillStyle='rgba(20,17,14,0.85)'; ctx.fillRect(b.x*S-11,(80-b.y)*S-18,22,5);
     ctx.fillStyle= b.hp>50?'#22c55e': (b.hp>25?'#eab308':'#ef4444');
     ctx.fillRect(b.x*S-11,(80-b.y)*S-18,22*Math.max(0,b.hp/100),5);
   }
@@ -468,7 +468,7 @@ function draw(fr){
   frameLbl.textContent = fi+'/'+(F.length-1);
   scrub.value = fi;
 }
-function step(){ if(playing && fi < F.length-1){ fi++; draw(F[fi]); const e=F[fi].events.join(' &middot; '); if(e){ document.getElementById('log').textContent='t'+F[fi].t+': '+e; } } }
+function step(){ if(playing && fi < F.length-1){ fi++; draw(F[fi]); const e=F[fi].events.join(' · '); if(e){ document.getElementById('log').textContent='t'+F[fi].t+': '+e; } } }
 function play(){ playing=true; }
 function pause(){ playing=false; }
 function reset(){ fi=0; draw(F[0]); document.getElementById('log').textContent=''; }
@@ -483,6 +483,7 @@ draw(F[0]);
     # report.py and dashboard.py escape, so it is escaped here too.
     page = (page
             .replace("@TITLE@", html.escape(str(title), quote=True))
+            .replace("@THEME@", theme.DARK_STYLE)
             .replace("@KILLS@", str(summary["kills"]))
             .replace("@DEATHS@", str(summary["deaths"]))
             .replace("@SHOTS@", str(summary["shots"]))

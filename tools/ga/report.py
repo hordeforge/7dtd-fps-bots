@@ -22,6 +22,7 @@ import math
 import sys
 from pathlib import Path
 
+import theme
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -32,10 +33,13 @@ except ImportError:
     HAS_MPL = False
     np = None  # type: ignore[assignment]
 
-# One accent hue (sky) for the whole GA tooling family; stops per role:
-# CAB sky-700 main series, ACCENT sky-600 secondary, best line stays near-black.
-CAB = "#0369a1"
-ACCENT = "#0284c7"
+# One rust signal hue for the whole GA tooling family (theme.py owns the
+# tokens; the charts and the HTML page take the same values so a chart and
+# the page it sits on cannot drift apart). CAB is the secondary series, ACCENT
+# the one a reader should look at first, best stays the darkest ink.
+CAB = theme.SERIES_DIM
+ACCENT = theme.ACCENT
+BEST_LINE = theme.SERIES_BEST
 
 # Charts are flat-color line/bar/heatmap figures: an adaptive-palette PNG runs
 # ~3-4x smaller than matplotlib's default RGBA at identical visual quality, and
@@ -78,7 +82,7 @@ def img_tag(data: bytes, alt: str) -> str:
     w, h = png_dimensions(data)
     return (f"<img src='data:image/png;base64,{b64}' alt='{alt}' width='{w}' height='{h}'"
             f" loading='lazy' decoding='async'"
-            f" style='max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:10px'>")
+            f" style='max-width:100%;height:auto;border:1px solid {theme.PAPER_LINE};border-radius:3px'>")
 
 
 def load_csv(path: Path):
@@ -120,7 +124,7 @@ def fitness_band(gens, best, mean, median, q25, q75) -> bytes:
     ax.fill_between(gens, q25, q75, color=CAB, alpha=0.14, label="IQR (q25–q75)")
     ax.plot(gens, mean, color=CAB, lw=1.1, alpha=0.9, label="mean")
     ax.plot(gens, median, color=ACCENT, lw=1.4, ls="--", label="median")
-    ax.plot(gens, best, color="#111827", lw=1.7, label="best")
+    ax.plot(gens, best, color=BEST_LINE, lw=1.7, label="best")
     ax.set_xlabel("generation"); ax.set_ylabel("fitness")
     ax.set_title("Evolution: fitness over generations")
     ax.legend(frameon=False, ncols=4, fontsize=8)
@@ -234,29 +238,25 @@ def build(runs: list[Path], out: Path):
         # shared run directory), so they must be HTML-escaped before they land
         # in the report: a name like "<img src=x onerror=...>" would otherwise
         # execute in the browser of whoever opens the generated file.
-        sec = [f"<h2 style='margin:18px 0 4px'>{html.escape(run_dir.name)}</h2>",
-               f"<p style='color:#334155;font-size:13px'>{headline}</p>",
-               f"<p style='color:#64748b;font-size:11px'>source: <code>{html.escape(str(csv_path))}</code> · {len(gens)} rows</p>"]
-        if band: sec.append(f"<div style='margin:10px 0'>{img_tag(band, 'fitness band over generations')}</div>")
-        if wh:   sec.append(f"<div style='margin:10px 0'>{img_tag(wh, 'weight histogram')}</div>")
-        if topo: sec.append(f"<div style='margin:10px 0'>{img_tag(topo, 'best network topology')}</div>")
+        sec = [f"<h2>{html.escape(run_dir.name)}</h2>",
+               f"<p class='meta'>{headline}</p>",
+               f"<p class='foot' style='margin:4px 0 0'>source: <code>{html.escape(str(csv_path))}</code> &middot; {len(gens)} rows</p>"]
+        if band: sec.append(f"<div style='margin:14px 0'>{img_tag(band, 'fitness band over generations')}</div>")
+        if wh:   sec.append(f"<div style='margin:14px 0'>{img_tag(wh, 'weight histogram')}</div>")
+        if topo: sec.append(f"<div style='margin:14px 0'>{img_tag(topo, 'best network topology')}</div>")
         if not HAS_MPL:
-            sec.append("<p style='color:#b45309'>matplotlib not installed, showing headline only. <code>uv pip install matplotlib</code></p>")
+            sec.append(f"<p class='foot' style='color:{theme.ACCENT_TEXT}'>matplotlib not installed, headline only. <code>uv pip install matplotlib</code></p>")
         parts.append("\n".join(sec))
 
     page = f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bot Evolution Report</title>
-<style>
- body{{font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 980px; margin: 28px auto; padding: 0 18px; color:#0f172a}}
- h1{{font-size:22px; margin: 6px 0}}
- h2{{font-size:15px; color:#0f172a}}
- code{{background:#f1f5f9; padding:1px 5px; border-radius:6px; font-size:12px}}
- .muted{{color:#64748b; font-size:12px}}
-</style>
-<h1>Clanker: Evolution Report</h1>
-<p class="muted">Generated {datetime.datetime.now().astimezone().isoformat(timespec='seconds')} · docs/research 00..06 · evolved/runs → best.json</p>
-{"<hr style='border:none;border-top:1px solid #e2e8f0;margin:14px 0'>".join(parts) if parts else "<p>No runs.</p>"}
-<footer class="muted" style="margin-top:22px">Charts score the headless combat sim (tools/ga/harness.py).</footer>
+<title>Clanker: evolution report</title>
+<style>{theme.LIGHT_STYLE}</style>
+<body><div class="wrap">
+<header class="head"><h1>Clanker: evolution report</h1>
+<p class="lede">Generated {datetime.datetime.now().astimezone().isoformat(timespec='seconds')} &middot; docs/research 00..06 &middot; evolved/runs &rarr; best.json</p></header>
+{"<section class='sec'>".join(parts) if parts else "<p>No runs.</p>"}
+<footer class="foot">Charts score the headless combat sim (tools/ga/harness.py). This report holds the runs it was built from; the cross-run champion lives in the evolution dashboard.</footer>
+</div></body></html>
 """
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")

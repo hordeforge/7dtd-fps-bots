@@ -26,6 +26,7 @@ tools/ga/
                          H16, so hidden size is not sweepable)
   replay.py              match recorder + HTML renderer
   viz.py                 network diagram rendering
+  theme.py               palette, type scale and page CSS for the HTML below
   report.py              per-run report.html generator
   dashboard.py           live training dashboard (docs/ga-dashboard.html)
   determinism_check.py   runs the stack twice from one seed and diffs it
@@ -73,6 +74,14 @@ replay is decoded into its iframe when that card scrolls into view (a browser
 without `IntersectionObserver` mounts them all at once), and the payload
 script sits at the end of the document so the sections above it are parsed
 first.
+
+Both pages take their look from `theme.py`, which is the one place a color or
+a size is set: a warm near-black console face for the dashboard, the same
+tokens on warm paper for the report, a single rust hue for anything a reader
+should look at first, and mono for every number. `report.py` imports the same
+constants for its matplotlib series, so a chart and the page under it cannot
+drift apart. Change the value in `theme.py`, rebuild both pages; do not
+hardcode a hex in either generator.
 
 ## How to run
 

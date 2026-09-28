@@ -43,6 +43,7 @@ from replay import WALLS, record_match, render_html  # noqa: E402 -- same bootst
 from viz import draw as draw_net  # noqa: E402 -- same bootstrap
 import ga  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
+import theme  # noqa: E402 -- same bootstrap
 
 REPO = TOOLS.parent.parent                         # repo root (TOOLS is already repo/tools/ga)
 RUNS_DIR = REPO / "evolved"                       # repo/evolved
@@ -67,9 +68,8 @@ def png_dimensions(data_b64: str) -> tuple[int, int]:
 
 def chart_card(data_b64: str, alt: str) -> str:
     w, h = png_dimensions(data_b64)
-    return (f'<div class="card"><img alt="{alt}" src="data:image/png;base64,{data_b64}"'
-            f' width="{w}" height="{h}" loading="lazy" decoding="async"'
-            f' style="max-width:100%;height:auto"></div>')
+    return (f'<figure class="fig"><img alt="{alt}" src="data:image/png;base64,{data_b64}"'
+            f' width="{w}" height="{h}" loading="lazy" decoding="async"></figure>')
 
 
 def load_run_csv(run: Path):
@@ -130,10 +130,10 @@ def curves_b64(runs, best_run_name: str | None):
             continue
         label = run.name
         if run.name == best_run_name:
-            ax.plot(gens, best, color="#0ea5e9", lw=2.2, label=f"{label} (BEST)")
-            ax.fill_between(gens, q25, q75, color="#0ea5e9", alpha=0.10)
+            ax.plot(gens, best, color=theme.ACCENT, lw=2.2, label=f"{label} (BEST)")
+            ax.fill_between(gens, q25, q75, color=theme.ACCENT, alpha=0.10)
         else:
-            ax.plot(gens, best, color="#64748b", lw=1.0, alpha=0.75, label=label)
+            ax.plot(gens, best, color=theme.SERIES_DIM, lw=1.0, alpha=0.85, label=label)
     ax.set_xlabel("generation", fontsize=10)
     ax.set_ylabel("fitness (scalar)", fontsize=10)
     ax.set_title("Evolution: best fitness per generation (all runs)", fontsize=13)
@@ -164,7 +164,7 @@ def held_strip_b64(runs):
     order = np.argsort(helds)[::-1]
     labels = [labels[i] for i in order]
     helds = [helds[i] for i in order]
-    cols = ["#0ea5e9"] + ["#94a3b8"] * (len(helds) - 1)
+    cols = [theme.ACCENT] + [theme.SERIES_DIM] * (len(helds) - 1)
     ax.bar(range(len(helds)), helds, color=cols, alpha=0.9)
     ax.set_xticks(range(len(helds)))
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
@@ -202,39 +202,30 @@ def build(runs, out: Path, replays):
     # the bulk of this file, and a script in the middle of the body holds the
     # parser at that byte offset, so everything after it waits.
     tail = []
-    chunks.append("""<!doctype html><html lang="en"><head><meta charset="utf-8">
+    chunks.append(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bot Evolution Dashboard</title>
-<style>
- body{font-family:ui-sans-serif, system-ui, Segoe UI, Roboto, Arial;background:#0b1220;color:#e2e8f0;margin:0}
- .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
- h1{font-size:22px} h2{font-size:16px;margin-top:34px;color:#38bdf8}
- .chip{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:20px;padding:4px 12px;font-size:12px;margin:2px}
- .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
- .card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px}
- .card img,.card iframe{width:100%;border-radius:8px}
- iframe{border:0;background:#0f172a}
- table{width:100%;border-collapse:collapse;font-size:12px}
- th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #1f2937}
- th{color:#38bdf8}
- .b{color:#38bdf8;font-weight:700}
-</style></head><body><div class="wrap">
-<h1>Bot Evolution Dashboard</h1>
-<p style="color:#94a3b8;font-size:13px">Neuroevolution of the FPS bot controller, 14&rarr;16&rarr;5 MLP, genetic algorithm, held-gated promotion.</p>
+<title>Clanker: bot evolution</title>
+<style>{theme.DARK_STYLE}</style></head><body><div class="wrap">
+<header class="head">
 <div>
-  <span class="chip">Champion gen <b class="b">""")
+<h1>Clanker: bot evolution</h1>
+<p class="lede">Champion of the headless combat sim, 14&rarr;16&rarr;5 MLP, genetic algorithm, held-gated promotion.</p>
+</div>
+<dl class="meta">
+<dt>generation</dt><dd>""")
     # best.meta.json travels via git (whitelisted in evolved/.gitignore), so
     # its values are untrusted text from the dashboard's perspective: escape
     # before they land in the page.
     chunks.append(html.escape(str(best_meta.get("generation", "?"))))
-    chunks.append("""</b></span>
-  <span class="chip">train <b class="b">""")
+    chunks.append("""</dd>
+<dt>train fitness</dt><dd>""")
     chunks.append(f"{best_meta.get('fitness',0):.1f}")
-    chunks.append("""</b></span>
-  <span class="chip">hash <b class="b">""")
+    chunks.append("""</dd>
+<dt>config hash</dt><dd>""")
     chunks.append(html.escape(str(best_meta.get("configHash", "?"))[:8]))
-    chunks.append("""</b></span>
-</div>
+    chunks.append("""</dd>
+</dl>
+</header>
 """)
 
     if HAS_MPL:
@@ -245,15 +236,16 @@ def build(runs, out: Path, replays):
         # run recorded held-out scores, and feeding "" through chart_card would
         # crash the whole dashboard on the PNG header parse.
         if cd:
-            chunks.append(f"""<h2>1 · Evolution curves</h2>{chart_card(cd, f'Line chart of the best fitness per generation across {len(runs)} runs; the champion run is highlighted')}""")
+            chunks.append(f"""<section class="sec"><h2>1 · Evolution curves</h2>{chart_card(cd, f'Line chart of the best fitness per generation across {len(runs)} runs; the champion run is highlighted')}</section>""")
         if hs:
-            chunks.append(f"""<h2>2 · Held-out stability</h2>{chart_card(hs, 'Bar chart of the final held-out score per run, champion run on the left')}""")
+            chunks.append(f"""<section class="sec"><h2>2 · Held-out stability</h2>{chart_card(hs, 'Bar chart of the final held-out score per run, champion run on the left')}</section>""")
         if net:
-            chunks.append(f"""<h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'Diagram of the champion controller neural network: 14 inputs, 16 hidden units, 5 outputs')}""")
+            chunks.append(f"""<section class="sec"><h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'Diagram of the champion controller neural network: 14 inputs, 16 hidden units, 5 outputs')}</section>""")
 
     # Arena replays
     if replays:
-        chunks.append('<h2>4 · Arena replays (top-down, live)</h2>')
+        chunks.append('<section class="sec"><h2>4 · Arena replays</h2>')
+        chunks.append('<p class="lede">Top-down matches of the champion in the sim, same seed as the run that promoted it.</p>')
         chunks.append('<div class="grid">')
         # Ids come from the frame's position, not from its label: str hashing is
         # salted per process, so the same runs produced different element ids on
@@ -262,10 +254,9 @@ def build(runs, out: Path, replays):
         frames = list(replays.items())
         for i, (label, _) in enumerate(frames):
             safe = html.escape(str(label), quote=True)
-            chunks.append(f'<div class="card"><div style="font-size:13px;margin-bottom:6px;color:#38bdf8">{safe}</div>'
-                          f'<iframe id="replay-{i}" title="Arena replay {safe}" loading="lazy" style="width:100%" height="430"></iframe>'
-                          '<div style="font-size:11px;color:#94a3b8;margin-top:6px">replay starts when this card scrolls into view</div></div>')
-        chunks.append('</div>')
+            chunks.append(f'<figure class="fig"><figcaption>{safe}</figcaption>'
+                          f'<iframe id="replay-{i}" title="Arena replay {safe}" loading="lazy"></iframe></figure>')
+        chunks.append('</div></section>')
         # Payloads stay base64 in the document (the output is one shareable
         # file), but each is decoded and handed to its iframe only when that
         # card approaches the viewport. Decoding all of them in one loop at
@@ -301,18 +292,22 @@ if (typeof IntersectionObserver === "function") {
                        for k in ("pop", "gens", "curriculum", "islands")),
                      f"{heldv[-1]:.2f}" if heldv else "n/a"))
     rows.sort(key=lambda r: float(r[5]) if r[5] != "n/a" else 0, reverse=True)
-    chunks.append("""<h2>5 · Runs</h2><div class="card"><table><caption style="text-align:left">Summary of every GA run: population, generations, curriculum, islands, final held-out score</caption><thead><tr><th scope="col">run</th><th scope="col">pop</th><th scope="col">gens</th><th scope="col">curriculum</th><th scope="col">islands</th><th scope="col">held</th></tr></thead><tbody>""")
-    # Every cell is filesystem/config text (run dir names, hand-editable
-    # config.json values), so it is HTML-escaped before it lands in the page:
-    # a crafted run name must not execute in the browser of whoever opens the
-    # generated dashboard.
-    for r in rows:
-        cells = "".join(f"<td>{html.escape(str(c))}</td>" for c in r)
-        chunks.append(f"<tr>{cells}</tr>")
-    chunks.append("</tbody></table></div>")
-    # Footer note in #94a3b8 (not the dimmer #64748b): it must keep 4.5:1
-    # contrast on the dark page background.
-    chunks.append(f"""<p style="color:#94a3b8;font-size:11px;margin-top:30px">Dashboard generated for {len(runs)} runs. Replays are deterministic (same seed == same match) and follow the pre-R10 sim rules.</p></div>""")
+    if rows:
+        chunks.append("""<section class="sec"><h2>5 · Runs</h2><table><caption>Population, generations, curriculum, islands and final held-out score (seed 999) per run, best held first.</caption><thead><tr><th scope="col">run</th><th scope="col">pop</th><th scope="col">gens</th><th scope="col">curriculum</th><th scope="col">islands</th><th scope="col">held</th></tr></thead><tbody>""")
+        # Every cell is filesystem/config text (run dir names, hand-editable
+        # config.json values), so it is HTML-escaped before it lands in the page:
+        # a crafted run name must not execute in the browser of whoever opens the
+        # generated dashboard.
+        for r in rows:
+            cells = "".join(f"<td>{html.escape(str(c))}</td>" for c in r)
+            chunks.append(f"<tr>{cells}</tr>")
+        chunks.append("</tbody></table></section>")
+    else:
+        # An empty table reads as a measured zero; name what is missing instead.
+        chunks.append('<section class="sec"><h2>5 · Runs</h2><p class="lede">'
+                      'No run has recorded a fitness.csv yet. Run tools/ga/evolve.py, '
+                      'then rebuild this dashboard.</p></section>')
+    chunks.append(f"""<p class="foot">Built from {len(runs)} run(s) in evolved/runs. Replays are deterministic: the same seed replays the same match. Replay frames follow the pre-R10 sim rules, not the live game.</p></div>""")
     chunks.extend(tail)
     chunks.append("</body></html>")
 
