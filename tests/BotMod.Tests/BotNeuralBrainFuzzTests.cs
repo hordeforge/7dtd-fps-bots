@@ -146,38 +146,6 @@ static class BotNeuralBrainFuzzTests
 
     // ---- mutant generation ----
 
-    static byte[] MutateBytes(byte[] src, Random rng)
-    {
-        byte[] m = (byte[])src.Clone();
-        switch (rng.Next(4))
-        {
-            case 0: // truncate
-                int keep = rng.Next(0, m.Length);
-                Array.Resize(ref m, keep);
-                return m;
-            case 1: // flip bytes
-                for (int n = rng.Next(1, 8); n > 0 && m.Length > 0; n--)
-                    m[rng.Next(m.Length)] = (byte)rng.Next(256);
-                return m;
-            case 2: // delete a chunk
-                if (m.Length < 4) return m;
-                int cutAt = rng.Next(m.Length - 1);
-                int cutLen = Math.Min(rng.Next(1, 40), m.Length - cutAt);
-                byte[] shorter = new byte[m.Length - cutLen];
-                Array.Copy(m, shorter, cutAt);
-                Array.Copy(m, cutAt + cutLen, shorter, cutAt, m.Length - cutAt - cutLen);
-                return shorter;
-            default: // insert junk
-                int at = rng.Next(m.Length + 1);
-                int junkLen = rng.Next(1, 20);
-                byte[] longer = new byte[m.Length + junkLen];
-                Array.Copy(m, longer, at);
-                for (int j = 0; j < junkLen; j++) longer[at + j] = (byte)rng.Next(256);
-                Array.Copy(m, at, longer, at + junkLen, m.Length - at);
-                return longer;
-        }
-    }
-
     static readonly int[] BadVersions = { 0, 2, -1, 99 };
     static readonly int[] WrongInputs = { 13, 15, 0, -3, 32 };   // all must be rejected
     static readonly int[] WrongOutputs = { 1, 3, 9, 0, -2, 6 };  // all must be rejected
@@ -294,11 +262,11 @@ static class BotNeuralBrainFuzzTests
             {
                 byte[] content;
                 double roll = rng.NextDouble();
-                if (roll < 0.40) content = MutateBytes(goldenBytes, rng);
+                if (roll < 0.40) content = MutantBytes.Mutate(goldenBytes, rng);
                 else
                 {
                     string mutated = MutateStructure(goldenText, rng);
-                    if (mutated == null) content = MutateBytes(goldenBytes, rng);
+                    if (mutated == null) content = MutantBytes.Mutate(goldenBytes, rng);
                     else content = Encoding.UTF8.GetBytes(mutated);
                 }
                 FuzzLoad(WriteMutant(dir, "mut-" + i + ".json", content), rng, "mutant-" + i);

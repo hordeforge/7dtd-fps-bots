@@ -6,6 +6,20 @@ namespace BotMod.AI
 {
     public static class BotCombat
     {
+        /// <summary>Log-safe label for one combat participant. EntityName is
+        /// player-chosen text (arbitrary under EAC-off / synthetic-auth joins),
+        /// so scrub it before it reaches the server log or client chat: control,
+        /// DEL/C1, bidi and zero-width characters would otherwise forge log
+        /// lines or reorder visible chat text (same contract as the web API's
+        /// sanitized audit fields). Entity ids are protocol tokens, so the
+        /// fallback renders invariantly (same convention as the invariant
+        /// int.TryParse on every id surface).</summary>
+        static string Label(EntityAlive e)
+        {
+            if (e == null) return "?";
+            return LogSanitizer.Clean(e.EntityName ?? e.name ?? e.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         public static void OnKilled(EntityAlive killer, EntityAlive victim)
         {
             try
@@ -16,16 +30,8 @@ namespace BotMod.AI
                 bool victimIsPlayer = victim is EntityPlayer;
                 if (!killerIsBot && !victimIsBot && !killerIsPlayer && !victimIsPlayer) return;
 
-                // EntityName for players is player-chosen text (arbitrary under
-                // EAC-off / synthetic-auth joins), so scrub it before it reaches
-                // the server log or client chat: control, DEL/C1, bidi and
-                // zero-width characters would otherwise forge log lines or
-                // reorder visible chat text (same contract as the web API's
-                // sanitized audit fields).
-                // Entity ids are protocol tokens, so the fallback renders invariantly
-                // (same convention as the invariant int.TryParse on every id surface).
-                string k = LogSanitizer.Clean(killer != null ? (killer.EntityName ?? killer.name ?? killer.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
-                string v = LogSanitizer.Clean(victim != null ? (victim.EntityName ?? victim.name ?? victim.entityId.ToString(System.Globalization.CultureInfo.InvariantCulture)) : "?");
+                string k = Label(killer);
+                string v = Label(victim);
                 ModApi.Log($"Kill: {k} killed {v}");
 
                 // Keep vanilla score paths for player->anything. For bot killers we must credit manually

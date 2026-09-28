@@ -56,14 +56,14 @@ def _lcg(s: int) -> int:
 
 
 @numba.njit
-def _lcg01(s: int):
+def lcg01(s: int):
     s = _lcg(s)
     v = ((s >> 8) & 0x00FFFFFF) / 16777216.0
     return v, s
 
 
 @numba.njit
-def _loadout_pick(rng: int, n_weapons: int):
+def loadout_pick(rng: int, n_weapons: int):
     """Draw one weapon index and return (index, advanced state).
 
     Separate from the caller so the draw itself is testable: the kernel's
@@ -76,7 +76,7 @@ def _loadout_pick(rng: int, n_weapons: int):
     1.0, but the modulo would then wrap a hypothetical 1.0 to index 0 and
     bias that one outcome.
     """
-    v, s = _lcg01(rng)
+    v, s = lcg01(rng)
     idx = int(v * n_weapons)
     if idx >= n_weapons:
         idx = n_weapons - 1
@@ -242,9 +242,9 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             bx[i] = 40.0 + (spawn_gap * 0.5) * (1.0 if i % 2 == 0 else -1.0)
             by[i] = 40.0
         else:
-            v, rng = _lcg01(rng)
+            v, rng = lcg01(rng)
             ang = v * 6.283185307179586
-            v2, rng = _lcg01(rng)
+            v2, rng = lcg01(rng)
             rad = 8.0 + v2 * 18.0
             bx[i] = 40.0 + math.cos(ang) * rad
             by[i] = 40.0 + math.sin(ang) * rad
@@ -259,13 +259,13 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
         if wep_pin >= 0:
             bweapon[i] = wep_pin
         else:
-            bweapon[i], rng = _loadout_pick(rng, 6)
+            bweapon[i], rng = loadout_pick(rng, 6)
         bskill[i] = float(bot_skill)
         balive[i] = True
     for i in range(n_zombies):
-        v, rng = _lcg01(rng)
+        v, rng = lcg01(rng)
         ang = v * 6.283185307179586
-        v2, rng = _lcg01(rng)
+        v2, rng = lcg01(rng)
         rad = 12.0 + v2 * 14.0
         zx[i] = 40.0 + math.cos(ang) * rad
         zy[i] = 40.0 + math.sin(ang) * rad
@@ -293,7 +293,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
         burst_left[i] = WEAPON_BURST_MIN[bweapon[i]]
         burst_cd[i] = 0.0
         reaction_cd[i] = 0.0
-        v, rng = _lcg01(rng)  # keep the draw: downstream rng stream is part of the frozen replay contract
+        v, rng = lcg01(rng)  # keep the draw: downstream rng stream is part of the frozen replay contract
         ammo[i] = WEAPON_MAG[bweapon[i]]
         reserve[i] = WEAPON_MAG[bweapon[i]] * AMMO_RESERVE_MULT
         spread[i] = 0.0
@@ -352,7 +352,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                     best_d2 = d2_eff; best_d2_true = d2; best = j; best_kind = 1
             if best < 0:
                 # wander
-                v, rng = _lcg01(rng)
+                v, rng = lcg01(rng)
                 ang = v * 6.283185307179586
                 bx[bi] += math.cos(ang) * 0.4
                 by[bi] += math.sin(ang) * 0.4
@@ -476,7 +476,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             aim_penalty = abs(aim_raw) * (1.0 - bskill[bi] * 0.15)
             # sniper gets little penalty, shotgun more forgiving
             hc2 = hc * (1.0 - aim_penalty * 0.35) * (1.0 - spread[bi] * SPREAD_HIT_PENALTY)
-            v, rng = _lcg01(rng)
+            v, rng = lcg01(rng)
             if v <= hc2:
                 # hit!
                 hits += 1
@@ -485,7 +485,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
                 # headshot roll (pellets==1 only)
                 is_head = False
                 if WEAPON_PELLETS[bweapon[bi]] == 1:
-                    v2, rng = _lcg01(rng)
+                    v2, rng = lcg01(rng)
                     if v2 < (0.04 + bskill[bi] * 0.02):
                         is_head = True
                 dmg = WEAPON_DAMAGE[bweapon[bi]]

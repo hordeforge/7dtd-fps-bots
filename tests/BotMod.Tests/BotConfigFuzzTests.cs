@@ -140,45 +140,6 @@ static class BotConfigFuzzTests
 
     // ---- mutant generation ----
 
-    static byte[] MutateBytes(byte[] src, Random rng)
-    {
-        byte[] m = (byte[])src.Clone();
-        switch (rng.Next(4))
-        {
-            case 0: // truncate
-                Array.Resize(ref m, rng.Next(0, m.Length));
-                return m;
-            case 1: // flip bytes
-                for (int n = rng.Next(1, 8); n > 0 && m.Length > 0; n--)
-                    m[rng.Next(m.Length)] = (byte)rng.Next(256);
-                return m;
-            case 2: // delete a chunk
-                if (m.Length < 4) return m;
-                int cutAt = rng.Next(m.Length - 1);
-                int cutLen = Math.Min(rng.Next(1, 40), m.Length - cutAt);
-                byte[] shorter = new byte[m.Length - cutLen];
-                Array.Copy(m, shorter, cutAt);
-                Array.Copy(m, cutAt + cutLen, shorter, cutAt, m.Length - cutAt - cutLen);
-                return shorter;
-            default: // insert junk
-                int at = rng.Next(m.Length + 1);
-                int junkLen = rng.Next(1, 20);
-                byte[] longer = new byte[m.Length + junkLen];
-                Array.Copy(m, longer, at);
-                for (int j = 0; j < junkLen; j++) longer[at + j] = (byte)rng.Next(256);
-                Array.Copy(m, at, longer, at + junkLen, m.Length - at);
-                return longer;
-        }
-    }
-
-    static readonly object[] ExtremeValues =
-    {
-        int.MinValue, int.MaxValue, 0, -1, 999999999,
-        3e38f, -3e38f, 0.5d, 1e300d,
-        "not-a-number", "", true, false, null,
-        new JArray { 1, 2 }, new JObject { ["nested"] = 9 }
-    };
-
     static readonly string[] NumericFields =
     {
         "TargetBotCount", "MaxBots", "BotAmmoCount", "BotHealth", "Difficulty",
@@ -200,7 +161,7 @@ static class BotConfigFuzzTests
         switch (rng.Next(7))
         {
             case 0: // numeric field gets an extreme / wrong-typed value
-                object v = ExtremeValues[rng.Next(ExtremeValues.Length)];
+                object v = MutantBytes.ExtremeValues[rng.Next(MutantBytes.ExtremeValues.Length)];
                 obj[NumericFields[rng.Next(NumericFields.Length)]] = v as JToken ?? new JValue(v);
                 break;
             case 1: // team map attacks: wrong container, hostile keys/values
@@ -223,7 +184,7 @@ static class BotConfigFuzzTests
                 }
                 break;
             case 3: // bool fields get non-bool values
-                object b = ExtremeValues[rng.Next(ExtremeValues.Length)];
+                object b = MutantBytes.ExtremeValues[rng.Next(MutantBytes.ExtremeValues.Length)];
                 obj[new[] { "Enabled", "DedicatedOnly", "AllowSyntheticAuthBypass", "UseNeuralBrain", "BotVsBot" }[rng.Next(5)]] =
                     b as JToken ?? new JValue(b);
                 break;
@@ -324,11 +285,11 @@ static class BotConfigFuzzTests
             {
                 byte[] content;
                 double roll = rng.NextDouble();
-                if (roll < 0.40) content = MutateBytes(goldenBytes, rng);
+                if (roll < 0.40) content = MutantBytes.Mutate(goldenBytes, rng);
                 else
                 {
                     string mutated = MutateStructure(goldenText, rng);
-                    if (mutated == null) content = MutateBytes(goldenBytes, rng);
+                    if (mutated == null) content = MutantBytes.Mutate(goldenBytes, rng);
                     else content = Encoding.UTF8.GetBytes(mutated);
                 }
                 string p = Path.Combine(dir, "mut-" + i + ".json");

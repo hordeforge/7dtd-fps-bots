@@ -107,13 +107,12 @@ def check_loadout_draw() -> None:
             if gap <= 0.0:
                 # The kernel's own draws, replayed in its own order: a copy of
                 # the roll here would pass even if the kernel changed, which is
-                # the regression this check exists to catch. SLF001 is the
-                # price of reaching the real implementation instead.
-                _, rng = combat_sim._lcg01(rng)  # noqa: SLF001 -- the kernel's own draw, replayed in order
-                _, rng = combat_sim._lcg01(rng)  # noqa: SLF001 -- the kernel's own draw, replayed in order
+                # the regression this check exists to catch.
+                _, rng = combat_sim.lcg01(rng)   # the two position draws
+                _, rng = combat_sim.lcg01(rng)
             # The kernel's own draw, so this check fails if the roll regresses
             # rather than re-asserting a correct copy of it here.
-            pick, rng = combat_sim._loadout_pick(rng, 6)  # noqa: SLF001 -- the kernel's own draw, not a copy
+            pick, rng = combat_sim.loadout_pick(rng, 6)
             picks.append(pick)
         if len(set(picks)) < 2:
             _fail(f"combat_sim spawn loop: spawn_gap={gap} drew one weapon "

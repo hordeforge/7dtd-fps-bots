@@ -264,6 +264,7 @@ else
 
     run_game_suite neuralfuzz \
       "$root/Source/BotMod/AI/BotNeuralBrain.cs" \
+      "$root/tests/BotMod.Tests/MutantBytes.cs" \
       "$root/tests/BotMod.Tests/BotNeuralBrainFuzzTests.cs"
 
     # Forward-pass correctness pins for the same brain (needs only Newtonsoft):
@@ -278,6 +279,7 @@ else
     # gate as above; compiles only the engine-free Config sources).
     run_game_suite configfuzz \
       "${config_src[@]}" \
+      "$root/tests/BotMod.Tests/MutantBytes.cs" \
       "$root/tests/BotMod.Tests/BotConfigFuzzTests.cs"
 
     # Character-file parser fuzzer: the same trust boundary as botmod.json
@@ -286,6 +288,7 @@ else
     # land inside the Normalize+difficulty-lerp contract with canonical keys.
     run_game_suite charfuzz \
       "${character_src[@]}" \
+      "$root/tests/BotMod.Tests/MutantBytes.cs" \
       "$root/tests/BotMod.Tests/BotCharacterFuzzTests.cs"
 
     # Admin-setter fuzzer: the web API and console hand caller-supplied target

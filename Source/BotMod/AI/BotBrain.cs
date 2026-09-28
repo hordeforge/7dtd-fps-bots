@@ -380,32 +380,24 @@ namespace BotMod.AI
             }
             catch (Exception ex) { WarnMoveFailed("MoveDir", me, ex); }
         }
-        public static void Strafe(EntityAlive me, EntityAlive target, int dirSign)
+        /// <summary>Orbit the target on a forward/side blend, the shape both
+        /// combat steps take: Strafe leans on the lateral term, Backpedal on
+        /// the reverse-forward one.</summary>
+        static void LateralStep(EntityAlive me, EntityAlive target, int dirSign, float forwardWeight, float sideWeight, string op)
         {
             try
             {
                 Vector3 toTarget = target.position - me.position; toTarget.y = 0;
                 if (toTarget == Vector3.zero) return; toTarget.Normalize();
                 Vector3 strafe = Vector3.Cross(Vector3.up, toTarget) * dirSign;
-                Vector3 dir = (toTarget * 0.22f + strafe * 0.78f).normalized;
+                Vector3 dir = (toTarget * forwardWeight + strafe * sideWeight).normalized;
                 float dist = Mathf.Max(0.3f, Vector3.Distance(me.position, target.position) * 0.2f);
                 MoveWithFallback(me, dir, dist);
             }
-            catch (Exception ex) { WarnMoveFailed("Strafe", me, ex); }
+            catch (Exception ex) { WarnMoveFailed(op, me, ex); }
         }
-        public static void Backpedal(EntityAlive me, EntityAlive target, int dirSign)
-        {
-            try
-            {
-                Vector3 toTarget = target.position - me.position; toTarget.y = 0;
-                if (toTarget == Vector3.zero) return; toTarget.Normalize();
-                Vector3 strafe = Vector3.Cross(Vector3.up, toTarget) * dirSign;
-                Vector3 dir = (-toTarget * 0.55f + strafe * 0.45f).normalized;
-                float dist = Mathf.Max(0.3f, Vector3.Distance(me.position, target.position) * 0.2f);
-                MoveWithFallback(me, dir, dist);
-            }
-            catch (Exception ex) { WarnMoveFailed("Backpedal", me, ex); }
-        }
+        public static void Strafe(EntityAlive me, EntityAlive target, int dirSign) { LateralStep(me, target, dirSign, 0.22f, 0.78f, "Strafe"); }
+        public static void Backpedal(EntityAlive me, EntityAlive target, int dirSign) { LateralStep(me, target, dirSign, -0.55f, 0.45f, "Backpedal"); }
         public static Vector3 FindCover(EntityAlive me, EntityAlive threat, World world)
         {
             // Doom3 idAASFindCover port: sample the 8 compass directions and

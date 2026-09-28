@@ -54,6 +54,17 @@ of them removes a config key or a console command.
 
 ### Changed
 
+- `combat_sim.lcg01` and `combat_sim.loadout_pick` dropped their leading
+  underscore. `determinism_check.py` already called both as a second consumer
+  (the loadout draw exists to be checked outside the kernel), and the SLF
+  rule group in `ruff.toml` made those three calls a red `make lint-python`.
+- `BotBrain.Strafe` and `BotBrain.Backpedal` share one `LateralStep` helper
+  that takes the forward/side blend, and `BotCombat`'s two kill-log labels go
+  through one `Label` helper. Same moves, same messages, one definition each.
+- The byte-level mutant generator and its `ExtremeValues` table moved from the
+  three JSON config fuzzers into `tests/BotMod.Tests/MutantBytes.cs`, wired
+  into the `neuralfuzz`, `configfuzz` and `charfuzz` compiles. The three
+  copies had already drifted (one used a named local where two inlined it).
 - The canonical body text an idempotency `requestId` is bound to is now
   length-prefixed per field instead of `key=value` lines. A value containing
   the separator could spell a second body exactly (`{"player":"b\nc=d"}`
