@@ -58,6 +58,12 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
   classes bots engage; all three on = free-for-all. Squad mode overrides vs bot.
 - Scoreboard: per-bot kills (players/zombies), deaths, score, level, health,
   team (colored dot + select)
+- Every command reports its outcome in a result line under the header
+  ("Spawn 2 bots: done", or a failure the user dismisses), and the actions
+  that remove bots ("Remove all", "Clear teams") ask for a second click to
+  confirm. Toggles (Enable/Disable, Skill, Brain, Squad, Shoot at) act on one
+  click; the scoreboard scrolls sideways inside its own box on a narrow
+  sidebar.
 
 API: authenticated `GET /api/bot` (status + online `players` list +
 scoreboard), `POST /api/bot` with

@@ -36,6 +36,20 @@
 .botmod-table th:first-child, .botmod-table td:first-child { text-align: start; }
 .botmod-state { opacity: .75; font-size: .78rem; }
 .botmod-empty { opacity: .75; }
+/* Result of the last command: a failed POST has to stay on screen until the
+   user dismisses it, so it gets the ok/bad pill colors of the header. */
+.botmod-status {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin: .6rem 0 0; padding: .35rem .6rem; border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, .3); background: rgba(127, 127, 127, .08);
+  font-size: .8rem;
+}
+.botmod-status-bad { border-color: rgba(255, 112, 112, .5); color: #ff7070; }
+.botmod-status-text { flex: 1 1 12rem; }
+/* The scoreboard has 12 columns; on a narrow panel it scrolls inside its own
+   box instead of pushing the sidebar wider. */
+.botmod-tablescroll { overflow-x: auto; }
+.botmod-num:disabled, .botmod-weapon:disabled, .botmod-select:disabled { opacity: .5; }
 
 /* Sidebar icon for the Bot menu entry. The stock dashboard gives every module
    route the same "Mods" font glyph; replace it with a robot via the entry's
@@ -61,7 +75,7 @@ a[data-for="tooltip-Bot"]::before {
 .botmod-remove { font-size: .72rem; padding: .05rem .45rem; min-width: 24px; }
 .botmod-armed { border-color: rgba(255, 112, 112, .9); color: #ff7070; font-weight: 700; }
 /* Churn visibility: a bot whose live fields changed since the last poll
-   flashes once and fades (see botRow's changedSig remount). Uses the accent
+   flashes once and fades (see botRow's changedSig). Uses the accent
    hue, never the ok/warn/bad severity ramp. */
 @media (prefers-reduced-motion: no-preference) {
   tr.botmod-flash td { animation: botmod-flash 1s ease-out; }

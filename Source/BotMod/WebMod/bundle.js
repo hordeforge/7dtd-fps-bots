@@ -52,18 +52,58 @@
         }
         return `botmod-${Date.now().toString(36)}-${Math.floor(Math.random() * 4294967296).toString(36)}`;
     }
+    function botCount(count) {
+        const n = numOr(count, 1);
+        return `${n} ${n === 1 ? "bot" : "bots"}`;
+    }
+    function actionLabel(body) {
+        switch (body.action) {
+            case "spawn":
+                return `Spawn ${botCount(body.count)}`;
+            case "spawnNear":
+                return `Spawn ${botCount(body.count)} near ${strOrEmpty(body.player) === "" ? "a player" : strOrEmpty(body.player)}`;
+            case "remove":
+                return "Remove all bots";
+            case "removeOne":
+                return "Remove bot";
+            case "enable":
+                return "Enable bots";
+            case "disable":
+                return "Disable bots";
+            case "skill":
+                return `Set skill level ${numOr(body.level, 0)}`;
+            case "neural":
+                return body.on === true ? "Switch to the GA brain" : "Switch to the static AI";
+            case "team":
+                return body.on === true ? "Turn squad mode on" : "Turn squad mode off";
+            case "vs":
+                return `Shoot at ${strOrEmpty(body.target)}: ${body.on === true ? "on" : "off"}`;
+            case "setTeam":
+                return `Move ${strOrEmpty(body.name)} to ${teamLabel(body.team)}`;
+            case "teamCount":
+                return `Set the number of teams to ${numOr(body.count, 0)}`;
+            case "clearTeams":
+                return "Clear teams";
+            default:
+                return body.action;
+        }
+    }
     function postAction(opts) {
         if (opts.busy !== "") {
             return;
         }
+        const label = actionLabel(opts.body);
         opts.setBusy(`${opts.body.action}${optNum(opts.body.count)}${optNum(opts.body.entityId)}`);
         opts.setArmed("");
-        opts.say(`${opts.body.action}: command sent`);
+        opts.setStatus({ text: `${label}: sending...`, bad: false });
         const body = Object.assign(Object.assign({}, opts.body), { requestId: newRequestId() });
         void opts.HTTP.post("/api/bot", body)
-            .then(() => { void opts.refetch(); })
+            .then(() => {
+            opts.setStatus({ text: `${label}: done`, bad: false });
+            void opts.refetch();
+        })
             .catch(() => {
-            opts.setBusy("");
+            opts.setStatus({ text: `${label}: failed, the server rejected the command.`, bad: true });
         })
             .then(() => {
             opts.setBusy("");
@@ -79,9 +119,9 @@
         setTimeout(() => opts.setArmed((a) => (a === opts.label ? "" : a)), ARM_TIMEOUT_MS);
     }
     function makeBtn(h, busy, post) {
-        return (label, body, cls) => h("button", {
+        return (label, body, cls, off) => h("button", {
             className: `botmod-btn${cls === undefined ? "" : ` ${cls}`}`,
-            disabled: busy !== "",
+            disabled: busy !== "" || off === true,
             onClick: () => post(body)
         }, label);
     }
@@ -146,12 +186,22 @@
             : "no players online";
         return h("div", { className: "botmod-head" }, h("h2", null, "Bot Control"), pill(s.enabled === true, "ENABLED", "DISABLED"), h("span", { className: "botmod-window" }, `alive ${num(s.alive)}/${num(s.targetBotCount)} · max ${num(s.maxBots)} · brain ${brainLabel(s.neural, s.neuralLoaded)} · ${onlineText}`));
     }
+    function renderCommandStatus(h, status, onDismiss) {
+        if (status === null) {
+            return null;
+        }
+        return h("div", { className: `botmod-status${status.bad ? " botmod-status-bad" : ""}`, role: status.bad ? "alert" : "status" }, h("span", { className: "botmod-status-text" }, status.text), h("button", { className: "botmod-btn", onClick: onDismiss }, "Dismiss"));
+    }
     function renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn) {
-        return h("div", { className: "botmod-row" }, armedBtn(enabled ? "Disable" : "Enable", { action: enabled ? "disable" : "enable" }, enabled ? "botmod-danger" : "botmod-primary"), armedBtn("Remove all", { action: "remove" }, "botmod-danger"), h("input", {
+        return h("div", { className: "botmod-row" }, btn(enabled ? "Disable" : "Enable", { action: enabled ? "disable" : "enable" }, enabled ? "botmod-danger" : "botmod-primary"), armedBtn("Remove all", { action: "remove" }, "botmod-danger"), h("input", {
             className: "botmod-num", type: "number", min: 1, max: 16, value: spawnCount,
             "aria-label": "Bots to spawn",
             onChange: (e) => setSpawnCount(e.target.value)
-        }), btn("Spawn", { action: "spawn", count: toCount(spawnCount) }, "botmod-primary"), [1, 4, 8].map((n) => h("button", { key: n, className: "botmod-btn", disabled: busy !== "", onClick: () => post({ action: "spawn", count: n }) }, `+${n}`)));
+        }), btn("Spawn", { action: "spawn", count: toCount(spawnCount) }, "botmod-primary"), [1, 4, 8].map((n) => h("button", {
+            key: n, className: "botmod-btn", disabled: busy !== "",
+            title: `Spawn ${n} bots at the default spot`,
+            onClick: () => post({ action: "spawn", count: n })
+        }, `+${n}`)));
     }
     function renderSkillRow(h, s, busy, post) {
         return h("div", { className: "botmod-row botmod-brain" }, h("span", { className: "botmod-label" }, "Skill:"), [0, 1, 2, 3, 4].map((d) => h("button", {
@@ -160,25 +210,26 @@
         }, String(d))), h("span", { className: "botmod-window" }, "0 bot · 1 easy · 2 normal · 3 hard · 4 nightmare"));
     }
     function renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn) {
-        return h("div", { className: "botmod-row" }, h("span", { className: "botmod-label" }, "Near player:"), onlinePlayers.length === 0
+        const noPlayers = onlinePlayers.length === 0;
+        return h("div", { className: "botmod-row" }, h("span", { className: "botmod-label" }, "Near player:"), noPlayers
             ? h("span", { className: "botmod-window" }, "no players online")
             : h("select", {
                 className: "botmod-select", value: nearPlayer,
                 "aria-label": "Player",
                 onChange: (e) => setNearPlayer(e.target.value)
             }, onlinePlayers.map((p) => h("option", { key: p.entityId, value: p.name }, p.name))), h("input", {
-            className: "botmod-num", type: "number", min: 1, max: 16, value: nearCount,
+            className: "botmod-num", type: "number", min: 1, max: 16, value: nearCount, disabled: noPlayers,
             "aria-label": "Bots to spawn near player",
             onChange: (e) => setNearCount(e.target.value)
         }), h("input", {
-            className: "botmod-weapon", type: "text", placeholder: "weapon (opt)", value: nearWeapon,
+            className: "botmod-weapon", type: "text", placeholder: "weapon (opt)", value: nearWeapon, disabled: noPlayers,
             "aria-label": "Weapon (optional)",
             onChange: (e) => setNearWeapon(e.target.value)
         }), btn("Spawn near", {
             action: "spawnNear", player: nearPlayer,
             count: toCount(nearCount),
             weapon: nearWeapon === "" ? undefined : nearWeapon
-        }, "botmod-primary"));
+        }, "botmod-primary", noPlayers));
     }
     function renderBrainRow(h, s, busy, btn) {
         return h("div", { className: "botmod-row botmod-brain" }, h("span", { className: "botmod-label" }, "Brain:"), btn(s.neural === true ? "Static AI" : "GA brain", { action: "neural", on: s.neural !== true }), s.neuralPath !== undefined && s.neuralPath !== "" ? h("span", { className: "botmod-window" }, `weights: ${s.neuralPath}`) : null);
@@ -246,7 +297,7 @@
         }, "− teams"), h("button", {
             className: "botmod-btn", title: "More teams", disabled: busy !== "" || teamCount >= 8,
             onClick: () => post({ action: "teamCount", count: teamCount + 1 })
-        }, "+ teams"), armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"), h("span", { className: "botmod-window" }, "drag a bot onto a team (or use its Team column) · picks persist"));
+        }, "+ teams"), armedBtn("Clear teams", { action: "clearTeams" }, "botmod-danger"), h("span", { className: "botmod-window" }, "drag a bot onto a team, or use the Team column in the scoreboard · assignments are saved"));
     }
     function renderConfigRow(h, s) {
         return h("div", { className: "botmod-row botmod-cfg" }, h("span", { className: "botmod-window" }, `vision ${num(s.visionRange)}m · attack ${num(s.attackRange)}m · spawn r ${num(s.spawnRadius)}m` +
@@ -269,15 +320,12 @@
         let rowClass = "";
         if (changedSig !== null) {
             rowClass = "botmod-flash";
-            if (dragName === b.name) {
-                rowClass += " botmod-drag";
-            }
         }
-        else if (dragName === b.name) {
-            rowClass = "botmod-drag";
+        if (dragName === b.name) {
+            rowClass = rowClass === "" ? "botmod-drag" : `${rowClass} botmod-drag`;
         }
         return h("tr", {
-            key: changedSig === null ? String(b.entityId) : `${b.entityId}:${changedSig}`,
+            key: String(b.entityId),
             draggable: true,
             className: rowClass,
             title: "Drag onto a team bucket",
@@ -305,12 +353,13 @@
     }
     let prevRowSigs = new Map();
     function renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver) {
-        const th = (label, key) => h("th", {
+        const th = (label, key, hint) => h("th", {
             key: label,
             className: "botmod-sortable",
             "aria-sort": ariaSortValue(sort, key)
         }, h("button", {
             className: "botmod-sort-btn",
+            title: hint === undefined ? `Sort by ${label}` : `Sort by ${hint}`,
             onClick: () => setSort((srt) => ({ key, dir: srt.key === key ? -srt.dir : -1 }))
         }, label, sortArrowNode(h, sort, key)));
         const teamCount = Math.max(0, Math.min(8, numOr(s.teamCount, 2)));
@@ -331,8 +380,16 @@
         };
         prevRowSigs = sigs;
         return h("div", { className: "botmod-scoreboard" }, h("h3", null, `Scoreboard (${bots.length}) · drag rows onto a team or use the Team column`), bots.length === 0
-            ? h("p", { className: "botmod-empty" }, "No bots alive.")
-            : h("table", { className: "botmod-table" }, h("caption", { className: "botmod-sronly" }, "Bot scoreboard"), h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players"), th("Kills Z", "zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level"), th("Near", "nearestPlayerDist"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver, changed(b.entityId))))));
+            ? h("p", { className: "botmod-empty" }, "No bots alive. Set a count above and press Spawn to add some.")
+            : h("div", { className: "botmod-tablescroll" }, h("table", { className: "botmod-table" }, h("caption", { className: "botmod-sronly" }, "Bot scoreboard"), h("thead", null, h("tr", null, th("Bot", "name"), th("Weapon", "weapon"), th("HP", "health"), th("Kills P", "players", "Kills on players"), th("Kills Z", "zombies", "Kills on zombies"), th("Deaths", "deaths"), th("Score", "score"), th("Lvl", "level", "Bot level"), th("Near", "nearestPlayerDist", "Nearest player"), th("Team", "team"), h("th", { key: "state" }, "State"), h("th", { key: "x" }, ""))), h("tbody", null, [...bots].sort(bySortKey(sort)).map((b) => botRow(h, b, busy, post, teamOptions, dragName, setDragName, setDropOver, changed(b.entityId)))))));
+    }
+    function renderQueryError(h, errStatus, onRetry) {
+        const auth = errStatus === 401 || errStatus === 403;
+        return h("div", { className: "botmod-panel" }, h("h2", null, "Bot Control"), h("span", { className: `botmod-pill ${auth ? "botmod-bad" : "botmod-off"}`, role: "status" }, auth ? "AUTH REQUIRED" : "API ERROR"), h("p", { role: "alert" }, auth
+            ? "Authentication required: log in to the dashboard as an admin (permission level 0) to control bots."
+            : `The bot API is not responding (HTTP ${errStatus === 0 ? "error" : String(errStatus)}). The panel keeps retrying every ${POLL_INTERVAL_MS / 1000} seconds.`), auth
+            ? h("button", { className: "botmod-btn", onClick: () => { location.href = "/"; } }, "Log in")
+            : h("button", { className: "botmod-btn", onClick: onRetry }, "Retry now"));
     }
     function BotPanel({ React, HTTP, useQuery }) {
         var _a, _b;
@@ -357,15 +414,13 @@
         const [nearWeapon, setNearWeapon] = React.useState("");
         const [armed, setArmed] = React.useState("");
         const [announce, setAnnounce] = React.useState("");
+        const [status, setStatus] = React.useState(null);
         const [sort, setSort] = React.useState({ key: "score", dir: -1 });
         const [dragName, setDragName] = React.useState(null);
         const [dropOver, setDropOver] = React.useState(null);
+        const refetch = () => (query.refetch === undefined ? Promise.resolve() : query.refetch());
         if (query.isError === true) {
-            const status = num((_b = (_a = query.error) === null || _a === void 0 ? void 0 : _a.response) === null || _b === void 0 ? void 0 : _b.status);
-            const msg = status === 403
-                ? "Authentication required: log in to the dashboard as an admin (permission level 0) to control bots."
-                : `Bot API unavailable (HTTP ${status === 0 ? "error" : String(status)}).`;
-            return h("div", { className: "botmod-panel" }, h("h2", null, "Bot Control"), h("span", { className: "botmod-pill botmod-bad", role: "status" }, "AUTH REQUIRED"), h("p", { role: "alert" }, msg), h("button", { className: "botmod-btn", onClick: () => { location.href = "/"; } }, "Log in"));
+            return renderQueryError(h, num((_b = (_a = query.error) === null || _a === void 0 ? void 0 : _a.response) === null || _b === void 0 ? void 0 : _b.status), () => { setBlocked(false); void refetch(); });
         }
         const s = unwrapSnap(query.data);
         const enabled = s.enabled === true;
@@ -374,12 +429,11 @@
         if (onlinePlayers.length > 0 && !onlinePlayers.some((p) => p.name === nearPlayer)) {
             setNearPlayer(onlinePlayers[0].name);
         }
-        const refetch = () => (query.refetch === undefined ? Promise.resolve() : query.refetch());
-        const post = (body) => postAction({ HTTP, busy, setBusy, setArmed, say: setAnnounce, refetch, body });
+        const post = (body) => postAction({ HTTP, busy, setBusy, setArmed, setStatus, refetch, body });
         const btn = makeBtn(h, busy, post);
         const armedBtn = makeArmedBtn(h, armed, setArmed, busy, setAnnounce, post);
         const pill = (on, onLabel, offLabel) => h("span", { className: `botmod-pill ${on ? "botmod-ok" : "botmod-off"}` }, on ? onLabel : offLabel);
-        return h("div", { className: "botmod-panel", "aria-busy": busy !== "" }, renderBotHeader(h, s, onlinePlayers, pill), h("p", { key: "srstatus", className: "botmod-sronly", role: "status" }, announce), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver), renderConfigRow(h, s), renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver));
+        return h("div", { className: "botmod-panel", "aria-busy": busy !== "" }, renderBotHeader(h, s, onlinePlayers, pill), h("p", { key: "srstatus", className: "botmod-sronly", role: "status" }, announce), renderCommandStatus(h, status, () => setStatus(null)), renderSpawnRow(h, enabled, busy, spawnCount, setSpawnCount, post, btn, armedBtn), renderSkillRow(h, s, busy, post), renderNearRow(h, onlinePlayers, nearPlayer, setNearPlayer, nearCount, setNearCount, nearWeapon, setNearWeapon, btn), renderBrainRow(h, s, busy, btn), renderTeamRow(h, s, busy, btn), renderVsRow(h, s, busy, post), renderTeamsCard(h, s, bots, busy, post, armedBtn, dragName, setDragName, dropOver, setDropOver), renderConfigRow(h, s), renderScoreboard(h, s, bots, busy, post, sort, setSort, dragName, setDragName, setDropOver));
     }
     const loggedIn = document.cookie.split(";").some((c) => c.trim().startsWith("sid="));
     const webMod = {

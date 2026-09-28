@@ -31,6 +31,13 @@ fails on drift between them.
   `viz.py`, `replay.py`) now has a `description`, per-flag help, worked examples
   and an exit-status section in `--help`, all following the same 0/1/2
   convention as argparse itself.
+- Web dashboard panel: a command that the server rejects now says so in a
+  result line under the header instead of silently springing the button back.
+  Enable/Disable acts on one click like every other toggle (only the actions
+  that remove bots still confirm), "Spawn near" is disabled while no player
+  is online, a non-auth API failure offers Retry rather than Log in, the
+  scoreboard scrolls sideways instead of widening the sidebar, and a live row
+  no longer remounts under the user's cursor.
 
 ## [0.7.1] - 2026-09-21
 
