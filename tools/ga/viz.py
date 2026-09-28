@@ -76,14 +76,14 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None, dpi=theme.CHART_
     yss = [np.linspace(0.08 + (max_n - n) * 0.04, 0.92 - (max_n - n) * 0.04, n) for n in layers]
     for li, (n, x) in enumerate(zip(layers, xs, strict=True)):
         ys = yss[li]
-        color = ["#0ea5e9", "#0369a1", "#0f172a"][li]
+        color = theme.CHART_LAYERS[li]
         ax.scatter([x] * n, ys, s=68, c=color, alpha=0.92, edgecolors="white", linewidths=1.0, zorder=3)
         labels = [INPUT_LABELS, [f"h{i}" for i in range(hidden)], OUT_LABELS][li]
         for y, lab in zip(ys, labels, strict=True):
-            ax.text(x + 0.06, y, lab, fontsize=6.2, va="center", color="#334155")
+            ax.text(x + 0.06, y, lab, fontsize=6.2, va="center", color=theme.CHART_INK_MUTED)
         # bias ring (size by |b|)
         if li in (1, 2):
-            bias, ring = (b1, "#64748b") if li == 1 else (b2, "#475569")
+            bias, ring = (b1, theme.CHART_RING) if li == 1 else (b2, theme.CHART_INK_MUTED)
             for y, b in zip(ys, bias, strict=True):
                 s = float(np.clip(abs(b) * 22, 0, 18))
                 if s > 3:
@@ -102,7 +102,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None, dpi=theme.CHART_
                 # W1 is hidden×inputs: r=hidden, c=inputs; W2 is outputs×hidden: r=out, c=hidden
                 y0 = yss[li][c]
                 y1 = yss[li + 1][r]
-                col = "#ef4444" if W[r, c] < 0 else "#0369a1"
+                col = theme.WEIGHT_NEG if W[r, c] < 0 else theme.WEIGHT_POS
                 ax.plot([x0, x1], [y0, y1], color=col, alpha=float(np.clip(abs(W[r, c]) * 0.95, 0.12, 0.92)), lw=float(np.clip(abs(W[r,c])*2.1, 0.45, 2.8)), zorder=1)
     ax.set_xlim(-0.12, 2.28); ax.set_ylim(0, 1)
     ax.set_xticks([]); ax.set_yticks([])
@@ -140,16 +140,20 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None, dpi=theme.CHART_
                             _sigmoid(y[3]), _sigmoid(y[4])]))
     X = np.arange(5)
     wbar = 0.23
+    # The three canonical traces are the ramp's three steps. A caller-supplied
+    # longer list cycles rather than inventing a fourth hue.
     for i, (name, vals) in enumerate(outs):
         off = (i - 1) * wbar
-        ax3.bar(X + off, vals, width=wbar, label=name, alpha=0.88, edgecolor="white", linewidth=0.7)
+        ax3.bar(X + off, vals, width=wbar, label=name,
+                color=theme.CHART_LAYERS[i % len(theme.CHART_LAYERS)],
+                alpha=0.88, edgecolor="white", linewidth=0.7)
     ax3.set_xticks(X); ax3.set_xticklabels(OUT_LABELS, fontsize=8)
     ax3.set_ylabel("output (sigmoid/tanh)"); ax3.set_ylim(0, 1)
     ax3.set_title("Activation traces: canonical observations (healthy / wounded / camp) · aim is tanh ([-1,1] shown clipped)", fontsize=8)
     ax3.legend(frameon=False, fontsize=7, ncols=3, loc="upper right")
     ax3.grid(True, axis="y", alpha=0.15)
 
-    fig.suptitle("BotNeuralBrain: topology + weights + activations", fontsize=9, color="#0f172a", y=0.995)
+    fig.suptitle("BotNeuralBrain: topology + weights + activations", fontsize=9, color=theme.CHART_INK, y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(out, dpi=dpi)
     plt.close(fig)

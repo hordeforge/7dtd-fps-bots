@@ -50,6 +50,56 @@ SERIES_BEST = "#3a332c"
 # to 45 KB.
 CHART_DPI = 120
 
+# Chart ink, tuned against the white plate the PNGs sit on rather than against
+# BG: matplotlib always renders on white, and the dark dashboard puts the figure
+# on a white .fig for the same reason. viz.py reads these, so the largest
+# figure on the page cannot carry a palette the page does not have.
+CHART_INK = PAPER_FG        # 17.9:1 on white
+CHART_INK_MUTED = PAPER_MUTED  # 7.2:1
+CHART_RING = SERIES_DIM     # 3.7:1, a non-text ring so it only has to clear 3:1
+# Layer fills step down the warm ramp so input -> hidden -> output reads as one
+# progression instead of three unrelated dots. All clear 4.7:1 on white. The
+# same three steps are the ordered scale for the activation traces, which are
+# themselves ordered (healthy, wounded, camping), so an ordered ramp is the
+# honest encoding there too and a second hue buys nothing.
+CHART_LAYERS = ("#a8622c", "#7d3a1a", "#3a332c")
+# Weight sign is data, not decoration, so it keeps a diverging pair instead of
+# joining the one-hue ramp: a warm red negative against a blue from the same
+# RdBu family the W1/W2 matrices are painted with, so an edge and the cell it
+# weights never disagree about sign. 6.0:1 and 6.9:1 on white.
+WEIGHT_NEG = "#b03a2e"
+WEIGHT_POS = "#2f5d8a"
+
+# The arena replay is a canvas, so it cannot read the CSS custom properties the
+# page above it uses; these are the same tokens inlined into the script (see
+# replay.py's @ARENA@). The ground is a step under BG so the arena reads as a
+# lit surface inside the dark page.
+ARENA_BG = "#14110e"
+ARENA_EDGE = "#4a433c"
+ARENA_WALL = SERIES_DIM
+# Weapon is the one categorical scale in the family: six loadouts have to be
+# told apart at a glance in a replay that plays at 80ms a frame, so it is the
+# one place six hues are allowed. They sit in a mid-chroma band rather than the
+# pastel row a default palette hands you, and the pistol step is the accent
+# because it is the most common. All clear 5.4:1 on ARENA_BG.
+WEAPON_RING = ("#e0644a", "#d9a441", "#c9c05a", "#5fa88f", "#7f9fd6", "#c98fc0")
+# The bot's tag letter is cut out of its own ring, so the ink is the ground.
+TAG_INK = ARENA_BG
+# Muzzle flash and the held aim line are the same two steps theme.py already
+# uses for "look at this": ACCENT_TEXT at full strength for the shot, a quarter
+# of it for the aim the bot is holding. 9.9:1 on ARENA_BG.
+SHOT = "#e8b53c"
+AIM = ACCENT_TEXT
+# Zombie green, then the bot's own health ramp. HP_WARN is a warmer yellow than
+# SHOT on purpose: one is a bullet leaving the barrel, the other is a bar that
+# is about to change state, and they are never drawn over each other.
+ZOMBIE = "#4f9d78"
+ZOMBIE_EDGE = "#3f7d61"
+HP_TRACK = SURFACE
+HP_OK = "#5fa860"
+HP_WARN = "#c9962f"
+HP_BAD = "#cc5148"
+
 _BASE = """
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; padding: 0 20px 56px; }
@@ -97,7 +147,7 @@ tbody td:first-child { font-family: inherit; }
 
 DARK_STYLE = f"""
 :root {{ --bg: {BG}; --surface: {SURFACE}; --line: {LINE}; --fg: {FG}; --muted: {MUTED};
-  --accent: {ACCENT}; --accent-text: {ACCENT_TEXT};
+  --accent: {ACCENT}; --accent-text: {ACCENT_TEXT}; --arena: {ARENA_BG};
   --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace; }}
 body {{ background: {BG}; color: {FG}; font-family: var(--sans); }}
@@ -125,3 +175,23 @@ h2 {{ color: var(--accent-text); font-family: var(--mono); letter-spacing: .06em
 thead th {{ color: var(--muted); border-bottom: 1px solid var(--line); }}
 code {{ background: #ece7de; color: {PAPER_FG}; padding: 1px 5px; border-radius: 3px; font-size: 12px; }}
 """
+
+# The canvas cannot read the custom properties above, so replay.py is handed
+# this dict as JSON and the draw loop reads A.<token> like the CSS reads
+# var(--token). One source for both surfaces is the point: a legend dot and the
+# ring it labels are the same value, so they cannot disagree.
+ARENA = {
+    "BG": ARENA_BG,
+    "EDGE": ARENA_EDGE,
+    "WALL": ARENA_WALL,
+    "WEAPON_RING": list(WEAPON_RING),
+    "TAG_INK": TAG_INK,
+    "SHOT": SHOT,
+    "AIM": AIM,
+    "ZOMBIE": ZOMBIE,
+    "ZOMBIE_EDGE": ZOMBIE_EDGE,
+    "HP_TRACK": HP_TRACK,
+    "HP_OK": HP_OK,
+    "HP_WARN": HP_WARN,
+    "HP_BAD": HP_BAD,
+}
