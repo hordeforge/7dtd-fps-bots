@@ -31,6 +31,7 @@ export LC_ALL=C TZ=UTC
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/tool-versions.sh"
+source "$root/scripts/digest.sh"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/clanker/oxlint-standards"
 webmod_dir="$root/Source/BotMod/WebMod"
 
@@ -57,11 +58,7 @@ archive="$cache_dir/anti-slop.tar.gz"
 # a tampered cache fails the gate too rather than linting against whatever is
 # on disk.
 archive_digest() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | cut -d' ' -f1
-  else
-    shasum -a 256 "$1" | cut -d' ' -f1
-  fi
+  "${SHA[@]}" "$1" | cut -d' ' -f1
 }
 verify_archive() {
   local actual

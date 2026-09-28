@@ -10,10 +10,10 @@ Same combat sim (`tools/ga/combat_sim.py`, numba tick loop), same seed chain
 
 | Sweep | Pop | Gens | Seed | Hidden | Activations | File |
 |---|---|---|---|---|---|---|
-| R1b-40 | 40 | 40 | 42 | 8,16,16,24 | tanh, relu | `tools/ga/sweeps/sweep_combat_H40_g40_s42.*` |
+| R1b-40 | 40 | 40 | 42 | 8,16,16,24 | tanh, relu | `evolved/sweeps/sweep_combat_H40_g40_s42.*` |
 
 Sweep tool: `tools/ga/sweep.py --sweep builtin` (spawns one GA per layout,
-plots all curves on one chart + JSON, `tools/ga/sweeps/`).
+plots all curves on one chart + JSON, `evolved/sweeps/`).
 
 ## Result (combat `H40_g40_s42`)
 
@@ -50,7 +50,7 @@ pays when the task has actual LOS/wall/burst/zombie pressure.
 
 ## Artifacts
 
-- Sweep chart: `tools/ga/sweeps/sweep_H40_g40_s42.png`
-- Sweep JSON: `tools/ga/sweeps/sweep_combat_H40_g40_s42.json` (per-gen `best/mean`)
+- Sweep chart: `evolved/sweeps/sweep_H40_g40_s42.png`
+- Sweep JSON: `evolved/sweeps/sweep_combat_H40_g40_s42.json` (per-gen `best/mean`)
 - This report: `docs/research/REPORT-2026-08-19-R1b-layout-sweep-combat.md`
 - Repro: `python3 tools/ga/sweep.py --sweep builtin --pop 40 --gens 40 --seed 42`

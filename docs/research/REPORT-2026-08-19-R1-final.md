@@ -63,7 +63,7 @@ python3 tools/ga/report.py --runs evolved/runs/2026-08-19_013411_pop40_g80_s42 -
 
 - Champion: `evolved/best.json` (`gen 37, 325 w, hash 03e6d06c`) + `best.meta.json`
 - Run: `evolved/runs/2026-08-19_013411_pop40_g80_s42/` + `evolved/report.html` + `net.png`
-- Sweep: `tools/ga/sweeps/sweep_H40_g40_s42.png` + `sweep_combat_H40_g40_s42.json`
+- Sweep: `evolved/sweeps/sweep_H40_g40_s42.png` + `sweep_combat_H40_g40_s42.json`
 - Code: `tools/ga/combat_sim.py` (numba) + `harness.py` (9-match mix) + `Source/BotMod/AI/BotNeuralBrain.cs`
 
 ## Next slice (no ask needed)

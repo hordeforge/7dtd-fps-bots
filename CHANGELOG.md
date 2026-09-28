@@ -59,6 +59,18 @@ of them removes a config key or a console command.
   is caught before a push. Added `CONTRIBUTING.md`: prerequisites, the loop,
   how a new suite is registered in `scripts/test-idempotency.sh`, and what a
   pull request has to carry.
+- The R0/R1 sweep artifacts (`sweep_42.json`, `sweep_H24_g20_s42.png`,
+  `sweep_H32_g30_s42.png`, `sweep_H40_g40_s42.png`,
+  `sweep_combat_H40_g40_s42.json`) moved from `tools/ga/sweeps/` to
+  `evolved/sweeps/`, the location `evolved/README.md` documents and every
+  later report cites. Two directories held the same kind of tool output; the
+  one inside the tooling source tree was the outlier, and `sweep.py` no longer
+  writes there. The four R0..R2 reports were repointed.
+- `scripts/lint-webui.sh` picked its own SHA-256 command
+  (`sha256sum`, else `shasum -a 256`) for the anti-slop archive digest. It now
+  sources `scripts/digest.sh` like the four other digest callers, so the pick
+  exists once and a host with neither tool fails loud instead of reaching a
+  confusing digest mismatch.
 - `Source/BotMod/Config/` held four engine-free primitives that have nothing
   to do with configuration and are used by every layer (`Lcg`, `BotText`,
   `LogSanitizer`, `AtomicTextFile`). They moved to `Source/BotMod/Foundation/`

@@ -61,7 +61,7 @@ python3 tools/ga/report.py --runs evolved/runs/2026-08-19_015608_pop40_g80_s42 -
 ## Artifacts
 
 - Champion: `evolved/best.json` (`gen 25, hash 885a3e9b`) + `evolved/report.html` + `evolved/runs/…/net.png`
-- Harness: `tools/ga/combat_sim.py` (numba) + `harness.py` (9-match) + `tools/ga/sweeps/`
+- Harness: `tools/ga/combat_sim.py` (numba) + `harness.py` (9-match) + `evolved/sweeps/`
 - Prove: `docs/research/REPORT-2026-08-19-R1-combat-GA.md`, `REPORT-2026-08-19-R1-live-dedi.md`
 
 ## Next
