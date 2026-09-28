@@ -133,7 +133,16 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
         v2, rng = _lcg01(rng); rad = 8.0 + v2 * 18.0
         bx.append(40.0 + math.cos(ang) * rad); by.append(40.0 + math.sin(ang) * rad)
-        bhp.append(100.0); bweapon.append(bot_weapon if bot_weapon >= 0 else ((rng >> 8) % 6))
+        bhp.append(100.0)
+        # Fresh draw, matching combat_sim's spawn loop. The old roll
+        # `(rng >> 8) % 6` re-read the state the radius draw had just left
+        # without advancing it, so consecutive bots drew correlated weapons
+        # instead of independent ones.
+        if bot_weapon >= 0:
+            bweapon.append(bot_weapon)
+        else:
+            vw, rng = _lcg01(rng)
+            bweapon.append(int(vw * 6.0) % 6 if vw < 1.0 else 5)
         bskill.append(float(bot_skill)); balive.append(True)
     zx = []; zy = []; zhp = []; zalive = []
     for _ in range(n_zombies):

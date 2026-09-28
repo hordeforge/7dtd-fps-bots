@@ -22,6 +22,7 @@ import base64
 import csv
 import html
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -91,6 +92,13 @@ def load_run_csv(run: Path):
             m = float(r["mean"])
             lo = float(r.get("q25") or r["mean"])
             hi = float(r.get("q75") or r["mean"])
+            # Same guard as report.load_csv: float("nan") parses fine but
+            # poisons every max/mean and delta downstream (max() over a list
+            # holding NaN returns NaN), so the chart silently drops the
+            # series. evolve.py writes a bare "nan" held column by design, and
+            # a torn or hand-edited row can carry one into best/mean.
+            if not all(map(math.isfinite, (b, m, lo, hi))):
+                raise ValueError("non-finite fitness value")
         except (KeyError, TypeError, ValueError):
             skipped += 1
             continue

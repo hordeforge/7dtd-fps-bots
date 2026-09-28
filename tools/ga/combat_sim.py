@@ -63,6 +63,29 @@ def _lcg01(s: int):
 
 
 @numba.njit
+def _loadout_pick(rng: int, n_weapons: int):
+    """Draw one weapon index and return (index, advanced state).
+
+    Separate from the caller so the draw itself is testable: the kernel's
+    version used to be the inline `(rng >> 8) % 6`, which read the state
+    without advancing it. A determinism probe replaying whole matches cannot
+    see that (the match still replayed exactly, just with every bot on the
+    same gun), so the draw needs its own check against this function.
+
+    The v < 1.0 guard is belt-and-braces: the top 24 bits cannot produce
+    1.0, but the modulo would then wrap a hypothetical 1.0 to index 0 and
+    bias that one outcome.
+    """
+    v, s = _lcg01(rng)
+    idx = int(v * n_weapons)
+    if idx >= n_weapons:
+        idx = n_weapons - 1
+    if idx < 0:
+        idx = 0
+    return idx, s
+
+
+@numba.njit
 def _forward(w, x, y, relu):
     # Hidden activation per call: tanh is what ships (BotNeuralBrain.cs); relu is
     # the sweep alternative (harness.ACTIVATION=1 -> simulate_match_relu).
@@ -226,7 +249,17 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
             bx[i] = 40.0 + math.cos(ang) * rad
             by[i] = 40.0 + math.sin(ang) * rad
         bhp[i] = 100.0
-        bweapon[i] = wep_pin if wep_pin >= 0 else ((rng >> 8) % 6)  # pinned loadout or random
+        # Pinned loadout, or a fresh draw from the run's one stream. The roll
+        # used to be `(rng >> 8) % 6`, which re-read the state without
+        # advancing it: on the pinned-position branch (spawn_gap > 0) that state
+        # is the one left by the previous bot, so every bot in the match drew the
+        # same weapon and a "mixed" arena was really a six-way AK match. On the
+        # ring branch it re-used the state that had just produced the spawn
+        # radius, correlating loadout with position.
+        if wep_pin >= 0:
+            bweapon[i] = wep_pin
+        else:
+            bweapon[i], rng = _loadout_pick(rng, 6)
         bskill[i] = float(bot_skill)
         balive[i] = True
     for i in range(n_zombies):

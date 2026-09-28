@@ -85,6 +85,38 @@ def check_match_kernel() -> None:
     print("  ok  combat_sim: same seed replays bit-for-bit, a new seed does not")
 
 
+def check_loadout_draw() -> None:
+    """A mixed loadout must draw independently per bot, on every spawn branch.
+
+    The spawn loop's weapon roll used to re-read the LCG state without advancing
+    it. On the pinned-position branch (spawn_gap > 0) no position draw happens,
+    so the state never moved and every bot in the match drew the SAME weapon:
+    a "mixed" arena was really a six-way identical-loadout match, silently. A
+    determinism probe cannot see that (the match still replayed exactly), so it
+    needs its own check on the draw itself, not on the match bytes.
+    """
+    # Replay the spawn loop's roll for both branches, from the same seed the
+    # sim uses, and require the picks to spread over the weapon table. The
+    # stream is threaded across bots exactly as the kernel threads it: a fresh
+    # seed per bot would pass this check even if the roll never advanced.
+    for gap in (0.0, 50.0):
+        picks = []
+        rng = SEED & 0xFFFFFFFF
+        for _ in range(12):
+            if gap <= 0.0:
+                _, rng = combat_sim._lcg01(rng)   # the two position draws
+                _, rng = combat_sim._lcg01(rng)
+            # The kernel's own draw, so this check fails if the roll regresses
+            # rather than re-asserting a correct copy of it here.
+            pick, rng = combat_sim._loadout_pick(rng, 6)
+            picks.append(pick)
+        if len(set(picks)) < 2:
+            _fail(f"combat_sim spawn loop: spawn_gap={gap} drew one weapon "
+                  f"({picks[0]}) for every bot; the loadout roll is not "
+                  f"advancing the LCG stream")
+    print("  ok  combat_sim: mixed loadout draws independently on both spawn branches")
+
+
 def check_threaded_harness() -> None:
     """evaluate_many fans matches across cores; the scores must not care."""
     w = ga.he_init(np.random.default_rng(SEED))
@@ -168,7 +200,7 @@ if __name__ == "__main__":
               f"(see --help)", file=sys.stderr)
         raise SystemExit(2)
     for step in (check_evolution, check_rng_checkpoint, check_match_kernel,
-                 check_threaded_harness, check_canonical_stick,
-                 check_concurrent_canonical_stick):
+                 check_loadout_draw, check_threaded_harness,
+                 check_canonical_stick, check_concurrent_canonical_stick):
         step()
     print("determinism: every layer replays from the seed")

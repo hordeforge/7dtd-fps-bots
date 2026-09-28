@@ -63,6 +63,12 @@ namespace BotMod.Core
         // evolved on (the R8 fire-cost pacing task shape).
         const float kSpreadAddPerShot = 0.25f;
         const float kSpreadDecayPerSec = 1.0f;
+        // Minimum health fraction for the neural camp output to hold position
+        // (AttackInRange). Same 0.55 ratio as the ChaseTarget cover-advance
+        // gate, and the same ratio tools/ga/combat_sim.py encodes as
+        // `bhp[bi] > 55` against its fixed 100 hp, so the runtime and the
+        // trainer agree at any BotHealth.
+        const float kCampHealthFrac = 0.55f;
         float _fireSpread;
         // zdtd_bot camp hold, ported back: when a camper decides to camp, hold
         // position for a few seconds and slowly sweep the facing (Q3/Doom3 LTG)
@@ -384,7 +390,15 @@ namespace BotMod.Core
                 float strafe = _neuralOuts.StrafeLogit;
                 float fwd = 1.2f * (1f - 2f * retreat);
                 float lat = (strafe - 0.5f) * 2.4f;
-                if (_neuralOuts.WantCamp && me.Health > 55f && dist > 18f) fwd *= 0.15f;
+                // Health as a fraction of cfg.BotHealth, like every other hp
+                // gate in this file (0.55 is the same ratio the sim's hardcoded
+                // `bhp > 55` encodes at its fixed 100 hp). The literal 55f was
+                // an absolute HP value: with the shipped BotHealth of 50 a
+                // full-health bot never cleared it and the camp output was
+                // dead, and at BotHealth 300 a bot at 18% hp still camped.
+                if (_neuralOuts.WantCamp
+                    && me.Health > cfg.BotHealth * kCampHealthFrac
+                    && dist > 18f) fwd *= 0.15f;
                 Vector3 toT = tPos - me.position; toT.y = 0;
                 if (toT.sqrMagnitude > 0.001f)
                 {
