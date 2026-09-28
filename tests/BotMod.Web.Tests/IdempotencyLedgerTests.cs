@@ -179,6 +179,29 @@ static class IdempotencyLedgerTests
             finally { IdempotencyLedger.Retention = TimeSpan.FromMinutes(10); }
         }
 
+        // 9. The production clock's units. ElapsedNow must convert the raw
+        // Stopwatch reading through Stopwatch.Frequency, on hosts with and
+        // without a high-resolution counter. Reading a low-resolution
+        // counter's ticks as DateTime ticks runs the clock ~10000x slow, and
+        // the virtual-clock scenarios above cannot see that: they replace
+        // the source entirely.
+        {
+            var real = (Func<TimeSpan>)Delegate.CreateDelegate(
+                typeof(Func<TimeSpan>),
+                typeof(IdempotencyLedger).GetMethod("DefaultElapsedNow",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            TimeSpan t0 = real();
+            System.Threading.Thread.Sleep(60);
+            TimeSpan t1 = real();
+            sw.Stop();
+            TimeSpan reported = t1 - t0;
+            Check("production clock advances with the monotonic counter",
+                reported >= TimeSpan.FromMilliseconds(40));
+            Check("production clock does not outrun the monotonic counter",
+                reported <= sw.Elapsed + TimeSpan.FromMilliseconds(50));
+        }
+
         Console.WriteLine(_failures == 0 ? "all idempotency ledger tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;
     }

@@ -31,11 +31,30 @@ static class AtomicTextFileTests
         if (!ok) _failures++;
     }
 
+    // Temp dirs this process created, cleaned up at the end. A blanket sweep of
+    // /tmp/botmod-atomictest-* would also delete a concurrently running
+    // instance's dirs, and its in-flight writers then fail with a vanished
+    // .tmp (reported as "concurrent writes complete without errors" plus a torn
+    // final primary). Two checkouts of this repo on one machine hit that.
+    static readonly List<string> _dirs = new List<string>();
+
     static string TempDir()
     {
         string dir = Path.Combine(Path.GetTempPath(), RunTag + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        _dirs.Add(dir);
         return dir;
+    }
+
+    static void Cleanup()
+    {
+        foreach (string dir in _dirs)
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+        _dirs.Clear();
     }
 
     static int Main()
@@ -217,8 +236,7 @@ static class AtomicTextFileTests
             foreach (string e in errors) Console.WriteLine("     " + e);
         }
 
-        foreach (string dir in Directory.GetDirectories(Path.GetTempPath(), RunTag + "*"))
-            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+        Cleanup();
 
         Console.WriteLine(_failures == 0 ? "all atomic text file tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;

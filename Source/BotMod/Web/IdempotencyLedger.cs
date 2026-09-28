@@ -54,11 +54,13 @@ namespace BotMod.Web
         static TimeSpan DefaultElapsedNow()
         {
             long delta = Stopwatch.GetTimestamp() - StartStamp;
-            // When no high-resolution counter exists GetTimestamp counts
-            // DateTime ticks, so convert like-for-like per mode.
-            return Stopwatch.IsHighResolution
-                ? TimeSpan.FromSeconds(delta / (double)Stopwatch.Frequency)
-                : TimeSpan.FromTicks(delta);
+            // GetTimestamp counts in Frequency units whether or not the host
+            // has a high-resolution counter, so the division is the one
+            // conversion. Reading the low-resolution counter as DateTime ticks
+            // would run this clock ~10000x slow (a millisecond read as 100 ns),
+            // stretching the replay window until only the capacity cap retires
+            // entries.
+            return TimeSpan.FromSeconds(delta / (double)Stopwatch.Frequency);
         }
 
         sealed class Entry

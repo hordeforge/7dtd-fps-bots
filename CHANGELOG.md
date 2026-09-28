@@ -43,6 +43,12 @@ fails on drift between them.
   `--n-zombies`, `--max-ticks` and `--env` before recording.
 - `tools/ga/sweep.py`'s docstring showed `--seeds` / `--trials` usage examples
   that no longer exist; they now show `--pop` / `--gens` / `--seed`.
+- `IdempotencyLedger`'s monotonic clock no longer reads a low-resolution
+  `Stopwatch` counter as `DateTime` ticks. On a host without a
+  high-resolution counter that ran the elapsed clock about 10000x slow, so
+  replay-window entries never aged out and only the capacity cap retired
+  them. `Stopwatch.GetTimestamp` always counts in `Stopwatch.Frequency`
+  units, so the single frequency division is now the only conversion.
 
 ### Changed
 
@@ -57,6 +63,11 @@ fails on drift between them.
   is online, a non-auth API failure offers Retry rather than Log in, the
   scoreboard scrolls sideways instead of widening the sidebar, and a live row
   no longer remounts under the user's cursor.
+- The `AtomicTextFile` suite cleans up only the temp directories its own
+  process created. The previous sweep of every `/tmp/botmod-atomictest-*`
+  directory deleted concurrent instances' in-flight writes, which showed up
+  as spurious "concurrent writes complete without errors" and torn-write
+  failures when two checkouts ran the suite at once.
 
 ## [0.7.1] - 2026-09-21
 
