@@ -398,6 +398,11 @@ namespace BotMod.Core
         const string BotClass = "zombieSoldier";
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)
         {
+            // Hoisted past the try so the catch below can release a body that
+            // was created but never completed its world spawn (see
+            // DiscardOrphan); the local name is unchanged for the create block.
+            Entity e = null;
+            bool spawned = false;
             try
             {
                 // "mixed" (the BotEntityClass default) resolves to the single soldier
@@ -414,7 +419,6 @@ namespace BotMod.Core
                     }
                 }
                 if (classId < 0) { string named = entityClassName; ModApi.WarnRateLimited(() => "Unknown entity class: " + (named ?? "(null)") + " (resolved " + want + ")"); return null; }
-                Entity e = null;
                 Exception createEx = null;
                 try
                 {
@@ -441,12 +445,58 @@ namespace BotMod.Core
                     return null;
                 }
                 TrySetEntityName(e, botName);
-                try { world.SpawnEntityInWorld(e); } catch (Exception ex) { ModApi.WarnRateLimited(() => "SpawnEntityInWorld failed: " + ex.Message); return null; }
+                try { world.SpawnEntityInWorld(e); spawned = true; }
+                catch (Exception ex)
+                {
+                    ModApi.WarnRateLimited(() => "SpawnEntityInWorld failed: " + ex.Message);
+                    DiscardOrphan(world, e);
+                    return null;
+                }
                 var ent = world.GetEntity(e.entityId);
                 if (ent != null) TrySetEntityName(ent, botName);
                 return ent ?? e;
             }
-            catch (Exception ex) { ModApi.WarnRateLimited(() => "SpawnBotEntity failed: " + ex); return null; }
+            catch (Exception ex)
+            {
+                // A throw anywhere between the create and the completed spawn
+                // (the world lookup below can fail too) leaves the caller with
+                // a null bot and the body unowned: nothing in BotManager's
+                // registry points at it, so only this release path reaches it.
+                // After a successful spawn the body is live and deliberately
+                // left alone: it is a real bot body, and the caller reached
+                // this catch only after the world already took it.
+                if (!spawned) DiscardOrphan(world, e);
+                ModApi.WarnRateLimited(() => "SpawnBotEntity failed: " + ex);
+                return null;
+            }
+        }
+
+        /// <summary>Release a body that was created but whose world spawn never
+        /// completed. CreateEntity allocates the entity; world.SpawnEntityInWorld
+        /// is what hands it to the world, and only world.RemoveEntity deallocates
+        /// one the world knows about. A throw in between therefore strands it:
+        /// the spawn reports failure, the bot is never registered, and the body
+        /// runs unmanaged as vanilla AI. MaintainPopulation retries every second
+        /// for as long as the fault lasts, so one stranded body per attempt is
+        /// unbounded world growth, not a one-off. The world-dictionary check
+        /// first: an entity that never got registered has nothing to remove, and
+        /// asking to remove it would throw on every failed create. Removal is
+        /// best-effort, exactly like the rest of this path, but a throw here is
+        /// reported rather than swallowed: it is the one case where the leak
+        /// survives.</summary>
+        static void DiscardOrphan(World world, Entity e)
+        {
+            if (world == null || e == null) return;
+            try
+            {
+                if (world.GetEntity(e.entityId) == null) return;
+                world.RemoveEntity(e.entityId, EnumRemoveEntityReason.Killed);
+            }
+            catch (Exception ex)
+            {
+                ModApi.WarnRateLimited(() => "unspawned bot entity " + e.entityId
+                    + " could not be removed and stays in the world: " + ex.Message);
+            }
         }
 
         /// <summary>Item value for an item id, or null when the id resolves to
