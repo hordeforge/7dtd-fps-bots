@@ -6,7 +6,8 @@
 # refuses to delete if the snapshot cannot be written. Set
 # BOTMOD_SKIP_BACKUP=1 to delete anyway (the state is then gone; see
 # docs/recovery.md). It only requires a Mods dir, not a valid server
-# install, so a half-installed server can still be cleaned up.
+# install, so a half-installed server can still be cleaned up, and it takes
+# the same deploy lock install.sh does so the two cannot overlap.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/server-dir.sh"
@@ -27,6 +28,12 @@ if [[ ! -d "$DST" ]]; then
   echo "Not installed -> $DST"
   exit 0
 fi
+
+# The same lock install.sh takes: this deletes the dir an install is renaming,
+# so the two must not overlap. Held from here to the end, released on exit.
+source "$ROOT/scripts/deploy-lock.sh"
+acquire_deploy_lock
+trap DEPLOY_LOCK_CLEANUP EXIT
 
 # Operator state is the config the server actually reads: the mod dir's own
 # Config/botmod.json, the file BOTMOD_CONFIG names when the deployment mounts

@@ -94,7 +94,8 @@ dst="$(fresh_server dst)"
 rm -f "$dst/Mods/BotMod/Config/botmod.json" "$dst/Mods/BotMod/Config/botmod.json.bak"
 rm -rf "$dst/Mods/BotMod"
 expect_ok "restore --apply" \
-  env SEVENDTD_DS_DIR="$dst" BOTMOD_CONTAINER_CONFIG="$work/absent" bash "$RESTORE" "$snap" --apply
+  env SEVENDTD_DS_DIR="$dst" BOTMOD_CONTAINER_CONFIG="$work/absent" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-restore" bash "$RESTORE" "$snap" --apply
 restored="$dst/Mods/BotMod/Config/botmod.json"
 if [[ -f "$restored" ]] && cmp -s "$src/Mods/BotMod/Config/botmod.json" "$restored"; then
   ok "restored config matches the source"
@@ -148,7 +149,8 @@ fi
 expect_ok "verify weights-only snapshot" \
   env SEVENDTD_DS_DIR="$empty" bash "$RESTORE" "$esnap"
 expect_fail "restore of a snapshot with no config is refused, not reported as done" \
-  env SEVENDTD_DS_DIR="$empty" bash "$RESTORE" "$esnap" --apply
+  env SEVENDTD_DS_DIR="$empty" BOTMOD_STATE_BACKUP_DIR="$work/pre-restore-noconfig" \
+  bash "$RESTORE" "$esnap" --apply
 
 check "the container config the mod writes outside the server root is backed up and restored"
 container="$(fresh_server container)/../container-config"
@@ -167,8 +169,35 @@ if grep -q "^# container-config=" "$csnap/MANIFEST"; then ok "snapshot records t
 cont_dst="$work/container-restore-host"
 mkdir -p "$cont_dst"
 expect_ok "restore onto the host that mounts it" \
-  env SEVENDTD_DS_DIR="$cont_dst" BOTMOD_CONTAINER_CONFIG="$container" bash "$RESTORE" "$csnap" --apply
+  env SEVENDTD_DS_DIR="$cont_dst" BOTMOD_CONTAINER_CONFIG="$container" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-restore-container" bash "$RESTORE" "$csnap" --apply
 if [[ -f "$container/botmod.json" ]]; then ok "container config still readable after restore"; else fail "restore removed the container config"; fi
+
+check "restore --apply snapshots the live config before overwriting it"
+# The host that will be overwritten still holds a config the operator set
+# after the snapshot above was taken. Restoring over it without a copy is how
+# a half-finished restore turns into lost operator state.
+overwrite_target="$(fresh_server overwrite)"
+printf '{"TargetBotCount": 77}\n' > "$overwrite_target/Mods/BotMod/Config/botmod.json"
+expect_ok "restore onto a host that already has a config" \
+  env SEVENDTD_DS_DIR="$overwrite_target" BOTMOD_CONTAINER_CONFIG="$work/absent" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-restore-live" bash "$RESTORE" "$snap" --apply
+if grep -q "snapshotted before the restore" "$work/out"; then
+  ok "pre-restore snapshot announced"
+else
+  fail "restore said nothing about snapshotting the state it overwrites"
+fi
+pre="$(newest_snapshot "$work/pre-restore-live")"
+if [[ -n "$pre" ]] && grep -q '"TargetBotCount": 77' "$pre/botmod.json"; then
+  ok "the overwritten config is recoverable from the pre-restore snapshot"
+else
+  fail "no pre-restore snapshot holding the live config under $work/pre-restore-live"
+fi
+if grep -q '"TargetBotCount": 24' "$overwrite_target/Mods/BotMod/Config/botmod.json"; then
+  ok "the snapshot's config was restored over it"
+else
+  fail "the restore did not take effect on $overwrite_target"
+fi
 
 check "a container-only snapshot on a host without that mount is refused, not silently dropped"
 # A server root with no mod-dir config plus a container config: the container
@@ -190,7 +219,8 @@ fi
 hostless="$work/hostless"
 mkdir -p "$hostless"
 expect_fail "container-only restore refused" \
-  env SEVENDTD_DS_DIR="$hostless" BOTMOD_CONTAINER_CONFIG="$work/absent" bash "$RESTORE" "$conly_snap" --apply
+  env SEVENDTD_DS_DIR="$hostless" BOTMOD_CONTAINER_CONFIG="$work/absent" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-restore-container-only" bash "$RESTORE" "$conly_snap" --apply
 if [[ -f "$hostless/Mods" ]]; then fail "refused restore still wrote into the host"; else ok "refused restore wrote nothing"; fi
 
 check "a BOTMOD_CONFIG snapshot is refused without the override, since the server would ignore it"
@@ -202,9 +232,11 @@ SEVENDTD_DS_DIR="$msnap_src" BOTMOD_STATE_BACKUP_DIR="$work/snapshots-mounted" \
 msnap="$(newest_snapshot "$work/snapshots-mounted")"
 if [[ -f "$msnap/botmod.config-path.json" ]]; then ok "mounted config in the snapshot"; else fail "mounted config missing from the snapshot"; fi
 expect_fail "restore without BOTMOD_CONFIG refused" \
-  env SEVENDTD_DS_DIR="$msnap_src" bash "$RESTORE" "$msnap" --apply
+  env SEVENDTD_DS_DIR="$msnap_src" BOTMOD_STATE_BACKUP_DIR="$work/pre-restore-mounted" \
+  bash "$RESTORE" "$msnap" --apply
 expect_ok "restore with BOTMOD_CONFIG" \
-  env SEVENDTD_DS_DIR="$msnap_src" BOTMOD_CONFIG="$mounted" bash "$RESTORE" "$msnap" --apply
+  env SEVENDTD_DS_DIR="$msnap_src" BOTMOD_CONFIG="$mounted" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-restore-mounted" bash "$RESTORE" "$msnap" --apply
 if [[ -f "$mounted" ]]; then ok "mounted config still in place"; else fail "mounted config disappeared"; fi
 
 check "a blank live config falls back to the .bak, so the snapshot is not the one unrestorable state"
@@ -276,7 +308,8 @@ ids="$work/ds-install"
 # of the script under the scratch root instead of writing into the repo's dist.
 payload="$work/install-root/dist/BotMod"
 mkdir -p "$work/install-root/scripts" "$payload/Config" "$payload/WebMod"
-cp "$ROOT/scripts/install.sh" "$ROOT/scripts/server-dir.sh" "$ROOT/scripts/digest.sh" "$work/install-root/scripts/"
+cp "$ROOT/scripts/install.sh" "$ROOT/scripts/server-dir.sh" "$ROOT/scripts/digest.sh" \
+  "$ROOT/scripts/deploy-lock.sh" "$work/install-root/scripts/"
 install_script="$work/install-root/scripts/install.sh"
 mkdir -p "$ids/7DaysToDieServer_Data/Managed" "$ids/Mods/0_TFP_Harmony" "$ids/Mods/BotMod/Config"
 touch "$ids/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" "$ids/Mods/0_TFP_Harmony/0Harmony.dll"
@@ -307,6 +340,96 @@ if grep -qx 'x' "$ids/Mods/BotMod/ModInfo.xml"; then
   ok "refused install left the live payload alone"
 else
   fail "refused install replaced the live payload"
+fi
+
+check "install.sh puts the running install back when the swap itself fails"
+# Undo the tamper above so the payload passes its manifest again; the manifest
+# was never touched, only the file it covers.
+printf 'x\n' > "$payload/ModInfo.xml"
+# A `mv` that fails on the payload swap and delegates every other rename, so
+# the first rename (the running install going aside) succeeds and the second
+# does not: the one window the rollback exists to cover.
+mkdir -p "$work/fakebin"
+cat > "$work/fakebin/mv" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  */.BotMod.staging.*)
+    echo "simulated rename failure" >&2
+    exit 1
+    ;;
+esac
+exec env PATH=/usr/bin:/bin mv "$@"
+SH
+chmod +x "$work/fakebin/mv"
+printf '{"TargetBotCount": 9}\n' > "$ids/Mods/BotMod/Config/botmod.json"
+expect_fail "a failed swap is reported" \
+  env SEVENDTD_DS_DIR="$ids" PATH="$work/fakebin:$PATH" bash "$install_script"
+if [[ -f "$ids/Mods/BotMod/BotMod.dll" ]]; then
+  ok "the running install is back in place"
+else
+  fail "a failed swap left the server with no mod dir"
+fi
+if grep -q '"TargetBotCount": 9' "$ids/Mods/BotMod/Config/botmod.json"; then
+  ok "the operator config survived the failed swap"
+else
+  fail "the failed swap lost the operator config"
+fi
+if compgen -G "$ids/Mods/.BotMod.previous.*" > /dev/null; then
+  fail "the previous install was left beside the mod dir"
+else
+  ok "no previous-install leftovers"
+fi
+if [[ -d "$ids/Mods/.botmod-deploy.lock" ]]; then
+  fail "a failed install left its lock behind"
+else
+  ok "lock released after the failure"
+fi
+
+check "a second install is refused while one is running, and a dead lock is taken over"
+mkdir -p "$ids/Mods/.botmod-deploy.lock"
+echo $$ > "$ids/Mods/.botmod-deploy.lock/pid"
+printf '{"TargetBotCount": 5}\n' > "$ids/Mods/BotMod/Config/botmod.json"
+expect_fail "install refused while the lock is live" \
+  env SEVENDTD_DS_DIR="$ids" bash "$install_script"
+if grep -q '"TargetBotCount": 5' "$ids/Mods/BotMod/Config/botmod.json"; then
+  ok "the refused install changed nothing"
+else
+  fail "the refused install still wrote to the server"
+fi
+# A lock whose owner is gone (a killed run) must not wedge the server forever.
+echo 999999 > "$ids/Mods/.botmod-deploy.lock/pid"
+expect_ok "stale lock taken over" \
+  env SEVENDTD_DS_DIR="$ids" bash "$install_script"
+if [[ -d "$ids/Mods/.botmod-deploy.lock" ]]; then
+  fail "the taken-over lock was not released"
+else
+  ok "lock released after the successful install"
+fi
+
+check "uninstall takes the same lock, so it cannot delete a mod an install is swapping"
+mkdir -p "$ids/Mods/.botmod-deploy.lock"
+echo $$ > "$ids/Mods/.botmod-deploy.lock/pid"
+expect_fail "uninstall refused while an install holds the lock" \
+  env SEVENDTD_DS_DIR="$ids" BOTMOD_CONTAINER_CONFIG="$work/absent" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-uninstall" bash "$ROOT/scripts/uninstall.sh"
+if [[ -d "$ids/Mods/BotMod" ]]; then
+  ok "the refused uninstall left the mod installed"
+else
+  fail "the refused uninstall removed the mod anyway"
+fi
+rm -rf "$ids/Mods/.botmod-deploy.lock"
+expect_ok "uninstall runs once the lock is free" \
+  env SEVENDTD_DS_DIR="$ids" BOTMOD_CONTAINER_CONFIG="$work/absent" \
+  BOTMOD_STATE_BACKUP_DIR="$work/pre-uninstall" bash "$ROOT/scripts/uninstall.sh"
+if [[ -d "$ids/Mods/BotMod" ]]; then
+  fail "uninstall left the mod dir behind"
+else
+  ok "mod removed"
+fi
+if [[ -d "$ids/Mods/.botmod-deploy.lock" ]]; then
+  fail "uninstall left the deploy lock behind"
+else
+  ok "lock released after the uninstall"
 fi
 
 if [[ "$failures" -gt 0 ]]; then

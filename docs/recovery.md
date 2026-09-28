@@ -52,7 +52,10 @@ writes, plus the champion weights) into
 before it writes anything, and defaults to verify-only. Each run takes its own
 directory: a second backup inside the same second lands in
 `<utc-timestamp>_2/`, never in the first one's, so a repeated `make backup`
-cannot blend two states into one snapshot.
+cannot blend two states into one snapshot. `make restore` also runs that
+snapshot itself before it overwrites anything, so the state a restore replaces
+is still recoverable if the restore fails part way; a fresh host with no
+installed mod has nothing to snapshot and says so.
 
 ```bash
 make backup                                    # snapshot into ./backups/<stamp>
@@ -83,7 +86,13 @@ that, and then the state is gone.
 - **Bad deploy / reinstall** (`make install`): zero loss. install.sh stages the
   whole payload in a sibling of `Mods/BotMod`, copies the live
   `Config/botmod.json(.bak)` into the staged copy, and swaps it in with a
-  single rename, so a failed copy leaves the running install untouched.
+  single rename, so a failed copy leaves the running install untouched. The
+  swap itself renames the old mod dir aside rather than deleting it and puts
+  it back if anything fails, so a failed rename does not leave the server with
+  no mod dir. `make install` and `make uninstall` hold
+  `<dedi>/Mods/.botmod-deploy.lock` for the duration, so a reinstall and an
+  uninstall cannot rewrite the same directory at once; a lock whose owning
+  process is gone is taken over on the next run.
 - **Torn or corrupt config file** (crash/power cut mid-persist, bad manual
   edit): at most one mutation lost. Persists go through `AtomicTextFile`
   (fsynced temp file, previous content kept at a fsynced `.bak`, then move over
@@ -141,8 +150,12 @@ MANIFEST, a snapshot with no config in it, a snapshot holding a zero-byte
 config, a blank live primary falling back to its `.bak`, a `BOTMOD_CONFIG`
 snapshot restored without the override, a container-only snapshot restored
 onto a host without that mount, and a `make backup-status` run against a
-missing, stale, or corrupt newest snapshot. The rest of the runbook needs the game install, so it
-stays manual:
+missing, stale, or corrupt newest snapshot. It drives the deploy paths too: an
+install whose swap rename fails (the previous install has to come back, with
+its config), a second install refused while the deploy lock is held, a lock
+left by a dead process taken over, and an uninstall refused while an install
+holds it. The rest of the runbook needs the game install, so it stays
+manual:
 
 ```bash
 make backup

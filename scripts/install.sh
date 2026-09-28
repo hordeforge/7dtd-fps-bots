@@ -3,7 +3,10 @@
 #
 # The payload is staged in a sibling of Mods/BotMod and swapped in with a
 # single rename, so a copy that fails part way leaves the running install
-# untouched instead of replacing it with a half-written mod dir.
+# untouched instead of replacing it with a half-written mod dir. The swap
+# itself holds the deploy lock uninstall.sh also takes and renames the old mod
+# dir aside rather than deleting it, so a failure between the two renames puts
+# the running install back instead of leaving the server with no mod dir.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/server-dir.sh"
@@ -55,11 +58,40 @@ if [[ -f "$SRC/MANIFEST.sha256" ]]; then
   fi
 fi
 
+# One install at a time: the swap below renames the live mod dir, and
+# uninstall.sh deletes it, so the two have to exclude each other.
+source "$ROOT/scripts/deploy-lock.sh"
+acquire_deploy_lock
+
 # Staged beside the target so the swap is a same-filesystem rename.
 STAGE="$DS/Mods/.BotMod.staging.$$"
+PREVIOUS="$DS/Mods/.BotMod.previous.$$"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-trap 'rm -rf "$STAGE"' EXIT
+# Releasing the lock is the first thing either exit path does, so a failed
+# install never blocks the retry that fixes it.
+cleanup() {
+  rm -rf "$STAGE"
+  DEPLOY_LOCK_CLEANUP
+}
+trap cleanup EXIT
+# Runs once the old install has been renamed aside (PREVIOUS exists): put it
+# back rather than leaving the server with no mod dir, whether the failure
+# landed on the rename itself or on the clean-up after it.
+rollback() {
+  local rc=$?
+  if [[ -d "$PREVIOUS" ]]; then
+    rm -rf "$DST"
+    if mv "$PREVIOUS" "$DST"; then
+      echo "the swap failed; the previous install was put back at '$DST'" >&2
+    else
+      echo "ERROR: the swap failed and '$PREVIOUS' could not be put back either." >&2
+      echo "       it is still intact there; move it to '$DST' by hand." >&2
+    fi
+  fi
+  exit "$rc"
+}
+trap rollback ERR
 # "$SRC/." not "$SRC"/*: a dotfile in the payload is payload, not a glob miss.
 cp -r "$SRC/." "$STAGE/"
 if [[ ! -f "$STAGE/BotMod.dll" ]]; then
@@ -80,8 +112,17 @@ for f in botmod.json botmod.json.bak; do
   fi
 done
 
-rm -rf "$DST"
+# The old install is renamed aside, not deleted, so a failure anywhere in the
+# second rename puts it straight back (rollback above). A `rm -rf` here would
+# leave a server with no mod dir for the window between the two commands and
+# for good if the second one failed.
+if [[ -d "$DST" ]]; then
+  mv "$DST" "$PREVIOUS"
+fi
 mv "$STAGE" "$DST"
+rm -rf "$PREVIOUS"
+trap - ERR
+cleanup
 trap - EXIT
 if [[ "$kept" == 1 ]]; then
   echo "Preserved operator config across reinstall: $DST/Config/botmod.json(.bak)"

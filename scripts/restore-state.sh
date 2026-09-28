@@ -15,6 +15,10 @@
 # when that path exists here. Champion weights are printed, not copied: they
 # are committed in the repo, so a restore of weights means a git checkout, and
 # this script's job is to say what the snapshot holds.
+#
+# --apply snapshots the live state first (scripts/backup-state.sh, honouring
+# BOTMOD_STATE_BACKUP_DIR) and prints where it went, so a restore that fails
+# part way does not leave the operator with neither state.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -40,7 +44,7 @@ apply=0
 for arg in "$@"; do
   case "$arg" in
     --apply) apply=1 ;;
-    -h | --help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)
       echo "ERROR: unknown option '$arg' (see --help)" >&2
       usage
@@ -128,6 +132,17 @@ if [[ "$apply" == 0 ]]; then
   echo "Dry run: nothing written. Re-run with --apply to restore config."
   exit 0
 fi
+
+# Snapshot whatever is live before overwriting it. A restore that fails part
+# way (a full disk, a permissions error on the second file) otherwise leaves
+# the operator with a half-restored config and no copy of what it was, and the
+# snapshot being restored from does not hold it. Best effort: a fresh host
+# with no installed mod has no live config to preserve, and the operator may
+# point BOTMOD_STATE_BACKUP_DIR wherever the rest of their backups live.
+pre_restore="$(bash "$ROOT/scripts/backup-state.sh" 2>&1)" && {
+  echo "Live state snapshotted before the restore:"
+  printf '%s\n' "$pre_restore" | sed 's/^/  /'
+} || echo "WARNING: no live state to snapshot before the restore (${pre_restore##*$'\n'})" >&2
 
 restored=0
 # A snapshot taken with BOTMOD_CONFIG set holds the config under its own name

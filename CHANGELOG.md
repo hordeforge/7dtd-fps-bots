@@ -66,6 +66,15 @@ Under the 0.x policy above, these change what an existing consumer sees.
 
 ### Changed
 
+- `make install` renames the running mod dir aside instead of deleting it, and
+  puts it back if the swap fails, so a failed rename no longer leaves the
+  server with no `Mods/BotMod`. `make install` and `make uninstall` also take a
+  shared deploy lock (`Mods/.botmod-deploy.lock`, dot-prefixed so the mod
+  loader skips it), so the two cannot rewrite the same dir at once; a lock
+  left by a killed run is taken over rather than wedging the next one.
+- `make restore SNAPSHOT=...` now snapshots the live config before it
+  overwrites it (same `backup-state.sh` path, same `BOTMOD_STATE_BACKUP_DIR`),
+  so a restore that fails part way does not destroy the state it was replacing.
 - `combat_sim.lcg01` and `combat_sim.loadout_pick` dropped their leading
   underscore. `determinism_check.py` already called both as a second consumer
   (the loadout draw exists to be checked outside the kernel), and the SLF
