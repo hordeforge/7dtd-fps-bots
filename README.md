@@ -33,6 +33,8 @@ make backup       # snapshots Mods/BotMod/Config + evolved champions to backups/
 
 Config is `Mods/BotMod/Config/botmod.json` (repo default `config/botmod.json`; `BOTMOD_CONFIG` overrides the path). Edit and `bot reload` live. EAC off: `<property name="EACEnabled" value="false"/>`. Offline LAN/loadgen clients with synthetic Steam ids additionally need `"AllowSyntheticAuthBypass": true` (off by default; the bypass accepts ids in a fixed test range without Steam auth). `make uninstall` snapshots the config before deleting it; `make backup` (point `BOTMOD_STATE_BACKUP_DIR` off-host) is the copy that also survives host loss, and `make restore SNAPSHOT=backups/<stamp>` puts it back. Details in `docs/recovery.md`.
 
+The server needs the TFP Harmony mod (`Mods/0_TFP_Harmony/0Harmony.dll`): BotMod ships no copy and every patch types off HarmonyLib. `make install` refuses to deploy when it is missing, when the payload lacks `ModInfo.xml`, `Config/botmod.json` or `WebMod/bundle.js`, or when an extracted release zip fails its `MANIFEST.sha256`, so a broken install fails at the swap rather than at the next server start.
+
 ## Web dashboard
 
 `make build` also compiles the TypeScript panel (`Source/BotMod/WebMod/bundle.ts`)
@@ -258,9 +260,10 @@ self-skip without a game install and say so.
 `make package` output is byte-stable: entry order is sorted, every archive
 timestamp is `SOURCE_DATE_EPOCH` (default: the HEAD commit time), and uid/gid
 and permissions are normalized. Two packages of the same commit compare equal
-with `sha256sum`, regardless of build machine or directory. The zip carries a
-`MANIFEST.sha256` covering every payload file; run `sha256sum -c
-MANIFEST.sha256` inside the extracted directory to verify it offline.
+with `sha256sum`, regardless of build machine or directory. The zip carries the
+repo `LICENSE` and a `MANIFEST.sha256` covering every payload file; run
+`sha256sum -c MANIFEST.sha256` inside the extracted directory to verify it
+offline, or let `make install` do it for you.
 `make verify-reproducible` runs that claim end to end: it builds the payload,
 rebuilds it from a different absolute path, diffs the two trees, then packages
 twice and compares the archive hashes. It needs the same prerequisites as

@@ -43,12 +43,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-if command -v sha256sum > /dev/null; then SHA=(sha256sum)
-elif command -v shasum > /dev/null; then SHA=(shasum -a 256)
-else
-  echo "ERROR: need sha256sum or shasum to verify the MANIFEST" >&2
-  exit 1
-fi
+source "$ROOT/scripts/digest.sh"
 
 # Verify every listed file, and every file present, so both a truncated
 # snapshot and a tampered one fail here instead of at the next server start.

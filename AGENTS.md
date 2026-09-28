@@ -56,9 +56,19 @@ not C#; `scripts/build.sh` compiles it into the shipped `Mods/BotMod/WebMod/`.
 - `make verify-reproducible` builds the payload twice, the second time from a
   different absolute path, then packages twice and compares bytes. Both build
   backends ship no debug symbols; `scripts/build.sh` fails the build if a `.pdb`
-  or `.mdb` reaches the payload. CI cannot run it (no game install).
+  or `.mdb` reaches the payload. The payload is the released mod dir, so it also
+  carries the repo `LICENSE`. CI cannot run it (no game install).
 - Suites needing the game install (config parsers, full-mod compile) skip with a
   message instead of failing when no install is found. A skip is not a pass.
+- `scripts/digest.sh` is the shared SHA-256 tool pick (`sha256sum` on Linux,
+  `shasum -a 256` on macOS) behind every MANIFEST writer and verifier:
+  `backup-state.sh`, `restore-state.sh`, `package.sh`,
+  `verify-reproducible.sh`, `install.sh`. Source it instead of probing again.
+  `make install` refuses to deploy without the TFP Harmony mod
+  (`Mods/0_TFP_Harmony/0Harmony.dll`, a runtime dependency the mod does not
+  bundle), without the files the mod cannot run without (`ModInfo.xml`,
+  `Config/botmod.json`, `WebMod/bundle.js`), or when an extracted release zip
+  fails its `MANIFEST.sha256`.
 
 ## Known deviations from the root rules
 

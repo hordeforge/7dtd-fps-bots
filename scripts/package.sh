@@ -16,6 +16,7 @@ set -euo pipefail
 export LC_ALL=C TZ=UTC
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/digest.sh"
 SRC="$ROOT/dist/BotMod"
 
 if [[ ! -f "$SRC/BotMod.dll" ]]; then
@@ -23,8 +24,10 @@ if [[ ! -f "$SRC/BotMod.dll" ]]; then
   exit 1
 fi
 
-# Same canonical source as scripts/build.sh's drift guard.
-VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)";/\1/p' \
+# Same canonical source as scripts/build.sh's drift guard. The trailing .*
+# matters: without it sed takes the longest overall match, so a `;` comment or
+# any text after the constant leaks into the version and into the archive name.
+VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)".*/\1/p' \
   "$ROOT/Source/BotMod/Core/BotModVersion.cs")"
 if [[ -z "$VERSION" ]]; then
   echo "ERROR: could not parse version from Source/BotMod/Core/BotModVersion.cs" >&2
@@ -51,7 +54,7 @@ cp -r "$SRC" "$STAGE/BotMod"
   mapfile -d '' files < <(find . -type f ! -name MANIFEST.sha256 -print0 | sort -z)
   : > MANIFEST.sha256
   for f in "${files[@]}"; do
-    sha256sum "${f#./}" >> MANIFEST.sha256
+    "${SHA[@]}" "${f#./}" >> MANIFEST.sha256
   done
 )
 
@@ -74,4 +77,4 @@ rm -f "$OUT"
   find BotMod -type f | LC_ALL=C sort | zip -X -q -9 "$OUT" -@
 )
 echo "Packaged -> $OUT"
-sha256sum "$OUT"
+"${SHA[@]}" "$OUT"

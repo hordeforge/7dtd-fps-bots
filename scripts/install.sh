@@ -17,6 +17,40 @@ if [[ ! -f "$DS/7DaysToDieServer_Data/Managed/Assembly-CSharp.dll" ]]; then
   echo "  SEVENDTD_DS_DIR='/path/to/7 Days to Die Dedicated Server' make install" >&2
   exit 1
 fi
+# Harmony is a runtime dependency, not a build-time one: the mod ships no
+# 0Harmony.dll of its own, and every patch in Source/BotMod/Patches types off
+# HarmonyLib, so a server without the TFP Harmony mod loads a mod that cannot
+# patch. Fail before the swap, while the running install is still intact.
+if [[ ! -f "$DS/Mods/0_TFP_Harmony/0Harmony.dll" ]]; then
+  echo "ERROR: '$DS/Mods/0_TFP_Harmony/0Harmony.dll' is missing; BotMod needs" >&2
+  echo "the TFP Harmony mod at runtime (same file scripts/build.sh links against)." >&2
+  echo "Install it into the server's Mods dir and retry." >&2
+  exit 1
+fi
+
+# Payload the mod cannot run without: the engine reads ModInfo.xml to list the
+# mod, BotConfig loads Config/botmod.json, and the dashboard serves
+# WebMod/bundle.js. A payload missing one of these installs cleanly and then
+# fails at runtime, one server start later.
+for required in ModInfo.xml Config/botmod.json WebMod/bundle.js; do
+  if [[ ! -f "$SRC/$required" ]]; then
+    echo "ERROR: payload $SRC is missing $required; nothing was installed" >&2
+    echo "Rebuild with scripts/build.sh (or re-extract the release zip)." >&2
+    exit 1
+  fi
+done
+
+# The release zip carries MANIFEST.sha256 over every payload file. Verifying it
+# here turns a tampered or half-extracted package into a refused install rather
+# than a live one; a payload built in place (no manifest) is not checked.
+if [[ -f "$SRC/MANIFEST.sha256" ]]; then
+  source "$ROOT/scripts/digest.sh"
+  if ! (cd "$SRC" && "${SHA[@]}" -c --quiet MANIFEST.sha256); then
+    echo "ERROR: $SRC fails MANIFEST.sha256; nothing was installed" >&2
+    echo "Re-extract the release zip or rebuild with scripts/build.sh." >&2
+    exit 1
+  fi
+fi
 
 # Staged beside the target so the swap is a same-filesystem rename.
 STAGE="$DS/Mods/.BotMod.staging.$$"

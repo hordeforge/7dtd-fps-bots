@@ -12,6 +12,7 @@ set -euo pipefail
 export LC_ALL=C TZ=UTC
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/digest.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -35,9 +36,9 @@ fi
 
 echo "verify-reproducible: leg 3/3, package twice and compare the archives"
 bash "$root/scripts/package.sh" > /dev/null
-first_zip="$(sha256sum "$root/dist/BotMod-"*.zip | cut -d' ' -f1)"
+first_zip="$("${SHA[@]}" "$root/dist/BotMod-"*.zip | cut -d' ' -f1)"
 bash "$root/scripts/package.sh" > /dev/null
-second_zip="$(sha256sum "$root/dist/BotMod-"*.zip | cut -d' ' -f1)"
+second_zip="$("${SHA[@]}" "$root/dist/BotMod-"*.zip | cut -d' ' -f1)"
 if [ "$first_zip" != "$second_zip" ]; then
   echo "ERROR: two packages of the same payload differ: $first_zip vs $second_zip" >&2
   exit 1

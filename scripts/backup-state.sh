@@ -23,14 +23,9 @@ DEST_ROOT="${1:-${BOTMOD_STATE_BACKUP_DIR:-$ROOT/backups}}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAP="$DEST_ROOT/$STAMP"
 
-# sha256sum on Linux, shasum on macOS; the MANIFEST is verified on restore, so
-# the digest tool has to exist on both sides of that trip.
-if command -v sha256sum > /dev/null; then SHA=(sha256sum)
-elif command -v shasum > /dev/null; then SHA=(shasum -a 256)
-else
-  echo "ERROR: need sha256sum or shasum to write a verifiable MANIFEST" >&2
-  exit 1
-fi
+# The MANIFEST is verified on restore, so the digest tool has to exist on both
+# sides of that trip; scripts/digest.sh picks it and fails when neither is there.
+source "$ROOT/scripts/digest.sh"
 
 mkdir -p "$SNAP/evolved"
 copied=0

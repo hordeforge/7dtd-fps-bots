@@ -40,7 +40,7 @@ fi
 # Version drift guard: BotModVersion.Number is canonical. ModInfo.xml is what
 # the engine's mod listing shows and cannot reference the C# constant, so the
 # build fails when they disagree instead of shipping mismatched versions.
-CS_VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)";/\1/p' "$SRC/Core/BotModVersion.cs" || true)"
+CS_VERSION="$(sed -n 's/.*const string Number = "\([^"]*\)".*/\1/p' "$SRC/Core/BotModVersion.cs" || true)"
 XML_VERSION="$(sed -n 's/.*<Version value="\([^"]*\)".*/\1/p' "$SRC/ModInfo.xml" || true)"
 if [[ -z "$CS_VERSION" || "$CS_VERSION" != "$XML_VERSION" ]]; then
   echo "ERROR: version drift: Source/BotMod/Core/BotModVersion.cs=$CS_VERSION vs Source/BotMod/ModInfo.xml=$XML_VERSION" >&2
@@ -59,6 +59,9 @@ mkdir -p "$OUT/Config"
 
 copy_payload() {
   cp "$SRC/ModInfo.xml" "$OUT/ModInfo.xml"
+  # The mod is redistributed as a zip to server operators; the license travels
+  # with it rather than staying only in the repo it was built from.
+  cp "$ROOT/LICENSE" "$OUT/LICENSE"
   cp "$ROOT/config/botmod.json" "$OUT/Config/botmod.json"
   # Both files fall back to defaults at runtime, so their absence is not a
   # build failure, but a silently thinner payload is a shipped surprise.
