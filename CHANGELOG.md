@@ -51,6 +51,14 @@ of them removes a config key or a console command.
 
 ### Changed
 
+- Developer path: `make test SUITE="lcg bottext"` (the form the README
+  documented) failed with `No rule to make target 'bottext'`, because make
+  read the second suite as a target. Recipes now run under bash explicitly, and
+  `make preflight` fails when the installed ruff or yamllint is not the version
+  CI pins in `scripts/tool-versions.sh`, so a lint run that disagrees with CI
+  is caught before a push. Added `CONTRIBUTING.md`: prerequisites, the loop,
+  how a new suite is registered in `scripts/test-idempotency.sh`, and what a
+  pull request has to carry.
 - `Source/BotMod/Config/` held four engine-free primitives that have nothing
   to do with configuration and are used by every layer (`Lcg`, `BotText`,
   `LogSanitizer`, `AtomicTextFile`). They moved to `Source/BotMod/Foundation/`

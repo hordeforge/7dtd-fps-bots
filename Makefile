@@ -1,5 +1,8 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
+# Every script in scripts/ is bash, so recipes get bash rather than the
+# /bin/sh a distro may point at dash.
+SHELL := /bin/bash
 .DEFAULT_GOAL := help
 .PHONY: help build build-mcs test test-list ci package verify-reproducible install uninstall backup restore verify-snapshot test-recovery clean coverage lint-html lint-webui lint-shell lint-python lint-yaml check preflight
 
@@ -11,6 +14,7 @@ Targets:
   make build-mcs    same, forcing the mono mcs backend
   make test         run tests/BotMod.Tests via scripts/test-idempotency.sh (needs mcs + mono; CI runs it after installing mono)
   make test SUITE=x run one suite by name (make test-list prints the names)
+  make test SUITE="x y"  run several suites in one run
   make test-list    print the C# suite names SUITE= accepts
   make ci           everything CI runs: make check then make test
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
@@ -18,6 +22,7 @@ Targets:
   make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness + backup/restore drill
   make coverage     line coverage of the pure-BCL suites into coverage.cobertura.xml (needs the dotnet SDK + dotnet-coverage; self-skips without them)
   make preflight    name the tools `make check` needs (shellcheck, yamllint, java, bun, ruff, curl)
+                    and fail on a ruff or yamllint that is not the CI pin
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
   make lint-yaml    yamllint over the CI workflows (config: .yamllint.yml, --strict)
@@ -46,6 +51,8 @@ build:
 	bash "$(SCRIPTS)/build.sh"
 build-mcs:
 	SEVENDTD_BUILD_BACKEND=mcs bash "$(SCRIPTS)/build.sh"
+# SUITE takes a quoted list for several suites: make test SUITE="lcg bottext"
+# (a bare second word would be read as another make target, not a suite).
 test:
 	bash "$(SCRIPTS)/test-idempotency.sh" $(SUITE)
 test-list:
@@ -75,7 +82,19 @@ preflight:
 	  echo "make check needs these on PATH:$$missing" >&2; \
 	  echo "Pinned versions for the fetched ones live in scripts/tool-versions.sh" >&2; \
 	  exit 1; \
-	fi
+	fi; \
+	. "$(SCRIPTS)/tool-versions.sh"; \
+	for pin in "ruff:$$RUFF_VERSION" "yamllint:$$YAMLLINT_VERSION"; do \
+	  tool="$${pin%%:*}"; want="$${pin#*:}"; \
+	  have="$$("$$tool" --version 2>/dev/null | head -n1)"; \
+	  [[ "$$have" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] && have="$${BASH_REMATCH[1]}"; \
+	  if [ "$$have" != "$$want" ]; then \
+	    echo "make check lints with the CI pins, and the installed $$tool is not one:" >&2; \
+	    echo "  installed: $${have:-unknown}  CI: $$want" >&2; \
+	    echo "  match CI:   uv tool install \"$$tool==$$want\"" >&2; \
+	    exit 1; \
+	  fi; \
+	done
 check: preflight lint-shell lint-yaml lint-html lint-webui lint-python test-recovery
 coverage:
 	bash "$(SCRIPTS)/coverage-cs.sh"

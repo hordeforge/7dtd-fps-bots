@@ -256,12 +256,14 @@ reported as a WARN line at load and ignored.
 
 ## Development
 
-`make help` lists all targets. The common loop:
+`make help` lists all targets. `CONTRIBUTING.md` covers the prerequisites, the
+commit and changelog conventions, and how a new test suite is registered. The
+common loop:
 
 ```bash
 make test          # C# unit tests (tests/BotMod.Tests, mcs + mono)
 make test-list     # names of the individual C# suites
-make test SUITE=lcg # one suite (SUITE=lcg bottext for several)
+make test SUITE=lcg # one suite (SUITE="lcg bottext" for several)
 make build         # full build: BotMod.dll + web bundle into dist/BotMod
 make package       # reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip
 make verify-reproducible  # build and package twice, then compare bytes
@@ -297,7 +299,9 @@ pair locally. The workflow installs
 mono for it, and the pinned ruff and yamllint for `make lint-python` and
 `make lint-yaml` via `uv tool install`; `make preflight` names the tools
 `make check` needs (shellcheck, yamllint, java, bun, ruff, curl) and where
-their pins live. Locally
+their pins live, and fails when the installed ruff or yamllint is not the
+pinned one, so a version that lints differently than CI is caught before a
+push. Locally
 `make test` needs mono, and
 `make build` needs the game's Managed DLLs (`SEVENDTD_DS_DIR`/`SEVENDTD_GAME_DIR`
 override the Steam paths scripts/build.sh probes). After editing
