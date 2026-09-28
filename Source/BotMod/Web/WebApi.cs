@@ -62,11 +62,14 @@ namespace BotMod.Web
     /// Correlation: every POST audit line names the request (the client
     /// idempotency key, or a server-side "auto-N" tag when none was sent), and
     /// the same tag is returned in the X-BotMod-Request-Id response header on
-    /// every outcome, so a failed call is traceable to one log line. The line
-    /// also names the caller (see CallerTag): permission level 0 says an admin
-    /// acted, not which one, and a stolen webtoken has to be attributable to
-    /// the token row an operator can revoke. The `bot` console command logs
-    /// its issuer the same way, so both admin surfaces reconstruct alike.
+    /// every outcome, so a failed call is traceable to one log line. GET tags
+    /// itself the same way ("auto-N": the verb carries no client key) so a
+    /// failing or slow status poll names itself in the log and in the header
+    /// the caller holds. The line also names the caller (see CallerTag):
+    /// permission level 0 says an admin acted, not which one, and a stolen
+    /// webtoken has to be attributable to the token row an operator can
+    /// revoke. The `bot` console command logs its issuer the same way, so both
+    /// admin surfaces reconstruct alike.
     ///
     /// Caching: every response (200, 400, 409, 500, on both verbs) carries
     /// Cache-Control: no-store plus X-Content-Type-Options: nosniff; see
@@ -99,11 +102,20 @@ namespace BotMod.Web
         public override void HandleRestGet(RequestContext context)
         {
             MarkNoStore(context);
+            // Correlation on the read path as well: the dashboard polls this
+            // every few seconds, so a failing or slow build was logged with no
+            // way to tie the line back to the client that saw it, and the
+            // response carried no id to quote. Same server-side tag and same
+            // response header the POST handler uses, so both verbs name
+            // themselves one way. GET carries no client idempotency key, and
+            // the tag costs one increment; a healthy poll still logs nothing.
+            string reqTag = LogSanitizer.Clean(NextRequestTag());
+            context.Response.Headers["X-BotMod-Request-Id"] = reqTag;
             PrepareEnvelopedResult(out JsonWriter writer);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(TimedStatus, "status")));
+                writer.WriteRaw(Encoding.UTF8.GetBytes(RunOnMain(() => TimedStatus(reqTag), "status")));
             }
             catch (Exception ex)
             {
@@ -112,7 +124,7 @@ namespace BotMod.Web
                 // a timed-out or failing status build escapes HandleRestGet
                 // unhandled (dispatch timeouts are expected here: RunOnMain
                 // throws TimeoutException when the main thread is stuck).
-                ModApi.Error("web api status failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
+                ModApi.Error("web api status req=" + reqTag + " failed 500 after " + sw.ElapsedMilliseconds + "ms: " + ex);
                 SendEmptyResponse(context, HttpStatusCode.InternalServerError, null, "ERROR", null);
                 return;
             }
@@ -638,16 +650,19 @@ namespace BotMod.Web
         /// main thread and can go through the shared flood gate (which is
         /// main-thread only). Without it a degraded read is invisible until it
         /// trips the 15 s dispatch timeout and surfaces as a 500, so the window
-        /// where the dashboard is merely slow leaves nothing in the log.
-        /// Read-only: the body is the same BuildStatus output either way.</summary>
-        static string TimedStatus()
+        /// where the dashboard is merely slow leaves nothing in the log. The
+        /// warning carries <paramref name="reqTag"/>, the same id the caller
+        /// got back in the response header, so a slow line names the poll it
+        /// came from. Read-only: the body is the same BuildStatus output
+        /// either way.</summary>
+        static string TimedStatus(string reqTag)
         {
             var build = System.Diagnostics.Stopwatch.StartNew();
             string body = BuildStatus();
             if (build.ElapsedMilliseconds > SlowStatusBuildMs)
             {
                 int alive = BotManager.Instance.BotCount;
-                ModApi.WarnRateLimited(() => "web api status build took " + build.ElapsedMilliseconds
+                ModApi.WarnRateLimited(() => "web api status req=" + reqTag + " build took " + build.ElapsedMilliseconds
                     + "ms with " + alive + " bots alive (dashboard polls this every few seconds)");
             }
             return body;

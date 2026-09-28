@@ -101,7 +101,13 @@ namespace BotMod
                 if (!ShouldRun()) return;
                 BotManager.Instance.Tick(BotClock.Delta);
             }
-            catch (Exception ex) { Error("GameUpdate tick failed: " + ex); }
+            // Rate-limited: the engine calls this every tick, so a failure that
+            // persists (a broken world object, a config field a bot reads as
+            // null) would otherwise emit 20 error lines a second and push every
+            // other line out of the log. The first failure stays an ERR in
+            // full; repeats inside the window are counted and reported on the
+            // next line.
+            catch (Exception ex) { ErrorRateLimited(() => "GameUpdate tick failed: " + ex); }
         }
 
         static void OnWorldShuttingDown(ref ModEvents.SWorldShuttingDownData data)
@@ -112,12 +118,29 @@ namespace BotMod
             catch (Exception ex) { Warn("WorldShuttingDown cleanup failed: " + ex); }
         }
 
+        // Latch for the dedicated-server probe below. Main-thread only (ShouldRun
+        // is called from the mod events), so no barrier is needed.
+        static bool _dedicatedProbeFailed;
+
         public static bool ShouldRun()
         {
             if (!Active || Config == null || !Config.Enabled) return false;
             if (!Config.DedicatedOnly) return true;
             try { return GameManager.IsDedicatedServer; }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                // Reported once, not per tick: ShouldRun runs on every
+                // GameUpdate, so a plain warn here is a line per tick for as
+                // long as the condition lasts, and a false here is
+                // indistinguishable from "the mod is disabled" - no bots, no
+                // ticks, and previously nothing in the log to say why.
+                if (!_dedicatedProbeFailed)
+                {
+                    _dedicatedProbeFailed = true;
+                    Warn("dedicated-server probe threw, running no bots (DedicatedOnly=" + Config.DedicatedOnly + "): " + ex);
+                }
+                return false;
+            }
         }
 
         public static void ReloadConfig()
@@ -201,6 +224,30 @@ namespace BotMod
             Warn(msg + suppressed);
             _warnSuppressed = 0;
             _warnGateUntil = now + WarnCooldownSec;
+        }
+
+        // A second gate, at the same cadence, for the error level: the engine
+        // calls ModEvents.GameUpdate once per tick, so an unguarded ERR there
+        // is a 20-line/s flood. It is deliberately separate from the warn gate
+        // so a storm of warnings cannot hide a tick loop that is throwing, and
+        // so tick failures are not suppressed by an unrelated hot-path source.
+        const float ErrorCooldownSec = 10f;
+        static float _errorGateUntil;
+        static int _errorSuppressed;
+
+        /// <summary>Rate-limited <see cref="Error"/> for handlers the engine
+        /// invokes every tick. Same contract as
+        /// <see cref="WarnRateLimited"/>, at ERR: the first failure logs in
+        /// full, repeats inside the window are counted, and the count rides on
+        /// the next emitted line. Main-thread only (reads the bound clock).</summary>
+        public static void ErrorRateLimited(Func<string> msgFactory)
+        {
+            float now = BotClock.Now;
+            if (now < _errorGateUntil) { _errorSuppressed++; return; }
+            string suppressed = _errorSuppressed > 0 ? " (+ " + _errorSuppressed + " suppressed)" : "";
+            Error(msgFactory() + suppressed);
+            _errorSuppressed = 0;
+            _errorGateUntil = now + ErrorCooldownSec;
         }
 
         // Persist one config field to the host-mounted canonical copy

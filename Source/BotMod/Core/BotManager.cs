@@ -143,7 +143,16 @@ namespace BotMod.Core
         {
             if (!_started) return;
             var world = GameManager.Instance?.World;
-            if (world == null) return;
+            if (world == null)
+            {
+                // Started but no world: the tick loop runs and simulates
+                // nothing, which from the outside is indistinguishable from a
+                // disabled mod or a spawner that cannot find ground. Rate
+                // limited, so a world that stays unloaded costs one line per
+                // window instead of one per tick.
+                ModApi.WarnRateLimited(() => "bot tick idle: GameStartDone fired but no world is loaded, so no bot is simulating");
+                return;
+            }
             _tickAccum += dt;
             _spawnRetryTimer -= dt;
             if (_spawnRetryTimer <= 0f) { _spawnRetryTimer = 1f; MaintainPopulation(); }
