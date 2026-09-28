@@ -26,7 +26,7 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 
 | Directory | Holds | May reference |
 |---|---|---|
-| `Foundation/` | engine-free primitives every layer shares: `Lcg`, `BotText`, `LogSanitizer`, `LogRedactor`, `AtomicTextFile`, `SpawnPointXml` | nothing else in the mod |
+| `Foundation/` | engine-free primitives every layer shares: `Lcg`, `BotClock`, `BotText`, `LogSanitizer`, `LogRedactor`, `AtomicTextFile`, `SpawnPointXml` | nothing else in the mod |
 | `Config/` | the operator-config layer: `BotConfig`, `BotCharacter`, `WeaponProfile`, `CombatGates` | `Foundation` |
 | `AI/` | decision-making: `BotBrain`, `BotCombat`, `BotNeuralBrain` | `Core`, `Config`, `Foundation` |
 | `Core/` | runtime: `Bot`, `BotManager`, `BotSpawner`, `BotModVersion` | `AI`, `Config`, `Foundation` |
@@ -86,8 +86,8 @@ Recorded so they stay visible instead of being rediscovered as "someone forgot".
   swallow can hide a defect, one file per change, never as a sweep: a bare
   `catch` removed from the tick path is a behavior change, not a comment
   change. `AtomicTextFile.cs`, `IdempotencyLedger.cs`, `BotPatches.cs`,
-  `BotConsoleCommands.cs`, `Bot.cs`, `BotBrain.cs` and `BotCombat.cs` are done:
-  every site reports through a `Warn` sink
+  `BotConsoleCommands.cs` and `Bot.cs` are done: none of them has an empty
+  catch left, and the ones they had reported through a `Warn` sink
   (`ModApi.Warn` / `ModApi.WarnRateLimited`), wired to `ModApi.Warn` in
   `InitMod`. What is left in `BotSpawner.cs`, `BotBrain.cs` and
   `BotCombat.cs` is deliberate and documented at each site: per-statement
