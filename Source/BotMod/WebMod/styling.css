@@ -11,8 +11,10 @@
 .botmod-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .botmod-head h2 { margin: 0; }
 /* Dimmed secondary text: opacity stays >= .75 so it keeps >= 4.5:1 against
-   the host theme's dark backgrounds. */
-.botmod-window { opacity: .75; font-size: .8rem; margin-left: auto; }
+   the host theme's dark backgrounds. Pushed to the inline end, not the
+   physical right, so an RTL dashboard mirrors it (all directional properties
+   in this file are logical). */
+.botmod-window { opacity: .75; font-size: .8rem; margin-inline-start: auto; }
 .botmod-pill { font-size: .75rem; font-weight: 700; letter-spacing: .04em; padding: .2rem .55rem; border-radius: 999px; }
 .botmod-ok { background: rgba(87, 217, 119, .18); color: #57d977; }
 .botmod-off { background: rgba(127, 127, 127, .18); color: #9aa0a6; }
@@ -30,8 +32,8 @@
 .botmod-weapon { width: 9rem; padding: .25rem .5rem; min-height: 24px; box-sizing: border-box; border-radius: 5px; border: 1px solid rgba(127, 127, 127, .35); background: rgba(127, 127, 127, .1); color: inherit; }
 .botmod-select { padding: .25rem .5rem; min-height: 24px; box-sizing: border-box; border-radius: 5px; border: 1px solid rgba(127, 127, 127, .35); background: rgba(127, 127, 127, .1); color: inherit; }
 .botmod-table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
-.botmod-table th, .botmod-table td { padding: .4rem; border-bottom: 1px solid rgba(127, 127, 127, .25); text-align: right; }
-.botmod-table th:first-child, .botmod-table td:first-child { text-align: left; }
+.botmod-table th, .botmod-table td { padding: .4rem; border-bottom: 1px solid rgba(127, 127, 127, .25); text-align: end; overflow-wrap: anywhere; }
+.botmod-table th:first-child, .botmod-table td:first-child { text-align: start; }
 .botmod-state { opacity: .75; font-size: .78rem; }
 .botmod-empty { opacity: .75; }
 
@@ -81,16 +83,23 @@ a[data-for="tooltip-Bot"]::before {
   display: flex; flex-direction: column; gap: .3rem;
   transition: transform .08s ease, box-shadow .08s ease;
 }
-.botmod-bucket-head { font-size: .78rem; font-weight: 700; white-space: nowrap; }
+/* Wraps rather than nowrap: the head carries the team label, which is the
+   one translatable string in the bucket, and a longer translation must wrap
+   inside the bucket instead of overflowing it. */
+.botmod-bucket-head { font-size: .78rem; font-weight: 700; overflow-wrap: anywhere; }
 .botmod-bucket-empty { opacity: .7; font-size: .72rem; font-style: italic; }
 .botmod-drop-active { border-style: solid; box-shadow: 0 0 0 2px rgba(138, 180, 248, .5); transform: translateY(-2px); }
 .botmod-chip {
   font-size: .72rem; padding: .12rem .5rem; border-radius: 999px;
   background: rgba(127, 127, 127, .16); cursor: grab; align-self: flex-start;
   display: inline-flex; align-items: center; gap: .25rem;
+  /* Bot names are player- or config-chosen, so a long one (or one with no
+     break opportunity, as in CJK) must break inside the chip, not widen the
+     bucket past the panel. */
+  max-width: 100%; min-width: 0; overflow-wrap: anywhere;
 }
 .botmod-chip:active { cursor: grabbing; }
-.botmod-teamdot { width: .62rem; height: .62rem; border-radius: 50%; display: inline-block; margin-right: .32rem; vertical-align: middle; }
+.botmod-teamdot { width: .62rem; height: .62rem; border-radius: 50%; display: inline-block; margin-inline-end: .32rem; vertical-align: middle; }
 .botmod-teamsel { font-size: .72rem; padding: .15rem .3rem; min-height: 24px; box-sizing: border-box; border-radius: 4px; border: 1px solid rgba(127, 127, 127, .35); background: rgba(127, 127, 127, .1); color: inherit; }
 .botmod-drag { cursor: grabbing; opacity: .75; }
 tr.botmod-drag td { border-bottom-color: rgba(138, 180, 248, .4); }

@@ -239,13 +239,29 @@ function makeArmedBtn(h: CreateElement, armed: string, setArmed: (v: string | ((
   };
 }
 
+// Locale-aware collation for the name and weapon columns. Code-unit `<` on a
+// toLowerCase()d string orders by Unicode scalar, so "Ähne" sorts after "Zulu"
+// and an NFD-decomposed name compares against nothing; a collator orders by the
+// viewer's collation (accent-insensitive, case-insensitive) and `numeric`
+// keeps "Bot 2" ahead of "Bot 10". A collator is locale-sensitive, so build it
+// once and reuse it: constructing one per comparison is a per-row cost on a
+// list that re-sorts on every 5 s poll.
+const TEXT_COLLATOR: Intl.Collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
 function bySortKey(sort: SortState): (a: BotStat, b: BotStat) => number {
   return (a, b): number => {
     const textKey = sort.key === "name" || sort.key === "weapon";
-    // SAFETY: bot rows are read from the untyped JSON payload; sort.key is a known column of the same rows
-    const av = textKey ? strOrEmpty((a as Record<string, unknown>)[sort.key]).toLowerCase() : numOr((a as Record<string, unknown>)[sort.key], -1);
+    if (textKey) {
+      // SAFETY: bot rows are read from the untyped JSON payload; sort.key is a known column of the same rows
+      const av = strOrEmpty((a as Record<string, unknown>)[sort.key]);
+      // SAFETY: same keyed access as av, on the other row
+      const bv = strOrEmpty((b as Record<string, unknown>)[sort.key]);
+      return -sort.dir * TEXT_COLLATOR.compare(av, bv);
+    }
     // SAFETY: same keyed access as av, on the other row
-    const bv = textKey ? strOrEmpty((b as Record<string, unknown>)[sort.key]).toLowerCase() : numOr((b as Record<string, unknown>)[sort.key], -1);
+    const av = numOr((a as Record<string, unknown>)[sort.key], -1);
+    // SAFETY: same keyed access as av, on the other row
+    const bv = numOr((b as Record<string, unknown>)[sort.key], -1);
     if (av < bv) {
       return -sort.dir;
     }
@@ -427,6 +443,7 @@ function renderTeamsCard(h: CreateElement, s: BotStatus, bots: Array<BotStat>, b
             h("span", {
               key: b.entityId,
               className: "botmod-chip",
+              dir: "auto",
               draggable: true,
               onDragStart: (): void => setDragName(b.name),
               onDragEnd: (): void => setDragName(null)
@@ -496,7 +513,10 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
       setDropOver(null);
     }
   },
-    h("td", null,
+    // dir=auto on every cell that renders a player-chosen name: an Arabic or
+    // Hebrew bot name inside an LTR table, or a mixed run of Latin and RTL
+    // text, resolves its own base direction instead of borrowing the page's.
+    h("td", { dir: "auto" },
       h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) }, "aria-hidden": "true" }),
       b.name),
     h("td", null, b.weapon),
@@ -506,7 +526,7 @@ function botRow(h: CreateElement, b: BotStat, busy: string, post: (body: BotActi
     h("td", null, b.deaths),
     h("td", null, b.score),
     h("td", null, b.level),
-    h("td", null, nearLabel(b)),
+    h("td", { dir: "auto" }, nearLabel(b)),
     h("td", null, h("select", {
       className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
       "aria-label": `Team for ${b.name}`,

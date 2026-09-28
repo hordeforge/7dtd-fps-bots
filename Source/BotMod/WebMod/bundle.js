@@ -95,11 +95,17 @@
             }, isArmed ? "Confirm?" : label);
         };
     }
+    const TEXT_COLLATOR = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
     function bySortKey(sort) {
         return (a, b) => {
             const textKey = sort.key === "name" || sort.key === "weapon";
-            const av = textKey ? strOrEmpty(a[sort.key]).toLowerCase() : numOr(a[sort.key], -1);
-            const bv = textKey ? strOrEmpty(b[sort.key]).toLowerCase() : numOr(b[sort.key], -1);
+            if (textKey) {
+                const av = strOrEmpty(a[sort.key]);
+                const bv = strOrEmpty(b[sort.key]);
+                return -sort.dir * TEXT_COLLATOR.compare(av, bv);
+            }
+            const av = numOr(a[sort.key], -1);
+            const bv = numOr(b[sort.key], -1);
             if (av < bv) {
                 return -sort.dir;
             }
@@ -230,6 +236,7 @@
             : bkt.members.map((b) => h("span", {
                 key: b.entityId,
                 className: "botmod-chip",
+                dir: "auto",
                 draggable: true,
                 onDragStart: () => setDragName(b.name),
                 onDragEnd: () => setDragName(null)
@@ -283,7 +290,7 @@
                 setDragName(null);
                 setDropOver(null);
             }
-        }, h("td", null, h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) }, "aria-hidden": "true" }), b.name), h("td", null, b.weapon), h("td", null, b.health), h("td", null, b.players), h("td", null, b.zombies), h("td", null, b.deaths), h("td", null, b.score), h("td", null, b.level), h("td", null, nearLabel(b)), h("td", null, h("select", {
+        }, h("td", { dir: "auto" }, h("span", { className: "botmod-teamdot", style: { background: teamColor(b.team) }, "aria-hidden": "true" }), b.name), h("td", null, b.weapon), h("td", null, b.health), h("td", null, b.players), h("td", null, b.zombies), h("td", null, b.deaths), h("td", null, b.score), h("td", null, b.level), h("td", { dir: "auto" }, nearLabel(b)), h("td", null, h("select", {
             className: "botmod-teamsel", value: String(numOr(b.team, 0)), disabled: busy !== "",
             "aria-label": `Team for ${b.name}`,
             onChange: (e) => post({ action: "setTeam", name: b.name, team: Number.parseInt(e.target.value, 10) })
