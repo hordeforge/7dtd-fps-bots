@@ -13,7 +13,7 @@ namespace BotMod.AI
         // FindTarget out-scores the attacker by this factor (0.6x).
         const float GrudgeBias = 0.6f;
 
-        public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg, int preferredId = -1)
+        public static EntityAlive FindTarget(EntityAlive me, World world, BotConfig cfg, int preferredId)
         {
             if (world == null || me == null) return null;
             EntityAlive best = null;
@@ -351,12 +351,11 @@ namespace BotMod.AI
             catch { }
         }
         static float WanderHash01(int entityId, int salt) { return Lcg.Seeded((uint)entityId * 2654435761u + (uint)salt * 97u + 1u).Next01(); }
-        public static Vector3 PickWanderTarget(EntityAlive me, World world, float radius, float rollAng01 = -1f, float rollDist01 = -1f)
+        public static Vector3 PickWanderTarget(EntityAlive me, World world, float radius, float rollAng01, float rollDist01)
         {
-            // Deterministic when rolls are supplied (from the bot's per-slot LCG, zdtd parity);
-            // fall back to a cheap hash of (entityId, pos) so the result is still not wall-clock noise.
-            if (rollAng01 < 0f) rollAng01 = WanderHash01(me.entityId, 11);
-            if (rollDist01 < 0f) rollDist01 = WanderHash01(me.entityId, 23);
+            // Rolls come from the bot's per-slot LCG (zdtd parity); later attempts
+            // and the fallback jitter derive from WanderHash01, so nothing here
+            // reads the wall clock.
             float ang0 = rollAng01 * (float)Math.PI * 2f;
             float dist0 = rollDist01 * radius * 0.7f + radius * 0.3f;
             for (int attempt = 0; attempt < 8; attempt++)

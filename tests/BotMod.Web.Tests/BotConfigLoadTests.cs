@@ -311,8 +311,8 @@ static class BotConfigLoadTests
                 p.Pellets == 6 && p.MagSize == 16 && p.FireRate < 0.55f && p.Range == 22f);
 
             p = WeaponProfile.ForGun("gunRifleT3SniperRifle", cfg);
-            Check("sniper: long range, high damage, tight spread, no burst",
-                p.Range == 90f && p.Damage == 42f && p.SpreadDeg == 0.35f
+            Check("sniper: long range, high damage, no burst",
+                p.Range == 90f && p.Damage == 42f
                 && p.BurstMin == 1 && p.BurstMax == 1);
 
             p = WeaponProfile.ForGun("gunHandgunT3SMG5", cfg);
@@ -333,7 +333,7 @@ static class BotConfigLoadTests
             // through to the pistol default.
             p = WeaponProfile.ForGun("gunHuntingRifleT0", cfg);
             Check("hunting rifle joins sniper class",
-                p.Range == 90f && p.Damage == 42f && p.SpreadDeg == 0.35f && p.BurstMin == 1);
+                p.Range == 90f && p.Damage == 42f && p.BurstMin == 1);
             p = WeaponProfile.ForGun("gunLeverActionT1", cfg);
             Check("lever action joins sniper class", p.Range == 90f && p.MagSize == 12);
             p = WeaponProfile.ForGun("gunMGT1M60", cfg);

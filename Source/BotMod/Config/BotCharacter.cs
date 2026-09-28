@@ -222,21 +222,14 @@ namespace BotMod.Config
         }
         public static BotCharacter ForName(string name)
         {
-            // Identity key must match BotManager.BaseName: spawned names look like
+            // Identity key must match BotText.BaseName: spawned names look like
             // "[Bot] Grunt_42" -> "Grunt". Splitting the raw name first yields
             // "[Bot] Grunt" and misses every non-Grunt entry in characters.json.
-            string key = BaseKey(name);
+            string key = BotText.BaseName(name);
+            if (key.Length == 0) key = "Grunt";
             if (Characters.TryGetValue(key, out var c)) return c;
             if (Characters.TryGetValue("Grunt", out var g)) return g;
             return BotCharacter.Defaults(key);
-        }
-        /// <summary>Base key for a bot name: strip the "[Bot] " tag, drop the _NN
-        /// suffix. Shared canonicalization in BotText.BaseName (Core references
-        /// Config, not the other way, so the helper lives here).</summary>
-        static string BaseKey(string name)
-        {
-            string key = BotText.BaseName(name);
-            return key.Length == 0 ? "Grunt" : key;
         }
     }
 }

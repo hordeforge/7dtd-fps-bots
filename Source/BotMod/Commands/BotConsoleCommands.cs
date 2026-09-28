@@ -251,9 +251,9 @@ namespace BotMod.Commands
             }
             var cfg = ModApi.Config;
             if (team < 0 || team > cfg.BotTeamCount) { SdtdConsole.Instance.Output("teamId must be 0.." + cfg.BotTeamCount + "."); return; }
-            string name = BotManager.BaseName(p[2]);
+            string name = BotMod.Config.BotText.BaseName(p[2]);
             bool live = false;
-            foreach (var b in BotManager.Instance.Bots) if (BotManager.BaseName(b.Name) == name) { live = true; break; }
+            foreach (var b in BotManager.Instance.Bots) if (BotMod.Config.BotText.BaseName(b.Name) == name) { live = true; break; }
             cfg.SetTeamAssignment(name, team);
             ModApi.PersistConfigField("TeamAssignments", cfg.SnapshotTeamAssignments());
             SdtdConsole.Instance.Output((team == 0 ? name + " is now free-for-all." : name + " assigned to team " + team + " (applies live).") + (live ? "" : " No live bot with that name - applies to future spawns."));

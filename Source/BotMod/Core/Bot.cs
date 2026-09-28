@@ -90,7 +90,7 @@ namespace BotMod.Core
         public Bot(int entityId, string name, float now, WeaponProfile weapon, BotCharacter character)
         {
             EntityId = entityId; Name = name; SpawnTime = now; Weapon = weapon; Character = character ?? BotCharacterDB.ForName(name);
-            TeamKey = BotManager.BaseName(name); // frozen: names never change after spawn
+            TeamKey = BotText.BaseName(name); // frozen: names never change after spawn
             _burstLeft = weapon.BurstMin;
             _rng = Lcg.Seeded((uint)entityId * 2654435761u + 97u);
             _ammo = weapon.MagSize; // zdtd_bot ammo pacing, ported

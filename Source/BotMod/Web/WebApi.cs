@@ -306,7 +306,7 @@ namespace BotMod.Web
                             if (teamRead == FieldRead.Invalid) { errorCode = "INVALID_TEAM"; break; }
                             if (teamRead == FieldRead.Ok) team = teamParsed;
                             if (string.IsNullOrEmpty(name)) { errorCode = "INVALID_NAME"; break; }
-                            string baseName = BotManager.BaseName(name);
+                            string baseName = BotText.BaseName(name);
                             var cfg = ModApi.Config;
                             team = Math.Max(0, Math.Min(cfg.BotTeamCount, team));
                             // Locked helper + snapshot: TeamAssignments is also

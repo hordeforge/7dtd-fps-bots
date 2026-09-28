@@ -99,22 +99,18 @@ namespace BotMod.AI
                 try
                 {
                     var t = typeof(GameManager);
-                    // Try GameManager.GameMessage(EnumGameMessages, string, string, float, string[]) or similar.
-                    var m = t.GetMethod("GameMessage", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
-                    if (m != null)
+                    // Best-effort: find a GameMessage overload accepting
+                    // (EnumGameMessages, string message).
+                    foreach (var ov in t.GetMethods())
                     {
-                        // Best-effort: find an overload accepting (EnumGameMessages, string message).
-                        foreach (var ov in t.GetMethods())
+                        if (ov.Name != "GameMessage") continue;
+                        var ps = ov.GetParameters();
+                        try
                         {
-                            if (ov.Name != "GameMessage") continue;
-                            var ps = ov.GetParameters();
-                            try
-                            {
-                                if (ps.Length >= 2 && ps[0].ParameterType.Name == "EnumGameMessages" && ps[1].ParameterType == typeof(string))
-                                    { ov.Invoke(gm, new object[] { (int)0, msg }); sent = true; return; }
-                            }
-                            catch { }
+                            if (ps.Length >= 2 && ps[0].ParameterType.Name == "EnumGameMessages" && ps[1].ParameterType == typeof(string))
+                                { ov.Invoke(gm, new object[] { (int)0, msg }); sent = true; return; }
                         }
+                        catch { }
                     }
                 }
                 catch { }

@@ -28,11 +28,6 @@ namespace BotMod.Core
         public bool IsBotEntity(int entityId) => _botEntityIds.Contains(entityId);
         public Bot GetBot(int entityId) => _botById.TryGetValue(entityId, out var b) ? b : null;
 
-        // Teams are keyed by base bot name ([Bot] Grunt_42 -> Grunt, same split
-        // as BotCharacterDB) so an assignment survives death and respawn.
-        // Canonicalization lives in BotMod.Config.BotText (shared with
-        // BotCharacterDB; Core already references Config).
-        public static string BaseName(string name) => Config.BotText.BaseName(name);
         /// <summary>Resolve a player by entity id, client id, or (partial) name.
         /// Shared by the `bot player` console command and the web API's spawnNear
         /// so both surfaces accept the same identifiers.</summary>
@@ -68,6 +63,8 @@ namespace BotMod.Core
             }
             return null;
         }
+        // Teams are keyed by base bot name ([Bot] Grunt_42 -> Grunt, same split
+        // as BotCharacterDB) so an assignment survives death and respawn.
         public int GetTeamId(int entityId)
         {
             if (ModApi.Config.BotTeamCount <= 0) return 0;
