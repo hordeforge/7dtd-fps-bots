@@ -43,8 +43,8 @@ selection and the AAS shims (`FindCover`, voxel LOS).
 
 Improvements travel both ways with `../zdtd-server`'s `mods/fps_bot` Wasm brain
 (`docs/q3-inspiration-notes.md` there). Everything stays deterministic via the
-per-bot LCG (`Config.Lcg`, held as `Bot._rng` and drawn through `Rng01()`/
-`RngSym()`, seeded from entity id). The type is `Foundation.Lcg`.
+per-bot LCG (`Foundation.Lcg`, held as `Bot._rng` and drawn through `Rng01()`/
+`RngSym()`, seeded from entity id).
 
 - **Lost-sight combat memory (from zdtd_bot).** While a target stays retained
   but out of sight, chase where it was last SEEN instead of its live position

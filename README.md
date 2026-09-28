@@ -70,10 +70,11 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
 
 The stock webserver serves `WebMod/bundle.js` and `WebMod/styling.css`
 uncompressed, so their shipped sizes are the whole download per panel open:
-14,489 and 8,874 bytes. `make check` holds both under a wire budget (14 KiB
-and 12 KiB, the initial congestion window) so the panel arrives in one round
-trip. State comes from one same-origin `GET /api/bot` polled every 5 s, with
-only the fields the panel reads in the response.
+14,145 and 8,874 bytes (`make lint-webui` prints the current pair). `make
+check` holds both under a wire budget (14 KiB and 12 KiB, the initial congestion
+window) so the panel arrives in one round trip. State comes from one same-origin
+`GET /api/bot` polled every 5 s, with only the fields the panel reads in the
+response.
 
 API: authenticated `GET /api/bot` (status + online `players` list +
 scoreboard), `POST /api/bot` with
