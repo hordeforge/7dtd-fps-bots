@@ -36,13 +36,15 @@ static class BotConfigLoadTests
 
     // Per-process scratch root. The pid is in the name so a leaked directory
     // names the run that left it, and so a second instance of this suite never
-    // shares a path with the first.
+    // shares a path with the first. Only this run's directories are cleaned
+    // up (see the same note in AtomicTextFileTests): a prefix-wide delete of
+    // the shared system temp dir removes a concurrent run's config mid-test.
     static string TempDir()
     {
         string dir = Path.Combine(Path.GetTempPath(),
             "botmod-configload-" + System.Diagnostics.Process.GetCurrentProcess().Id + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        _tempDirs.Add(dir);
+        lock (_tempDirs) _tempDirs.Add(dir);
         return dir;
     }
 

@@ -33,11 +33,12 @@ static class AtomicTextFileTests
     }
 
     // Per-process scratch root: only the dirs this process created are
-    // recorded and only those are deleted at the end. A blanket sweep of a
-    // shared temp prefix would delete a concurrently running instance's dirs,
-    // and its in-flight writers then fail with a vanished .tmp (reported as
-    // "concurrent writes complete without errors" plus a torn final primary).
-    // Two checkouts of this repo on one machine hit that.
+    // recorded and only those are deleted at the end. The system temp dir is
+    // shared with every other run of this suite on the host (a second gate,
+    // another checkout), and a prefix-wide delete tears down a live run's
+    // staging file, whose in-flight writers then fail with a vanished .tmp
+    // (reported as "concurrent writes complete without errors" plus a torn
+    // final primary). Two checkouts of this repo on one machine hit that.
     static string TempDir()
     {
         string dir = Path.Combine(Path.GetTempPath(), RunTag + Guid.NewGuid().ToString("N"));
