@@ -1,0 +1,24 @@
+# yamllint config for the CI workflow definitions
+# (`make lint-yaml`, part of `make check`; version pinned in
+# scripts/tool-versions.sh). The workflows are the only YAML this repo owns.
+#
+# Overridden from the "default" preset, each with the reason:
+#   truthy            GitHub Actions reads the bare `on:` key; that is the
+#                     documented spelling, not a boolean accident.
+#   comments          inline rule comments sit one space out, e.g.
+#                     `- uses: actions/checkout@<sha> # v7.0.1`, so pinning a
+#                     SHA and its tag must stay one token.
+#   line-length       the two offending runs are action SHAs, which
+#                     yamllint's non-breakable-word allowance already covers;
+#                     120 is the cap prose comments are held to.
+extends: default
+
+rules:
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  line-length:
+    max: 120
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true

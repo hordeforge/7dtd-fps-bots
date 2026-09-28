@@ -130,7 +130,7 @@ def _last_best(run_dir: Path):
     return np.array(last["top3"][0], dtype=float), last
 
 
-def weight_hist(run_dir: Path) -> str | None:
+def weight_hist(run_dir: Path) -> bytes | None:
     """Weight histogram of the final best (or first gen ckpt if no best yet)."""
     import numpy as np
     w, last = _last_best(run_dir)
@@ -145,7 +145,7 @@ def weight_hist(run_dir: Path) -> str | None:
     return optimized_png_bytes(fig)
 
 
-def best_net(run_dir: Path) -> str | None:
+def best_net(run_dir: Path) -> bytes | None:
     """Tiny net topology image: 14 inputs → 16 hidden (tanh) → 5 outputs.
     Colors encode the final best's weights; gives a quick “is it dead units”
     scan without opening JSON.
@@ -210,7 +210,7 @@ def build(runs: list[Path], out: Path):
         )
 
         if HAS_MPL:
-            band = fitness_band(gens, best, mean, median, q25, q75)
+            band: bytes | None = fitness_band(gens, best, mean, median, q25, q75)
             wh = weight_hist(run_dir)
             topo = best_net(run_dir)
         else:

@@ -283,7 +283,7 @@ def _simulate(w, seed, n_bots, n_zombies, max_ticks, bot_skill, w_opp, n_evolved
         n_evolved = n_bots
     kills_ev = 0; deaths_ev = 0; damage_dealt_ev = 0.0; damage_taken_ev = 0.0; shots_ev = 0; hits_ev = 0
 
-    for tick in range(max_ticks):
+    for _ in range(max_ticks):
         # check early termination: one side wiped
         alive_bots = 0
         for i in range(n_bots):

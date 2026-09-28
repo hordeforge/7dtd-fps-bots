@@ -127,14 +127,14 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
     """
     rng = seed & 0xFFFFFFFF
     bx = []; by = []; bhp = []; bweapon = []; balive = []; bskill = []
-    for i in range(n_bots):
+    for _ in range(n_bots):
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
         v2, rng = _lcg01(rng); rad = 8.0 + v2 * 18.0
         bx.append(40.0 + math.cos(ang) * rad); by.append(40.0 + math.sin(ang) * rad)
         bhp.append(100.0); bweapon.append(bot_weapon if bot_weapon >= 0 else ((rng >> 8) % 6))
         bskill.append(float(bot_skill)); balive.append(True)
     zx = []; zy = []; zhp = []; zalive = []
-    for i in range(n_zombies):
+    for _ in range(n_zombies):
         v, rng = _lcg01(rng); ang = v * 6.283185307179586
         v2, rng = _lcg01(rng); rad = 12.0 + v2 * 14.0
         zx.append(40.0 + math.cos(ang) * rad); zy.append(40.0 + math.sin(ang) * rad)
@@ -358,7 +358,7 @@ def record_match(w, seed, n_bots=4, n_zombies=3, max_ticks=1200, bot_skill=3, bo
                "total_ticks": total_ticks,
                # Alive bots only: dead bots keep their residual hp (<= 0), and
                # balive is always non-empty so a plain truthiness guard is dead code.
-               "winner_hp": max((h for h, a in zip(bhp, balive) if a), default=0)}
+               "winner_hp": max((h for h, a in zip(bhp, balive, strict=True) if a), default=0)}
     return summary, frames
 
 

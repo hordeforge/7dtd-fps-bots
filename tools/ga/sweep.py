@@ -97,7 +97,7 @@ exit status:
     print(" ────────────────────────────────────────────────────────────")
     for key in sorted(ok):
         hidden = 16
-        _, best, mean = zip(*ok[key])
+        _, best, mean = zip(*ok[key], strict=True)
         b = best[-1]; m = mean[-1]
         flops = 2 * 14 * hidden + 2 * hidden * 5
         W = hidden * 14 + hidden + 5 * hidden + 5
@@ -115,7 +115,7 @@ exit status:
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(8.5, 3.8))
         for key in sorted(ok):
-            xs, bs, ms = zip(*ok[key])
+            xs, bs, ms = zip(*ok[key], strict=True)
             ax.plot(xs, bs, lw=1.5, label=f"{key} best")
             ax.plot(xs, ms, lw=1.0, ls="--", alpha=0.85, label=f"{key} mean")
         ax.set_xlabel("generation"); ax.set_ylabel("fitness")

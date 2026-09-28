@@ -111,7 +111,7 @@ def _load_resume(resume: str, seed: int, pop: int):
         except Exception as ex:
             print(f"resume: skipping unusable checkpoint {cand.name} "
                   f"({ex.__class__.__name__}: {ex})", file=sys.stderr)
-    if top3 is None:
+    if top3 is None or ckpt is None or chosen is None:
         return _fresh(f"resume: no usable checkpoint in {resume}, starting fresh")
 
     # Prefer the checkpoint's full population: with it, the resumed run is a
@@ -252,9 +252,8 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
 
             # island eval: each island evaluates its subpop, global best is over all islands
             if islands == 1:
-                fitness = ([_synthetic_fitness(w) for w in island_pops[0]] if dry_run
-                           else harness.evaluate_population(island_pops[0], g, seed))
-                all_fitness = fitness
+                all_fitness = ([_synthetic_fitness(w) for w in island_pops[0]] if dry_run
+                               else harness.evaluate_population(island_pops[0], g, seed))
                 all_pops_flat = island_pops[0]
             else:
                 island_fitness: list[list[float]] = []

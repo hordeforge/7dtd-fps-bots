@@ -66,23 +66,23 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None):
     layers = [inputs, hidden, 5]
     xs = [0, 1, 2]
     max_n = max(layers)
-    for li, (n, x) in enumerate(zip(layers, xs)):
+    for li, (n, x) in enumerate(zip(layers, xs, strict=True)):
         # pad centering
         off = (max_n - n) * 0.04
         ys = np.linspace(0.08 + off, 0.92 - off, n)
         color = ["#0ea5e9", "#0369a1", "#0f172a"][li]
         ax.scatter([x] * n, ys, s=68, c=color, alpha=0.92, edgecolors="white", linewidths=1.0, zorder=3)
         labels = [INPUT_LABELS, [f"h{i}" for i in range(hidden)], OUT_LABELS][li]
-        for y, lab in zip(ys, labels):
+        for y, lab in zip(ys, labels, strict=True):
             ax.text(x + 0.06, y, lab, fontsize=6.2, va="center", color="#334155")
         # bias ring (size by |b|)
         if li == 1:
-            for y, b in zip(ys, b1):
+            for y, b in zip(ys, b1, strict=True):
                 s = float(np.clip(abs(b) * 22, 0, 18))
                 if s > 3:
                     ax.scatter([x], [y], s=s * 10, facecolors="none", edgecolors="#64748b", alpha=0.85, zorder=2)
         if li == 2:
-            for y, b in zip(ys, b2):
+            for y, b in zip(ys, b2, strict=True):
                 s = float(np.clip(abs(b) * 22, 0, 18))
                 if s > 3:
                     ax.scatter([x], [y], s=s * 10, facecolors="none", edgecolors="#475569", alpha=0.85, zorder=2)

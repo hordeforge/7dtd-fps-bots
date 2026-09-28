@@ -1,7 +1,7 @@
 ROOT := $(CURDIR)
 SCRIPTS := $(ROOT)/scripts
 .DEFAULT_GOAL := help
-.PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell lint-python check
+.PHONY: help build build-mcs test package install uninstall clean lint-html lint-webui lint-shell lint-python lint-yaml check
 
 # build needs the game's Managed DLLs (see scripts/build.sh for the two paths
 # it probes and the SEVENDTD_DS_DIR / SEVENDTD_GAME_DIR overrides).
@@ -11,9 +11,10 @@ Targets:
   make build-mcs    same, forcing the mono mcs backend
   make test         run tests/BotMod.Web.Tests via scripts/test-idempotency.sh (needs mcs + mono; CI runs it after installing mono)
   make package      reproducible zip of dist/BotMod -> dist/BotMod-<version>.zip (needs zip; run build first)
-  make check        what CI runs: shellcheck + vnu HTML lint + tsc/oxlint/bundle freshness
+  make check        what CI runs: shellcheck + yamllint + vnu HTML lint + tsc/oxlint/bundle freshness
   make lint-shell   shellcheck over scripts/*.sh
   make lint-python  ruff defect-class gate over tools/ga + scripts (config: ruff.toml)
+  make lint-yaml    yamllint over the CI workflows (config: .yamllint.yml, --strict)
   make lint-html    Nu HTML checker over shipped/generated HTML (needs java; tools via bunx)
   make lint-webui   tsc strict type-check, oxlint, committed-bundle freshness gate (needs bun/bunx)
   make install      copy dist/BotMod into the dedicated server's Mods dir
@@ -45,7 +46,10 @@ lint-shell:
 	shellcheck "$(SCRIPTS)"/*.sh
 lint-python:
 	ruff check .
-check: lint-shell lint-html lint-webui lint-python
+lint-yaml:
+	yamllint -c "$(ROOT)/.yamllint.yml" --strict "$(ROOT)/.github/workflows"
+
+check: lint-shell lint-yaml lint-html lint-webui lint-python
 install:
 	bash "$(SCRIPTS)/install.sh"
 uninstall:

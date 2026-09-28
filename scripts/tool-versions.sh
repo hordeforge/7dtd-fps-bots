@@ -24,7 +24,11 @@
 # lockstep with the locally installed ruff so local runs and CI enforce the
 # same rule set and fixes (ruff.toml documents the selected rules).
 : "${RUFF_VERSION:=0.16.4}"
+# CI workflow lint gate (make lint-yaml / .github/workflows/ci.yml). Same
+# lockstep contract as ruff above: CI installs the pin, the config that shapes
+# the finding set is .yamllint.yml.
+: "${YAMLLINT_VERSION:=1.38.0}"
 
 export TSC_VERSION OXLINT_VERSION OXLINT_STANDARDS_VERSION \
   OXLINT_TSGOLINT_VERSION OXLINT_PLUGINS_VERSION ANTI_SLOP_SHA VNU_VERSION \
-  RUFF_VERSION
+  RUFF_VERSION YAMLLINT_VERSION

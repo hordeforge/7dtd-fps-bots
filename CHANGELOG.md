@@ -12,8 +12,27 @@ fails on drift between them.
 
 ## [Unreleased]
 
+### Added
+
+- `make lint-yaml` runs `yamllint --strict` over `.github/workflows` and joins
+  `make check`, so the CI definitions are held to the same blocking bar as the
+  shell, Python, TypeScript and HTML sources. Config: `.yamllint.yml`; the
+  version is pinned in `scripts/tool-versions.sh` next to ruff's.
+- `ruff` now selects `B` (flake8-bugbear) in `ruff.toml`. The eight `zip()`
+  calls over parallel-length sequences pass `strict=True`, so a length
+  mismatch raises instead of silently truncating, and the two loop counters
+  that were never read are retired.
+
 ### Fixed
 
+- `tools/ga/report.py`'s `weight_hist` and `best_net` were annotated
+  `-> str | None` while returning PNG bytes, so every caller that embedded the
+  result in an `<img>` was mistyped. Both now say `bytes | None`.
+- `tools/ga/evolve.py` rebound its `fitness` parameter (the mix dict) to a
+  per-generation list of scores inside the training loop, and resumed from a
+  checkpoint that set `top3` without narrowing `ckpt`. The loop now uses
+  `all_fitness` directly, and the resume guard checks the whole triple it
+  depends on.
 - `tools/ga/evolve.py static-vs-neural` exits 1 when the promotion gate is not
   met instead of printing `GOAL MET: False` and exiting 0, and `tools/ga/sweep.py`
   exits 1 when no activation produced a curve. A CI step reading either exit code
