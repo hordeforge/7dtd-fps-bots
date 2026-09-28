@@ -98,6 +98,7 @@ refs=(
   -r:"$MANAGED/Utf8Json.dll"
   -r:"$MANAGED/System.Xml.dll"
   -r:"$MANAGED/LogLibrary.dll"
+  -r:"$MANAGED/SpaceWizards_HttpListener.dll"
 )
 # sort -z: deterministic compile order regardless of readdir order.
 mapfile -d '' sources < <(find "$SRC" -type f -name '*.cs' -print0 | sort -z)

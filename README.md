@@ -83,7 +83,8 @@ executing something else, as do missing required fields (`spawnNear`
 `player`, `removeOne` `entityId`) and the toggles' required `on` flag.
 Rejection codes: `INVALID_ACTION`, `INVALID_COUNT`, `INVALID_ENTITY_ID`,
 `INVALID_LEVEL`, `INVALID_NAME`, `INVALID_ON`, `INVALID_PLAYER`,
-`INVALID_REQUEST_ID`, `INVALID_TARGET`, `INVALID_WEAPON`. Range clamps match
+`INVALID_REQUEST_ID`, `INVALID_TARGET`, `INVALID_TEAM`, `INVALID_WEAPON`.
+Range clamps match
 the console (`count` 1..16, `skill` 0..4, teams 0..8). Send an optional
 client-generated `"requestId"` with mutations so a retried POST replays the
 recorded response instead of executing twice; a concurrent duplicate gets
@@ -91,6 +92,36 @@ recorded response instead of executing twice; a concurrent duplicate gets
 128 chars is rejected `400 INVALID_REQUEST_ID` (your retry protection would
 not be active). Failures return a generic `500 ERROR` envelope; detail goes
 to the server log only.
+
+Success bodies are per-action and carried in the stock webserver envelope's
+`data`; the rejection code above arrives as `meta.errorCode` with the status
+code. Every response, on both verbs and for every status, carries
+`Cache-Control: no-store`: `GET` is live world state and every `POST` mutates
+config or the world, so nothing here may be replayed from a cache.
+
+| action | `data` on success |
+|---|---|
+| `enable` / `disable` | `{"enabled":bool}` |
+| `spawn` | `{"spawned":N}` |
+| `spawnNear` | `{"spawned":N,"found":bool,"player":"<resolved name>"}` |
+| `remove` / `clear` | `{"removed":N}` |
+| `removeOne` | `{"removed":bool,"entityId":N}` |
+| `skill` | `{"difficulty":0-4}` (post-clamp value actually applied) |
+| `neural` | `{"neural":bool,"loaded":bool,"reason":"<load failure, else empty>"}` |
+| `team` | `{"team":bool}` |
+| `vs` | `{"vs":"<target class>","on":bool}` |
+| `setTeam` | `{"name":"<base name>","team":N}` (post-clamp bucket) |
+| `teamCount` | `{"teamCount":N}` (post-clamp value actually applied) |
+| `clearTeams` | `{"cleared":true}` |
+
+`GET` returns the config summary (`enabled`, `alive`, `difficulty`, `neural`,
+range/chance settings, the three `botVs*` toggles, `botTeam`, `teamCount`,
+`botHealth`, `targetBotCount`, `maxBots`, `neuralLoaded`, `neuralPath`) plus
+`players` (`{name, entityId}`) and `bots` (`{name, entityId, team, weapon,
+status, health, deaths, zombies, players, score, level, nearestPlayer,
+nearestPlayerDist}`; `nearestPlayerDist` is `-1` when no live player is
+online). Fields are added over time, so read unknown keys as ignored rather
+than absent, and treat a missing optional field the same way.
 
 ### Player data
 

@@ -52,5 +52,12 @@
       <HintPath>$(GameManagedDir)/Utf8Json.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- RequestContext.Response is a SpaceWizards.HttpListener type; setting
+         the Cache-Control header on every response (Web/WebApi.cs MarkNoStore)
+         needs the assembly even though nothing else names it. -->
+    <Reference Include="SpaceWizards_HttpListener">
+      <HintPath>$(GameManagedDir)/SpaceWizards_HttpListener.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 </Project>

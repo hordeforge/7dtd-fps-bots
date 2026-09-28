@@ -45,6 +45,10 @@ namespace BotMod.Web
     /// the caller must learn its retry protection is not active. Range
     /// clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
     /// console command's setters in BotConfig.
+    ///
+    /// Caching: every response (200, 400, 409, 500, on both verbs) carries
+    /// Cache-Control: no-store; see MarkNoStore. The bodies are live state,
+    /// not a stable representation of anything.
     /// </summary>
     public sealed class Bot : AbsRestApi
     {
@@ -71,6 +75,7 @@ namespace BotMod.Web
 
         public override void HandleRestGet(RequestContext context)
         {
+            MarkNoStore(context);
             PrepareEnvelopedResult(out JsonWriter writer);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
@@ -93,6 +98,7 @@ namespace BotMod.Web
 
         public override void HandleRestPost(RequestContext context, IDictionary<string, object> _jsonInput, byte[] _jsonInputData)
         {
+            MarkNoStore(context);
             PrepareEnvelopedResult(out JsonWriter writer);
             string action = GetString(_jsonInput, "action")?.ToLowerInvariant();
             // Optional idempotency key: one per logical request, reused across
@@ -387,6 +393,20 @@ namespace BotMod.Web
         }
 
         public override int[] DefaultMethodPermissionLevels() => new[] { 0, 0, 0, 0, 0 };
+
+        /// <summary>Mark every response uncacheable. Nothing this API returns is
+        /// a stable representation of anything: GET is live world state
+        /// (alive bots, health, positions' nearest player) and every POST
+        /// mutates config or the world, so a shared cache, the dashboard's
+        /// HTTP cache, or a replayed GET after a bfcache restore would hand an
+        /// admin a bot roster and config that no longer exist. Called at the
+        /// top of both handlers so every send path (200, 400, 409, 500) carries
+        /// it; the listener writes headers when the response is sent, not
+        /// before, so setting them here is still in time.</summary>
+        static void MarkNoStore(RequestContext context)
+        {
+            context.Response.Headers["Cache-Control"] = "no-store";
+        }
 
         /// <summary>Run a world-touching action on the game's main thread and
         /// wait for it (the web server handler runs on a thread pool thread;
