@@ -16,6 +16,15 @@ static class AtomicTextFileTests
     static int _failures;
     static readonly List<string> _tempDirs = new List<string>();
 
+    // Byte-exact compare: a decoded-text read hides a BOM and hides a
+    // platform-codepage write, both of which pass on an ASCII payload.
+    static bool SameBytes(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
+
     // Run-scoped tag: the end-of-run cleanup must delete THIS process's
     // directories and nothing else. Globbing a fixed "botmod-atomictest-*"
     // pattern in the shared temp root let any other run of this suite (a
@@ -195,15 +204,34 @@ static class AtomicTextFileTests
         }
 
         // 6. Content round-trip fidelity: multi-line UTF-8 payload survives.
+        //    Compared as BYTES, not decoded text: ReadAllText auto-detects and
+        //    strips a BOM, and an ASCII payload round-trips through any
+        //    single-byte codepage, so a string compare passed for a write that
+        //    emitted a BOM or used the platform default encoding.
         {
             string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
             string cfg = "{\n  \"Enabled\": true,\n  \"TeamAssignments\": { \"Grunt\": 2 }\n}";
             AtomicTextFile.Write(path, cfg);
             AtomicTextFile.Write(path, cfg + "\n");
-            Check("multi-line content round-trips byte-exact",
-                File.ReadAllText(path) == cfg + "\n");
+            byte[] want = System.Text.Encoding.UTF8.GetBytes(cfg + "\n");
+            byte[] got = File.ReadAllBytes(path);
+            Check("multi-line content round-trips byte-exact (" + got.Length + " bytes, no BOM)", SameBytes(got, want));
             Check(".bak keeps the prior full content",
                 File.ReadAllText(AtomicTextFile.BackupPath(path)) == cfg);
+        }
+
+        // 6b. Non-ASCII round trip. The reason both sides name UTF-8
+        //     explicitly: a team assignment keyed by an accented bot name is
+        //     stored here, and a host-codepage write mangles it on read-back.
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            string accented = "{\n  \"TeamAssignments\": { \"K\u00edra\": 2, \"\u96ea_\u5b88\": 1 }\n}";
+            AtomicTextFile.Write(path, accented);
+            Check("non-ASCII payload round-trips byte-exact",
+                SameBytes(File.ReadAllBytes(path), System.Text.Encoding.UTF8.GetBytes(accented)));
+            string s, src;
+            Check("non-ASCII payload reads back through TryRead",
+                AtomicTextFile.TryRead(path, out s, out src) && s == accented);
         }
 
         // 7. Concurrency: overlapping writers must serialize. Before the
@@ -238,16 +266,23 @@ static class AtomicTextFileTests
             Check("concurrent writers finished within timeout (" + budget + " ms, " + _perWriteMs + " ms/write)", finished);
             Check("concurrent writes complete without errors", errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);
-            string s, src;
-            bool read = AtomicTextFile.TryRead(path, out s, out src);
-            // The final content must be ONE complete payload from a single
-            // write call, never interleaved bytes from two.
-            bool complete = false;
-            for (int w = 0; w < writers && !complete; w++)
-                for (int i = 0; i < perWriter && !complete; i++)
-                    complete = read && s == "{\"writer\":" + w + ",\"seq\":" + i + ",\"pad\":\"0123456789\"}";
-            Check("final primary is one complete payload (no torn write)", complete);
-            Check("no staging tmp left after concurrent writes", !File.Exists(AtomicTextFile.TmpPath(path)));
+            // Inspect the file only once the writers have stopped. After a
+            // timeout they are still running, and a torn-file or leftover-tmp
+            // check against a file they are mutating reports the stall as a
+            // second and third failure.
+            if (finished)
+            {
+                string s, src;
+                bool read = AtomicTextFile.TryRead(path, out s, out src);
+                // The final content must be ONE complete payload from a single
+                // write call, never interleaved bytes from two.
+                bool complete = false;
+                for (int w = 0; w < writers && !complete; w++)
+                    for (int i = 0; i < perWriter && !complete; i++)
+                        complete = read && s == "{\"writer\":" + w + ",\"seq\":" + i + ",\"pad\":\"0123456789\"}";
+                Check("final primary is one complete payload (no torn write)", complete);
+                Check("no staging tmp left after concurrent writes", !File.Exists(AtomicTextFile.TmpPath(path)));
+            }
         }
 
         // 8. Degraded-write reporting: a failed .bak copy is the one swallowed

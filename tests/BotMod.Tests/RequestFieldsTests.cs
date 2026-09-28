@@ -284,6 +284,12 @@ static class RequestFieldsTests
         const int PoolSize = 12;
         long roundTrips = 0;
         long comparisons = 0;
+        // Break on a failure raised inside this fuzz, not on the suite-wide
+        // counter: reading _failures directly made an unrelated earlier
+        // failure exit the loop on its first iteration, so the fuzz reported
+        // green over one iteration while the round-trip count check below
+        // fired and buried the real cause.
+        int failuresBefore = _failures;
 
         for (int iter = 0; iter < 20000; iter++)
         {
@@ -345,7 +351,7 @@ static class RequestFieldsTests
                         + " are one request but read as <" + fp + "> and <" + poolFp[p] + ">");
                 comparisons++;
             }
-            if (_failures > 0) break;
+            if (_failures > failuresBefore) break;
 
             pool.Add(b);
             poolFp.Add(fp);
@@ -605,10 +611,18 @@ static class RequestFieldsTests
                     Check("fuzz produced unknown triage " + a, false);
                     return Finish();
                 }
+                // The value the caller receives, not just the triage: comparing
+                // only the FieldRead left a read that answers Ok and writes a
+                // default for every input green. Each branch keeps its own
+                // out value so the untouched one is never compared.
+                int vi = 0;
+                bool bb = false;
+                if (intRead) vi = v7; else bb = b0;
                 FieldRead b = intRead
                     ? RequestFields.OptInt(body, key, out v7)
                     : RequestFields.RequireBool(body, key, out b0);
-                if (a != b)
+                bool valueSame = intRead ? vi == v7 : bb == b0;
+                if (a != b || !valueSame)
                 {
                     Check("fuzz read not deterministic for key=" + key, false);
                     return Finish();

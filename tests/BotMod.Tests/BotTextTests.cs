@@ -18,6 +18,13 @@ static class BotTextTests
         if (!ok) _failures++;
     }
 
+    static string Repeat(string s, int n)
+    {
+        var sb = new System.Text.StringBuilder(s.Length * n);
+        for (int i = 0; i < n; i++) sb.Append(s);
+        return sb.ToString();
+    }
+
     static int Main()
     {
         // NFD input canonicalizes to NFC: base letter + combining acute ->
@@ -80,6 +87,54 @@ static class BotTextTests
         Check("visible non-ASCII preserved in key", BotText.IdentityKey("K\u00edra\u2603") == "K\u00edra\u2603");
         Check("WithoutInvisible leaves clean text alone", BotText.WithoutInvisible(nfcKira) == nfcKira);
         Check("WithoutInvisible null is empty", BotText.WithoutInvisible(null) == "");
+
+        // Strip before canon, not after: an invisible character sitting
+        // between a base letter and its combining mark blocks their
+        // composition, so canon-then-strip leaves two uncombined marks in the
+        // stored key and the lookup key never matches it.
+        {
+            // "e" + ZWNJ (U+200C, scrubbed) + combining acute.
+            string split = "e\u200c\u0301";
+            Check("invisible char between base and mark still composes",
+                BotText.IdentityKey(split) == "\u00e9");
+            // Two marks with the invisible character wedged between them.
+            // The contract is that wedging a scrubbed character in changes
+            // nothing, so compare against the same name without it.
+            Check("invisible char between base and mark still composes",
+                BotText.IdentityKey(split) == BotText.IdentityKey("e\u0301"));
+            Check("two invisible chars between base and mark still compose",
+                BotText.IdentityKey("e\u200c\u200d\u0301") == BotText.IdentityKey("e\u0301"));
+            Check("invisible char between two letters does not fork the key",
+                BotText.IdentityKey("Gr\u200cunt") == "Grunt");
+            Check("stripping first is a fixed point",
+                BotText.IdentityKey(BotText.IdentityKey(split)) == BotText.IdentityKey(split));
+        }
+
+        // CharCount is the unit for every character limit: a surrogate pair is
+        // one character, not the two string.Length reports, so a 128-char limit
+        // is not silently a 64-emoji limit.
+        {
+            string emoji = "\ud83d\ude00"; // U+1F600, one scalar, two code units
+            Check("CharCount counts a surrogate pair once", BotText.CharCount(emoji) == 1);
+            Check("CharCount differs from string.Length above the BMP", emoji.Length == 2);
+            Check("CharCount of a 100-emoji key is 100", BotText.CharCount(Repeat(emoji, 100)) == 100);
+            Check("CharCount counts unpaired surrogates as one each",
+                BotText.CharCount("a\ud83db") == 3);
+            Check("CharCount is zero for null and empty",
+                BotText.CharCount(null) == 0 && BotText.CharCount("") == 0);
+            Check("CharCount agrees with Length in the BMP",
+                BotText.CharCount("Grunt_42\u00e9") == "Grunt_42\u00e9".Length);
+        }
+
+        // NameMatches must not strip invisibles: player names legitimately
+        // carry U+200D inside emoji sequences, so the stored-key rule above
+        // cannot be applied to a match.
+        {
+            string zwj = "a\ud83d\ude00\ud83d\udc69\u200d\ud83d\ude80b";
+            Check("NameMatches keeps an emoji ZWJ sequence intact", BotText.NameMatches(zwj, zwj));
+            Check("NameMatches differs from IdentityKey on ZWJ names",
+                BotText.IdentityKey(zwj) != zwj);
+        }
 
         Console.WriteLine(_failures == 0 ? "all bot text tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;

@@ -466,9 +466,17 @@ static class BotConfigLoadTests
                 Check("blank override counts as unset", BotConfig.ConfigPathOverride() == null);
             }
             finally { Environment.SetEnvironmentVariable(BotConfig.ConfigPathEnvVar, prev); }
-            Check("no override falls back to the assembly-relative path",
-                BotConfig.ConfigPathOverride() == null
-                && BotConfig.ConfigPath().EndsWith("botmod.json", StringComparison.Ordinal));
+            // Clear rather than restore for the fallback check: a host that
+            // exports BOTMOD_CONFIG (a deployed-server convention) made this
+            // fail for an environment reason, not a code one.
+            try
+            {
+                Environment.SetEnvironmentVariable(BotConfig.ConfigPathEnvVar, "");
+                Check("no override falls back to the assembly-relative path",
+                    BotConfig.ConfigPathOverride() == null
+                    && BotConfig.ConfigPath().EndsWith("botmod.json", StringComparison.Ordinal));
+            }
+            finally { Environment.SetEnvironmentVariable(BotConfig.ConfigPathEnvVar, prev); }
         }
 
         // The effective dump is the only place the clamped, preset-adjusted
@@ -494,18 +502,33 @@ static class BotConfigLoadTests
         {
             var cfg = new BotConfig();
             string f;
+            // The exact field name, not just "some config property": the
+            // copy-paste bug this block exists for sets BotVsBot and returns
+            // "BotVsZombie", and a property-existence check passes for it.
             Check("singular alias 'bot' flips BotVsBot",
-                cfg.SetVsTarget("bot", false, out f) && !cfg.BotVsBot && IsConfigProperty(f));
+                cfg.SetVsTarget("bot", false, out f) && !cfg.BotVsBot && f == "BotVsBot" && IsConfigProperty(f));
+            Check("plural alias 'bots' flips BotVsBot",
+                cfg.SetVsTarget("bots", true, out f) && cfg.BotVsBot && f == "BotVsBot");
             Check("plural alias 'zombies' flips BotVsZombie",
-                cfg.SetVsTarget("zombies", false, out f) && !cfg.BotVsZombie && IsConfigProperty(f));
+                cfg.SetVsTarget("zombies", false, out f) && !cfg.BotVsZombie && f == "BotVsZombie" && IsConfigProperty(f));
+            Check("singular alias 'zombie' flips BotVsZombie",
+                cfg.SetVsTarget("zombie", true, out f) && cfg.BotVsZombie && f == "BotVsZombie");
             Check("'human' aliases players",
-                cfg.SetVsTarget("human", false, out f) && !cfg.BotVsPlayer && IsConfigProperty(f));
+                cfg.SetVsTarget("human", false, out f) && !cfg.BotVsPlayer && f == "BotVsPlayer" && IsConfigProperty(f));
             Check("plural alias 'players' aliases same flag",
-                cfg.SetVsTarget("players", true, out f) && cfg.BotVsPlayer && IsConfigProperty(f));
+                cfg.SetVsTarget("players", true, out f) && cfg.BotVsPlayer && f == "BotVsPlayer");
+            Check("singular alias 'player' aliases same flag",
+                cfg.SetVsTarget("player", false, out f) && !cfg.BotVsPlayer && f == "BotVsPlayer");
             // Rejection leaves every flag at its value before the call.
             bool vsBot = cfg.BotVsBot, vsZombie = cfg.BotVsZombie, vsPlayer = cfg.BotVsPlayer;
             Check("unknown target rejected without touching flags",
                 !cfg.SetVsTarget("trader", true, out f) && f == null
+                && cfg.BotVsBot == vsBot && cfg.BotVsZombie == vsZombie && cfg.BotVsPlayer == vsPlayer);
+            // An absent target is the default branch too, not a crash: the
+            // admin surfaces read the field as "" when the client omits it.
+            Check("null and empty targets are rejected, not guessed",
+                !cfg.SetVsTarget(null, true, out f) && f == null
+                && !cfg.SetVsTarget("", true, out f) && f == null
                 && cfg.BotVsBot == vsBot && cfg.BotVsZombie == vsZombie && cfg.BotVsPlayer == vsPlayer);
         }
 
@@ -584,9 +607,14 @@ static class BotConfigLoadTests
             foreach (string gun in cfg.LoadoutPool)
             {
                 WeaponProfile direct = WeaponProfile.ForGun(gun, cfg);
-                if (mixedPick.GunId == direct.GunId)
-                    matchesDirect = direct.FireRate == mixedPick.FireRate && direct.Range == mixedPick.Range
-                        && direct.Damage == mixedPick.Damage && direct.Pellets == mixedPick.Pellets;
+                if (mixedPick.GunId != direct.GunId) continue;
+                // Stop at the first id match. Comparing into the same flag on
+                // every iteration left a partial match on pool entry 0 masked
+                // by a non-match on entry 1, so the check passed for a pick
+                // that equalled no profile at all.
+                matchesDirect = direct.FireRate == mixedPick.FireRate && direct.Range == mixedPick.Range
+                    && direct.Damage == mixedPick.Damage && direct.Pellets == mixedPick.Pellets;
+                break;
             }
             Check("mixed pick equals the direct profile of a pooled gun", matchesDirect);
 

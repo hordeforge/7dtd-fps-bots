@@ -79,12 +79,20 @@ static class LcgTests
         //    across many draws and seeds.
         {
             var r = Lcg.Seeded(0xC0FFEEu);
-            bool ok01 = true, okSym = true;
+            bool ok01 = true;
             for (int i = 0; i < 200000; i++)
             {
                 float v = r.Next01();
                 if (v < 0f || v >= 1f || float.IsNaN(v)) { ok01 = false; break; }
-                float s = r.NextSymmetric();
+            }
+            // A second stream: sharing the loop with the sweep above let a
+            // Next01 failure break out before a single NextSymmetric draw ran,
+            // and the check below still reported a pass.
+            var rs = Lcg.Seeded(0xC0FFEEu);
+            bool okSym = true;
+            for (int i = 0; i < 200000; i++)
+            {
+                float s = rs.NextSymmetric();
                 if (s < -1f || s >= 1f || float.IsNaN(s)) { okSym = false; break; }
             }
             Check("200k Next01 draws stay in [0,1)", ok01);
