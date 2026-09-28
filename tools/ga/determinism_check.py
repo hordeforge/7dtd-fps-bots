@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -110,6 +111,48 @@ def check_canonical_stick() -> None:
     print("  ok  harness: the canonical stick is reproducible and restores its knobs")
 
 
+def check_concurrent_canonical_stick() -> None:
+    """canonical_scores pins the stick for the whole threaded evaluation, so
+    two probes at once must not steal each other's pin: each has to return the
+    canonical score, and the training knobs outside must survive intact."""
+    w = ga.he_init(np.random.default_rng(SEED))
+    want = harness.canonical_scores(w, 7, SEED, 4)
+    # evolve sets the training knobs this way before it starts a generation;
+    # reproduce that here so a probe has a live non-canonical stick to stomp.
+    training = {"ACTIVATION": 1, "FIT_ELO": 0.9, "FIT_ECON": 0.3, "FIT_SURV": 0.2,
+                "FIT_STUCK": 0.4, "CURRICULUM": "horde_first", "DRAWS_PER_CONFIG": 3}
+    for name, value in training.items():
+        setattr(harness, name, value)
+    results: list[list[float]] = []
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(4)
+
+    def probe() -> None:
+        try:
+            barrier.wait(timeout=30)  # every probe starts inside the same window
+            results.append(harness.canonical_scores(w, 7, SEED, 4))
+        except BaseException as ex:  # reported by the driver, not swallowed
+            errors.append(ex)
+
+    threads = [threading.Thread(target=probe) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=120)
+    if errors:
+        _fail(f"harness.canonical_scores: a concurrent probe raised {errors[0]!r}")
+    if any(t.is_alive() for t in threads):
+        _fail("harness.canonical_scores: a concurrent probe did not finish (deadlock)")
+    if any(r != want for r in results):
+        _fail("harness.canonical_scores: a concurrent probe scored on another "
+              "caller's measuring stick")
+    after = {name: getattr(harness, name) for name in training}
+    if after != training:
+        _fail(f"harness.canonical_scores: concurrent probes lost the training "
+              f"knobs ({after} != {training})")
+    print("  ok  harness: concurrent canonical probes each kept the canonical stick")
+
+
 def _fail(msg: str) -> None:
     # stderr: the passing checks are the report on stdout, a failure is status.
     print(f"FAIL  {msg}", file=sys.stderr)
@@ -125,6 +168,7 @@ if __name__ == "__main__":
               f"(see --help)", file=sys.stderr)
         raise SystemExit(2)
     for step in (check_evolution, check_rng_checkpoint, check_match_kernel,
-                 check_threaded_harness, check_canonical_stick):
+                 check_threaded_harness, check_canonical_stick,
+                 check_concurrent_canonical_stick):
         step()
     print("determinism: every layer replays from the seed")

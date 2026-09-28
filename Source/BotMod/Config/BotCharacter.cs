@@ -253,8 +253,13 @@ namespace BotMod.Config
             // "[Bot] Grunt" and misses every non-Grunt entry in characters.json.
             string key = BotText.BaseName(name);
             if (key.Length == 0) key = "Grunt";
-            if (Characters.TryGetValue(key, out var c)) return c;
-            if (Characters.TryGetValue("Grunt", out var g)) return g;
+            // One read of the published table: three separate property reads
+            // could straddle a `bot reload` and pair a miss on the new table
+            // with the "Grunt" fallback from the old one, so one call would
+            // return a character from a table that is no longer live.
+            var table = Characters;
+            if (table.TryGetValue(key, out var c)) return c;
+            if (table.TryGetValue("Grunt", out var g)) return g;
             return BotCharacter.Defaults(key);
         }
     }

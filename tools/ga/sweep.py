@@ -33,9 +33,9 @@ def run_one(activation: str, pop: int, gens: int, seed: int):
     """One evolution with `activation` ('tanh' or 'relu'). The other 16 are
     skip branches; H16 is the only real size. harness.ACTIVATION selects
     simulate_match (canonical tanh) or simulate_match_relu."""
-    orig_act = harness.ACTIVATION
-    harness.ACTIVATION = 1 if activation == "relu" else 0
-    try:
+    # pinned_knobs saves and restores every knob it sets, so the activation
+    # only has to be named once.
+    with harness.pinned_knobs(ACTIVATION=1 if activation == "relu" else 0):
         rng = np.random.default_rng(seed)
         pop_w = ga.init_population(rng, pop, sigma=0.02)
         curve = []
@@ -50,8 +50,6 @@ def run_one(activation: str, pop: int, gens: int, seed: int):
             # (generation=0 -> no anneal), no stagnant burst.
             pop_w = ga.next_generation(pop_w, ranked, order, rng)
         return curve
-    finally:
-        harness.ACTIVATION = orig_act
 
 
 def main():

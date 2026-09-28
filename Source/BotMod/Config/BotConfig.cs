@@ -206,8 +206,16 @@ namespace BotMod.Config
         /// BotCharacterDB ingestion). Wired to ModApi.Warn by ModApi.InitMod
         /// so this layer stays free of engine/game type dependencies
         /// (headless unit tests can exercise Load); the default writes to
-        /// stdout.</summary>
-        internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
+        /// stdout. Volatile for the same reason the ledger's sink is: wired on
+        /// the main thread by InitMod, read from web handler threads
+        /// (PersistConfigField's audit path).</summary>
+        internal static Action<string> Warn
+        {
+            get { return System.Threading.Volatile.Read(ref _warn); }
+            set { System.Threading.Volatile.Write(ref _warn, value); }
+        }
+
+        static Action<string> _warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
 
         public static BotConfig Load(string path)
         {

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import List
 
 import numpy as np
@@ -42,6 +44,60 @@ DRAWS_PER_CONFIG = 2
 # the duration of its evaluation and restores the caller's knobs afterwards.
 _CANONICAL_STICK = (0, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, "mixed", 1)
 
+# The seven knobs above are process globals, and evaluate() reads them from
+# the pool threads _pmap spawns. Anything that swaps them has to hold this
+# lock for the whole window: two overlapping pins otherwise interleave their
+# save/restore and a worker can end up scoring one arena with another
+# caller's curriculum and draws-per-config, or with a half-restored scalarization.
+# It is a leaf lock (held across ThreadPoolExecutor work, never acquired from
+# inside a worker), so it cannot deadlock against the pool.
+_STICK_LOCK = threading.Lock()
+
+KNOB_NAMES = ("ACTIVATION", "FIT_ELO", "FIT_ECON", "FIT_SURV", "FIT_STUCK",
+              "CURRICULUM", "DRAWS_PER_CONFIG")
+
+
+@contextmanager
+def pinned_stick(values: tuple):
+    """Install the module knobs named in `values` (parallel to KNOB_NAMES)
+    for the duration of the block, then put back whatever was there.
+
+    The one way to change a knob from a caller: evaluate() fans out across
+    threads, so a bare assign is only safe while no other caller is in flight,
+    and a bare restore is a check-then-act that loses a concurrent caller's
+    pin. The window is exclusive instead."""
+    globals_ = globals()
+    # Snapshot only once the window is ours: reading before the acquire would
+    # capture the canonical stick another caller still has pinned, and that
+    # probe would then "restore" it on the way out and strand the training
+    # knobs as the new baseline.
+    _STICK_LOCK.acquire()
+    try:
+        saved = tuple(globals_[name] for name in KNOB_NAMES)
+        for name, value in zip(KNOB_NAMES, values, strict=True):
+            globals_[name] = value
+        yield
+    finally:
+        try:
+            for name, value in zip(KNOB_NAMES, saved, strict=True):
+                globals_[name] = value
+        finally:
+            _STICK_LOCK.release()
+
+
+@contextmanager
+def pinned_knobs(**overrides):
+    """pinned_stick for a partial override: the named knobs take the given
+    values, the rest keep whatever the caller had set."""
+    index = {name: i for i, name in enumerate(KNOB_NAMES)}
+    values = list(globals()[name] for name in KNOB_NAMES)
+    for name, value in overrides.items():
+        if name not in index:
+            raise KeyError(f"unknown harness knob {name!r}; known: {', '.join(KNOB_NAMES)}")
+        values[index[name]] = value
+    with pinned_stick(tuple(values)):
+        yield
+
 
 def canonical_scores(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -> List[float]:
     """Score `w` on the shared held-out measuring stick: canonical tanh +
@@ -49,15 +105,11 @@ def canonical_scores(w: np.ndarray, gen_key: int, run_seed: int, matches: int) -
     by (gen_key, m, run_seed). One definition for every consumer of held-out
     numbers (evolve's promotion gate and its eval / static-vs-neural
     subcommands), so they cannot drift apart again; training knobs set by
-    a caller are pinned to the canonical values for the duration and restored
-    afterwards."""
-    global ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG
-    saved = (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG)
-    (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG) = _CANONICAL_STICK
-    try:
+    a caller are pinned for the duration (pinned_stick, so a probe running
+    beside another caller cannot have its stick swapped mid-flight) and
+    restored afterwards."""
+    with pinned_stick(_CANONICAL_STICK):
         return evaluate_many(w, gen_key, run_seed, matches)
-    finally:
-        (ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV, FIT_STUCK, CURRICULUM, DRAWS_PER_CONFIG) = saved
 
 
 # Thread cap for evaluate_population/evaluate_many: one worker per genome (or
@@ -110,6 +162,14 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
     Curriculum gates the mix: pvp_first emphasizes duels early, horde_first
     emphasizes horde (set by evolve.py per gen, default mixed).
     """
+    # Read the process knobs once, into locals. This body runs on a pool
+    # thread while the caller thread owns pinned_stick, so re-reading the
+    # globals inside the loop could score a genome's 36 sims under two
+    # different measuring sticks (a swap lands between arenas) and the arena
+    # mix would no longer match the config that was asked for.
+    activation, fit_elo, fit_econ, fit_surv = ACTIVATION, FIT_ELO, FIT_ECON, FIT_SURV
+    fit_stuck, fit_camp, curriculum, draws = FIT_STUCK, FIT_CAMP, CURRICULUM, DRAWS_PER_CONFIG
+
     total = 0.0
     n = 0
     # Arena configs: (n_bots, n_evolved, n_zombies, max_ticks). When n_evolved <
@@ -118,19 +178,19 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
     # instead of pitting the policy against itself (kills == deaths, elo pinned).
     # A curriculum is a weighting of these shapes: one entry per occurrence, so
     # a shape that outweighs another is a longer list, not a different tuple.
-    if CURRICULUM == "pvp_first":
+    if curriculum == "pvp_first":
         configs = [_DUEL] * 5 + [_SKIRMISH, _FFA, _FFA, _HORDE_SHORT]
-    elif CURRICULUM == "horde_first":
+    elif curriculum == "horde_first":
         configs = [_DUEL, _SKIRMISH, _FFA, _FFA, _HORDE_LONG, _HORDE_LONG, _HORDE_LONG, _HORDE_LONG, _FFA]
     else:
         configs = [_DUEL] * 3 + [_SKIRMISH, _FFA, _FFA, _FFA, _HORDE_LONG, _HORDE_LONG]
     # dual-seed regularizer: training fitness = mean over two seed streams
-    fn = _simulate_relu if ACTIVATION == 1 else _simulate
+    fn = _simulate_relu if activation == 1 else _simulate
     seeds = (run_seed, run_seed ^ 0x9E3779B9)
     for rs in seeds:
         for m, (n_bots, n_evolved, n_zombies, max_ticks) in enumerate(configs):
-            for rep in range(DRAWS_PER_CONFIG):
-                seed = _seed_for(generation, genome_idx, m * DRAWS_PER_CONFIG + rep, rs)
+            for rep in range(draws):
+                seed = _seed_for(generation, genome_idx, m * draws + rep, rs)
                 skill = _skill_for_match(m)
                 if n_evolved < n_bots:
                     # fixed-opponent duel arena (R11 rework): spawn gap + open env + equal AKs
@@ -138,7 +198,8 @@ def evaluate(w: np.ndarray, generation: int, genome_idx: int, run_seed: int = 42
                            _OPP_STATIC, n_evolved, DUEL_SPAWN_GAP, DUEL_ENV, DUEL_WEAPON)
                 else:
                     r = fn(w, seed, n_bots, n_zombies, max_ticks, skill)
-                fitness = FIT_ELO * r[0] + FIT_ECON * r[1] + FIT_SURV * r[2] - FIT_STUCK * r[3] - FIT_CAMP * r[4]
+                fitness = (fit_elo * r[0] + fit_econ * r[1] + fit_surv * r[2]
+                           - fit_stuck * r[3] - fit_camp * r[4])
                 total += fitness; n += 1
     return total / max(1, n)
 

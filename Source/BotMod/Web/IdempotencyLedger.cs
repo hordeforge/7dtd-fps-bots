@@ -60,8 +60,16 @@ namespace BotMod.Web
 
         /// <summary>Warning sink for a throwing eviction sink. Wired to
         /// ModApi.Warn by ModApi.InitMod; the default keeps the failure visible
-        /// in headless runs.</summary>
-        internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
+        /// in headless runs. Volatile for the same reason as
+        /// <see cref="CapacityEvicted"/>: wired on the main thread, read under
+        /// <see cref="Gate"/> from web handler threads.</summary>
+        internal static Action<string> Warn
+        {
+            get { return System.Threading.Volatile.Read(ref _warn); }
+            set { System.Threading.Volatile.Write(ref _warn, value); }
+        }
+
+        static Action<string> _warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
 
         /// <summary>Monotonic elapsed-time source for retention/pruning
         /// decisions. Retention is a pure duration, so it must not ride the

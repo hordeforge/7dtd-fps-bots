@@ -25,8 +25,18 @@ namespace BotMod.Foundation
         /// default keeps a failure visible in headless runs. Both swallow sites
         /// below trade durability for availability (the swap still completes),
         /// so an operator has to learn about it from the log: a .bak that was
-        /// never written means the next torn primary has no last-known-good.</summary>
-        internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
+        /// never written means the next torn primary has no last-known-good.
+        /// Volatile for the same reason the ledger's sink is: InitMod wires it
+        /// on the main thread while web handler threads reach it through
+        /// PersistConfigField, and a plain static field lets a reader keep the
+        /// pre-init default past the store.</summary>
+        internal static Action<string> Warn
+        {
+            get { return System.Threading.Volatile.Read(ref _warn); }
+            set { System.Threading.Volatile.Write(ref _warn, value); }
+        }
+
+        static Action<string> _warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
 
         internal static string TmpPath(string path) { return path + ".tmp"; }
         internal static string BackupPath(string path) { return path + ".bak"; }

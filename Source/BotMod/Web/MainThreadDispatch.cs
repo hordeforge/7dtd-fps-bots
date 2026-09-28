@@ -79,8 +79,14 @@ namespace BotMod.Web
                         // this queued task still holds it; Set must not throw into
                         // the main-thread loop on that abandoned-dispatch path.
                         try { done.Set(); } catch (Exception) { }
-                        if (callerGone && Abandoned != null)
-                            try { Abandoned(op, error); } catch (Exception) { }
+                        // One read of the sink, taken after Set: re-reading the
+                        // property for the call could observe a different value
+                        // than the null test, and a swapped-to-null sink would
+                        // turn this report into a NullReferenceException on the
+                        // main-thread loop.
+                        var sink = Abandoned;
+                        if (callerGone && sink != null)
+                            try { sink(op, error); } catch (Exception) { }
                     }
                 });
                 if (!done.Wait(timeout))
