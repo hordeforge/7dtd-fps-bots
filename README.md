@@ -174,10 +174,17 @@ what the game already holds for connected players, and only on an admin surface:
   `localStorage`/`sessionStorage`, and loads no third-party script. The mod
   makes no outbound request.
 - **In the server log**: player-chosen names appear where gameplay needs them
-  (kill feed, spawn-near, admin mutations) and pass through `LogSanitizer`
-  (`Source/BotMod/Foundation/LogSanitizer.cs`) so they cannot forge log lines. The
-  synthetic-auth bypass (`AllowSyntheticAuthBypass`, off by default) logs the
-  connection's entity id only, not the Steam id or client IP
+  (kill feed) and pass through `LogSanitizer`
+  (`Source/BotMod/Foundation/LogSanitizer.cs`) so they cannot forge log lines.
+  The audit lines for admin mutations do not carry them: the
+  `web api ... ok in Nms <body>` line and the `bot cmd player:` line record
+  the action's outcome plus the target's entity id, with the name replaced by
+  `<player>` (`LogRedactor.Redact`,
+  `Source/BotMod/Foundation/LogRedactor.cs`). The API response and the console
+  echo still name the player; the operator asked which player they meant, and
+  both stay in the operator's own session. The synthetic-auth bypass
+  (`AllowSyntheticAuthBypass`, off by default) logs the connection's entity id
+  only, not the Steam id or client IP
   (`Source/BotMod/Patches/BotPatches.cs`).
 - **In memory**: the idempotency ledger caches response bodies, which for
   `spawnNear` include a player name, for at most `Retention` (10 min) and 256

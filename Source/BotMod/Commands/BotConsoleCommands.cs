@@ -270,9 +270,14 @@ namespace BotMod.Commands
             SdtdConsole.Instance.Output($"Spawned {spawned}/{count} bots near {nearName} (id {target.entityId})" + (weapon != null ? $" weapon={weapon}" : "") + ".");
             // Same audit line as DoSpawn: this surface's echo never reaches the
             // server log, and a near-player spawn is the one an incident review
-            // most needs to place in time.
-            ModApi.Log("bot cmd player: " + spawned + "/" + count + " bots near " + nearName
-                + " (id " + target.entityId.ToString(CultureInfo.InvariantCulture) + ")"
+            // most needs to place in time. The name stays on the console echo,
+            // which names who the operator asked about; the log line carries
+            // the entity id instead, the reference every other log line uses
+            // for a player, so a name a player chose never lands in the log
+            // file. The echo above is the operator's own session and the one
+            // they typed the name into.
+            ModApi.Log("bot cmd player: " + spawned + "/" + count + " bots near entity "
+                + target.entityId.ToString(CultureInfo.InvariantCulture)
                 + (weapon != null ? " weapon=" + weapon : "")
                 + " by " + SenderTag(sender));
         }

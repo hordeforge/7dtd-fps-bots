@@ -19,7 +19,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # check at the end keep this list and the actual run_suite calls in step.
 all_suites=(
   idempotency atomictextfile idempotencyfuzz mainthreaddispatch logsanitize
-  spawnpointxmlfuzz logsanitizerfuzz requestfields combatgates bottext lcg
+  spawnpointxmlfuzz logsanitizerfuzz logredact requestfields combatgates bottext lcg
   botclock botargparser botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz
   adminsettersfuzz botchararith weaponprofile weaponprofilefuzz teamshammer
   botconfig webapiauthz botarith
@@ -149,6 +149,15 @@ run_suite logsanitizerfuzz \
   "$root/Source/BotMod/Foundation/LogSanitizer.cs" \
   "$root/Source/BotMod/Foundation/BotText.cs" \
   "$root/tests/BotMod.Tests/LogSanitizerFuzzTests.cs"
+
+# Personal-data guard for the /api/bot audit line: a response body carrying a
+# connected player's name (spawnNear's "player") keeps its outcome fields and
+# loses the name, so the log records what the action did and not who it was
+# about. Distinct from logsanitize above, which answers whether a value can
+# forge a line, not whether it identifies a person.
+run_suite logredact \
+  "$root/Source/BotMod/Foundation/LogRedactor.cs" \
+  "$root/tests/BotMod.Tests/LogRedactorTests.cs"
 
 # POST /api/bot body-field readers: absent vs present-but-garbage triage for
 # untrusted JSON values (named 400s instead of silent defaults), plus a

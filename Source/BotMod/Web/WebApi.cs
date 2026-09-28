@@ -242,7 +242,11 @@ namespace BotMod.Web
             // ident). Json.NET escapes C0 controls but passes DEL/C1, bidi
             // controls and zero-width characters through verbatim, so the same
             // LogSanitizer contract that guards action/requestId guards it too.
-            ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " ok in " + sw.ElapsedMilliseconds + "ms " + LogSanitizer.Clean(respBody));
+            // Redaction runs first: the client's copy of the body keeps the
+            // name, the log copy does not (the audit value is the outcome
+            // fields, and entity id already names the player in every other
+            // log line).
+            ModApi.Log("web api action=" + logAction + " req=" + logTag + " caller=" + caller + " ok in " + sw.ElapsedMilliseconds + "ms " + LogSanitizer.Clean(LogRedactor.Redact(respBody)));
             writer.WriteRaw(Encoding.UTF8.GetBytes(respBody));
             SendEnvelopedResult(context, ref writer, HttpStatusCode.OK, null, null, null);
         }
