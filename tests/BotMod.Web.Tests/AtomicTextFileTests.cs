@@ -42,19 +42,22 @@ static class AtomicTextFileTests
     {
         string dir = Path.Combine(Path.GetTempPath(), RunTag + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        _dirs.Add(dir);
+        lock (_dirs) _dirs.Add(dir);
         return dir;
     }
 
     static void Cleanup()
     {
-        foreach (string dir in _dirs)
+        lock (_dirs)
         {
-            try { Directory.Delete(dir, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            foreach (string dir in _dirs)
+            {
+                try { Directory.Delete(dir, recursive: true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            _dirs.Clear();
         }
-        _dirs.Clear();
     }
 
     static int Main()
@@ -175,7 +178,38 @@ static class AtomicTextFileTests
             Check("no staging tmp left after concurrent writes", !File.Exists(AtomicTextFile.TmpPath(path)));
         }
 
-        // 8. Concurrency: readers must never observe Write's delete-then-move
+        // 8. Degraded-write reporting: a failed .bak copy is the one swallowed
+        //    failure with no downstream signal. The swap still lands (the new
+        //    content is not lost), but the last-known-good is not refreshed, so
+        //    a later torn primary has nothing to recover from and Load would
+        //    quietly reset every persisted operator setting to defaults. A
+        //    read-only .bak stands in for the real cases (backup on a
+        //    read-only mount, out of space, no permission in the mod dir).
+        {
+            string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
+            var warns = new List<string>();
+            Action<string> previous = AtomicTextFile.Warn;
+            AtomicTextFile.Warn = msg => { lock (warns) warns.Add(msg); };
+            try
+            {
+                AtomicTextFile.Write(path, "{\"v\":1}");
+                File.WriteAllText(AtomicTextFile.BackupPath(path), "{\"v\":0}");
+                File.SetAttributes(AtomicTextFile.BackupPath(path), FileAttributes.ReadOnly);
+                AtomicTextFile.Write(path, "{\"v\":2}");
+            }
+            finally { AtomicTextFile.Warn = previous; }
+            File.SetAttributes(AtomicTextFile.BackupPath(path), FileAttributes.Normal);
+            Check("write still lands when the backup copy fails",
+                File.ReadAllText(path) == "{\"v\":2}");
+            string joined;
+            lock (warns) joined = string.Join(" | ", warns);
+            Check("failed backup copy is reported (" + warns.Count + " warning(s))", warns.Count == 1);
+            Check("backup warning names the .bak path", joined.Contains(AtomicTextFile.BackupPath(path)));
+            Check("backup warning carries the exception cause",
+                joined.Contains("denied") || joined.Contains("Access"));
+        }
+
+        // 9. Concurrency: readers must never observe Write's delete-then-move
         //    swap mid-flight. Without the WriteGate around TryRead, a reader
         //    could pass File.Exists(primary) just before the Delete and hit
         //    FileNotFoundException, then find the .bak momentarily being

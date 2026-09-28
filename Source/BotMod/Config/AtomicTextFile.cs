@@ -19,6 +19,15 @@ namespace BotMod.Config
     /// </summary>
     internal static class AtomicTextFile
     {
+        /// <summary>Warning sink for degraded writes and unreadable files. Wired
+        /// to ModApi.Warn by ModApi.InitMod, same contract as BotConfig.Warn:
+        /// this layer stays free of engine/game type dependencies, and the
+        /// default keeps a failure visible in headless runs. Both swallow sites
+        /// below trade durability for availability (the swap still completes),
+        /// so an operator has to learn about it from the log: a .bak that was
+        /// never written means the next torn primary has no last-known-good.</summary>
+        internal static Action<string> Warn = msg => Console.WriteLine("[BotMod] WARNING: " + msg);
+
         internal static string TmpPath(string path) { return path + ".tmp"; }
         internal static string BackupPath(string path) { return path + ".bak"; }
 
@@ -55,7 +64,7 @@ namespace BotMod.Config
                 // line leaves the old primary intact; crash during the swap leaves
                 // .bak as the last good copy, which BotConfig.Load picks up.
                 try { if (File.Exists(path)) File.Copy(path, BackupPath(path), overwrite: true); }
-                catch (Exception) { }
+                catch (Exception ex) { Warn("backup copy failed (" + BackupPath(path) + "); last-known-good not refreshed: " + ex.Message); }
                 // File.Move cannot overwrite on .NET Framework/Windows, and
                 // File.Replace is unavailable on some filesystems; delete-then-move
                 // behaves identically everywhere. The momentary absence of path is
@@ -85,7 +94,7 @@ namespace BotMod.Config
                     // Explicit UTF-8: Write() stages Encoding.UTF8 bytes, so reads
                     // must not depend on the platform default codepage to round-trip.
                     try { contents = File.ReadAllText(candidate, Encoding.UTF8); readFrom = candidate; return true; }
-                    catch (Exception) { }
+                    catch (Exception ex) { Warn("read failed (" + candidate + "): " + ex.Message); }
                 }
             }
             return false;

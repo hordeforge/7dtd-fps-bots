@@ -46,6 +46,11 @@ namespace BotMod.Web
     /// clamping (count 1..16, skill 0..4, teams 0..8) stays shared with the
     /// console command's setters in BotConfig.
     ///
+    /// Correlation: every POST audit line names the request (the client
+    /// idempotency key, or a server-side "auto-N" tag when none was sent), and
+    /// the same tag is returned in the X-BotMod-Request-Id response header on
+    /// every outcome, so a failed call is traceable to one log line.
+    ///
     /// Caching: every response (200, 400, 409, 500, on both verbs) carries
     /// Cache-Control: no-store; see MarkNoStore. The bodies are live state,
     /// not a stable representation of anything.
@@ -109,12 +114,22 @@ namespace BotMod.Web
             bool keyed = requestId != null;
             // One audit line per executed/replayed/rejected mutation; GET stays
             // unlogged because the dashboard polls it continuously.
-            string reqTag = keyed ? requestId : "-";
+            // Keyless requests (curl, an older panel, a script) still get a
+            // server-side tag so every line of such a request is greppable and
+            // quotable back to the caller; a client-supplied key keeps priority
+            // so a retry is identifiable as the same logical request.
+            string reqTag = keyed ? requestId : NextRequestTag();
             // Log-safe copies: requestId/action are request-supplied and must
             // not carry control characters into the audit trail (see
             // LogSanitizer). The raw values still drive routing and the ledger.
             string logAction = LogSanitizer.Clean(action);
             string logTag = LogSanitizer.Clean(reqTag);
+            // Correlation, not decoration: the tag reaches the client in a
+            // response header on every outcome (200/400/409/500) so a failed
+            // call can be tied back to the exact server log line, which for a
+            // keyless request carries no other identifier. Sanitized value, so
+            // a request-supplied key cannot inject header structure.
+            context.Response.Headers["X-BotMod-Request-Id"] = LogSanitizer.Clean(reqTag);
             if (keyed && !IdempotencyLedger.IsValidKey(requestId))
             {
                 ModApi.Log("web api action=" + logAction + " req=" + logTag + " rejected INVALID_REQUEST_ID");
@@ -393,6 +408,19 @@ namespace BotMod.Web
         }
 
         public override int[] DefaultMethodPermissionLevels() => new[] { 0, 0, 0, 0, 0 };
+
+        static int _requestSeq;
+
+        /// <summary>Correlation tag for a request that carried no client
+        /// idempotency key. Monotonic per process, incremented off the web
+        /// thread pool: its only job is to make a keyless request's audit
+        /// lines (ok, rejected, 500) findable as one group, and the same value
+        /// is echoed in the X-BotMod-Request-Id response header.</summary>
+        static string NextRequestTag()
+        {
+            return "auto-" + System.Threading.Interlocked.Increment(ref _requestSeq)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         /// <summary>Mark every response uncacheable. Nothing this API returns is
         /// a stable representation of anything: GET is live world state
