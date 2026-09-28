@@ -437,6 +437,18 @@ namespace BotMod.Web
                 .ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
+        /// <summary>Engine floats (health, score, distance) reach the scoreboard
+        /// as JSON numbers, so they cannot keep a fraction. Round rather than
+        /// truncate (a 99.9 hp bot read as 99), and clamp: a cast of a value
+        /// outside int range, NaN or Infinity is undefined in C#.</summary>
+        static int ToScoreInt(float v)
+        {
+            if (float.IsNaN(v)) return 0;
+            if (v >= int.MaxValue) return int.MaxValue;
+            if (v <= int.MinValue) return int.MinValue;
+            return Mathf.RoundToInt(v);
+        }
+
         /// <summary>Mark every response uncacheable. Nothing this API returns is
         /// a stable representation of anything: GET is live world state
         /// (alive bots, health, positions' nearest player) and every POST
@@ -542,14 +554,14 @@ namespace BotMod.Web
                         team = BotManager.Instance.GetTeamId(b.EntityId),
                         weapon = b.Weapon.GunId ?? "?",
                         status = b.Status(world),
-                        health = ent != null ? (int)ent.Health : 0,
+                        health = ent != null ? ToScoreInt(ent.Health) : 0,
                         deaths = ent != null ? ent.Died : 0,
                         zombies = ent != null ? ent.KilledZombies : 0,
                         players = ent != null ? ent.KilledPlayers : 0,
-                        score = ent != null ? (int)ent.Score : 0,
+                        score = ent != null ? ToScoreInt(ent.Score) : 0,
                         level = ent != null && ent.Progression != null ? ent.Progression.GetLevel() : 1,
                         nearestPlayer = nearName,
-                        nearestPlayerDist = (int)nearDist
+                        nearestPlayerDist = ToScoreInt(nearDist)
                     });
                 }
             }

@@ -352,6 +352,10 @@ static class BotConfigLoadTests
             p = WeaponProfile.ForGun("gunHandgunT0PipeMachinegun", cfg);
             Check("pipe machinegun joins smg class",
                 p.BurstMin >= 5 && p.FireRate == 0.09f && p.Range == 35f);
+            p = WeaponProfile.ForGun("gunPipeRifle", cfg);
+            Check("pipe rifle joins rifle class, not the pistol default",
+                p.BurstMin == 3 && p.BurstMax == 6 && p.Range == 55f && p.Damage == 16
+                && p.FireRate == 0.11f);
             p = WeaponProfile.ForGun("gunHandgunDesertEagle", cfg);
             Check("desert joins magnum class", p.MagSize == 6 && p.Damage == 34 && p.Range == 45f);
 

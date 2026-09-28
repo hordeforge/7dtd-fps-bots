@@ -18,6 +18,7 @@ import datetime
 import html
 import io
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -87,6 +88,9 @@ def load_csv(path: Path):
     this loader runs for every historical run in a single build, and a torn
     row (a crash mid-write before ga.atomic_write_text, or a hand edit) in
     one old run must not cost the whole report/dashboard for all of them.
+    NaN counts as unparseable for the same reason: float("nan") parses fine
+    but poisons every max(), mean and delta downstream (max() over a list
+    holding NaN returns NaN, and the chart silently drops the series).
     """
     gens, best, mean, median, q25, q75 = [], [], [], [], [], []
     skipped = 0
@@ -99,6 +103,8 @@ def load_csv(path: Path):
                 md = float(row["median"])
                 lo = float(row.get("q25") or row["mean"])
                 hi = float(row.get("q75") or row["mean"])
+                if not all(map(math.isfinite, (b, m, md, lo, hi))):
+                    raise ValueError("non-finite fitness value")
             except (KeyError, TypeError, ValueError):
                 skipped += 1
                 continue
@@ -203,14 +209,18 @@ def build(runs: list[Path], out: Path):
                 print(f"{cfg_path}: unreadable ({ex.__class__.__name__}: {ex}); "
                       f"pop/seed shown as ?", file=sys.stderr)
 
-        # headline stats
-        rel = (best[-1] - best[0]) / max(1e-9, abs(best[0])) * 100
+        # headline stats. A gen-0 baseline of 0 has no meaningful percentage:
+        # the old 1e-9 floor printed a plausible-looking "+10000000000.0%".
+        if best and best[0] != 0:
+            rel_s = f"{(best[-1] - best[0]) / abs(best[0]) * 100:+.1f}%"
+        else:
+            rel_s = "n/a (g0 baseline is 0)"
         # pop/seed come from the run's config.json; a hand-edited file may hold
         # arbitrary text, so they are escaped like every other external string.
         headline = (
             f"gens {len(gens)} · pop {html.escape(str(cfg.get('pop','?')))} · seed {html.escape(str(cfg.get('seed','?')))} · "
             f"best {best[-1]:+.3f} (g{gens[best.index(max(best))]} peak {max(best):+.3f}) · "
-            f"Δ vs g0 {rel:+.1f}% · mean {mean[-1]:+.3f}"
+            f"Δ vs g0 {rel_s} · mean {mean[-1]:+.3f}"
         )
 
         if HAS_MPL:

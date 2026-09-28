@@ -204,9 +204,6 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
             n += 1
             run_dir = Path(f"evolved/runs/{stem}_{n}")
 
-    config = {"pop": pop, "gens": gens, "seed": seed, "fitness": mix, "dry_run": dry_run, "activation": activation, "islands": islands, "curriculum": curriculum, "held_seed": HELD_SEED}
-    ga.atomic_write_text(run_dir / "config.json", json.dumps(config, indent=2))
-
     start_gen = 0
     best_w = None
     best_f = float("-inf")
@@ -237,6 +234,16 @@ def run(pop: int, gens: int, seed: int, dry_run: bool = False, resume: str | Non
         per = max(8, pop // islands)
         island_pops = [ga.init_population(np.random.default_rng(seed ^ (i * 0x9E3779B9)), P=per, sigma=0.02) for i in range(islands)]
         pop_w = island_pops[0]  # alias for the single-pool bookkeeping below
+
+    # config.json is written after the split so "pop" is the size the run
+    # actually evolves. The per-island floor made --pop 8 --islands 4 train 32
+    # genomes, and the old write recorded 8, so replaying the logged config
+    # produced a different run.
+    config = {"pop": sum(len(ip) for ip in island_pops), "pop_requested": pop,
+              "pop_per_island": len(island_pops[0]), "gens": gens, "seed": seed, "fitness": mix,
+              "dry_run": dry_run, "activation": activation, "islands": islands,
+              "curriculum": curriculum, "held_seed": HELD_SEED}
+    ga.atomic_write_text(run_dir / "config.json", json.dumps(config, indent=2))
 
     hof: list = []
     plateau = 0

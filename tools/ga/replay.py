@@ -530,6 +530,8 @@ exit status:
             ap.error(f"{flag} must be >= {minimum}, got {value}")
     if args.env is not None and not 0 <= args.env < len(WALLS):
         ap.error(f"--env must be 0..{len(WALLS) - 1}, got {args.env}")
+    if not -1 <= args.weapon < len(WEAPON_DAMAGE):
+        ap.error(f"--weapon must be -1..{len(WEAPON_DAMAGE) - 1}, got {args.weapon}")
     best_path = Path(args.best)
     if not best_path.is_file():
         raise SystemExit(f"--best not found: {best_path} (e.g. evolved/best.json)")

@@ -422,5 +422,22 @@ static class BotNeuralBrainFuzzTests
             string p = VariantFile(dir, "hidden-" + h + ".json", o => o["hidden"] = h, rng, true);
             FuzzLoad(p, rng, "hidden=" + h);
         }
+
+        // 8. hidden is read from a file, and the weight count is hidden *
+        //    inputs + hidden + outputs * hidden + outputs. Values that wrap
+        //    that int (268435456 * 14 overflows) or go negative must be
+        //    rejected, not turned into a plausible small length by the size
+        //    check. 0 is rejected too: it packs an empty network.
+        foreach (int bad in new[] { 0, -1, -16, 268435456, int.MaxValue })
+        {
+            string p = VariantFile(dir, "bad-hidden-" + bad + ".json",
+                o => o["hidden"] = bad, rng, false);
+            string reason;
+            bool ok = BotMod.AI.BotNeuralBrain.TryLoad(p, out reason);
+            Check(!ok, "regression: hidden=" + bad + " was accepted");
+            if (!ok) Check(reason != null && reason.Contains("hidden"),
+                "regression: hidden=" + bad + " rejection lacks reason, got: " + reason);
+            Check(!BotMod.AI.BotNeuralBrain.Loaded, "regression: loaded despite hidden=" + bad);
+        }
     }
 }

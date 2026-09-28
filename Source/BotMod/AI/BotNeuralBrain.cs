@@ -30,6 +30,10 @@ namespace BotMod.AI
         // Only hidden activation the forward pass below can reproduce (tanh).
         // Trainer counterpart: harness.ACTIVATION / tools/ga/ga.py save_best.
         const string kActivation = "tanh";
+        // Upper bound on the file-declared hidden width. 4096 packs ~82k
+        // weights, far past any trained net, and keeps hidden * inputs inside
+        // int on every pack.
+        const int kMaxHidden = 4096;
         static bool _loaded;
         static string _loadedPath = "";
         static string _loadedHash = "";
@@ -224,6 +228,14 @@ namespace BotMod.AI
                 }
                 int hidden = obj.Value<int?>("hidden") ?? 16;
                 int outputs = obj.Value<int?>("outputs") ?? kOutputs;
+                // hidden comes from a file on disk, so bound it before it
+                // multiplies: hidden * inputs wraps int and the size check
+                // below would pass a truncated length.
+                if (hidden < 1 || hidden > kMaxHidden)
+                {
+                    reason = "hidden out of range: " + hidden + " (1.." + kMaxHidden + ")";
+                    _lastReason = reason; return false;
+                }
                 if (outputs != kOutputs)
                 {
                     reason = "unsupported outputs=" + outputs + " (v" + kVersion + " exposes " + kOutputs + " action heads)";
