@@ -162,6 +162,23 @@ of them removes a config key or a console command.
   under each spelling of that name, an unknown `vs` target must change no
   flag, and the difficulty and team-count setters must clamp at both ends of
   their ranges.
+- `tests/BotMod.Tests/WeaponProfileFuzzTests.cs` fuzzes the gun-id classifier
+  whose answer is every bot's fire rate, burst shape, damage, range and
+  magazine pacing. It asserts that a client-supplied id (web `spawnNear`,
+  `bot player`, `bot weapon`) never throws, never comes back as a different
+  gun than the one asked for, never yields a non-finite or non-positive stat,
+  and that the `mixed` expansion stays inside the `LoadoutPool` and is a pure
+  function of the seed. The fixed-vector `WeaponProfileTests.cs` had no
+  `run_suite` call behind it and had not been running; it runs as
+  `make test SUITE=weaponprofile` now.
+- `Source/BotMod/Foundation/SpawnPointXml.cs` is the world `spawnpoints.xml`
+  reader, extracted from `BotSpawner` so the parse is testable without a
+  running server, with
+  `tests/BotMod.Tests/SpawnPointXmlFuzzTests.cs` fuzzing it (seed corpus,
+  byte-level mutants, entity-expansion and billion-laughs documents, a
+  comma-decimal host culture). A coordinate the reader accepted as `NaN` or
+  `Infinity` would have placed a bot at an undefined position; those are now
+  rejected like any other unusable coordinate.
 - `make lint-yaml` runs `yamllint --strict` over `.github/workflows` and joins
   `make check`, so the CI definitions are held to the same blocking bar as the
   shell, Python, TypeScript and HTML sources. Config: `.yamllint.yml`; the
@@ -215,6 +232,12 @@ of them removes a config key or a console command.
   canonicalizes field names and values to NFC before the ledger compares
   them, so `"Kíra"` (U+00ED) and `"Kíra"` (U+004B U+0069 U+0301) are one
   request rather than two.
+- A world `spawnpoints.xml` could place a bot at a non-finite position. The
+  DM spawn reader accepted the `NaN`, `Infinity` and `-Infinity` spellings
+  `float.TryParse` allows, so a corrupt or crafted world file fed an
+  undefined coordinate into the spawn position and from there into every
+  later combat tick. Non-finite coordinates are rejected now, alongside the
+  malformed ones the reader already dropped.
 - The web panel reported `done` for any 200, including the ones the API
   answers when nothing happened: `spawn` and `spawnNear` return
   `{"spawned":0}` at the bot cap (and `{"found":false}` when the named player

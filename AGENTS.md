@@ -26,7 +26,7 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 
 | Directory | Holds | May reference |
 |---|---|---|
-| `Foundation/` | engine-free primitives every layer shares: `Lcg`, `BotText`, `LogSanitizer`, `AtomicTextFile` | nothing else in the mod |
+| `Foundation/` | engine-free primitives every layer shares: `Lcg`, `BotText`, `LogSanitizer`, `AtomicTextFile`, `SpawnPointXml` | nothing else in the mod |
 | `Config/` | the operator-config layer: `BotConfig`, `BotCharacter`, `WeaponProfile`, `CombatGates` | `Foundation` |
 | `AI/` | decision-making: `BotBrain`, `BotCombat`, `BotNeuralBrain` | `Core`, `Config`, `Foundation` |
 | `Core/` | runtime: `Bot`, `BotManager`, `BotSpawner`, `BotModVersion` | `AI`, `Config`, `Foundation` |

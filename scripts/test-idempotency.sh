@@ -19,13 +19,14 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # check at the end keep this list and the actual run_suite calls in step.
 all_suites=(
   idempotency atomictextfile idempotencyfuzz mainthreaddispatch logsanitize
-  logsanitizerfuzz requestfields combatgates bottext lcg botargparser
-  botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz
-  botchararith teamshammer botconfig webapiauthz botarith
+  spawnpointxmlfuzz logsanitizerfuzz requestfields combatgates bottext lcg
+  botargparser botargparserfuzz neuralfuzz neuraleval configfuzz charfuzz
+  adminsettersfuzz botchararith weaponprofile weaponprofilefuzz teamshammer
+  botconfig webapiauthz botarith
 )
 # The suites compiled against the game DLLs (Newtonsoft and/or the full mod
 # source), which self-skip without a game install.
-game_suites=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith teamshammer botconfig webapiauthz botarith)
+game_suites=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith weaponprofile weaponprofilefuzz teamshammer botconfig webapiauthz botarith)
 
 filter=()
 while (($#)); do
@@ -166,6 +167,13 @@ run_suite combatgates \
   "$root/Source/BotMod/Config/CombatGates.cs" \
   "$root/tests/BotMod.Tests/CombatGatesTests.cs"
 
+# World spawnpoints.xml reader: the document parse is fuzzed separately from
+# the world-file lookup, so the untrusted half of the path (a shared world
+# file) is testable without a running server.
+run_suite spawnpointxmlfuzz \
+  "$root/Source/BotMod/Foundation/SpawnPointXml.cs" \
+  "$root/tests/BotMod.Tests/SpawnPointXmlFuzzTests.cs"
+
 # Unicode identity contract: NFC canonicalization and ordinal case folding
 # for bot/player name lookups and team-assignment keys.
 run_suite bottext \
@@ -296,9 +304,25 @@ else
     run_game_suite botchararith \
       "${character_src[@]}" \
       "$root/tests/BotMod.Tests/BotCharacterArithTests.cs"
+
+    # Gun-id classification, fixed vectors: the "mixed" literal expands
+    # case-insensitively, a named id passes through verbatim, an empty pool
+    # falls back to the default gun instead of an out-of-range index.
+    run_game_suite weaponprofile \
+      "${config_src[@]}" \
+      "$root/tests/BotMod.Tests/WeaponProfileTests.cs"
+
+    # The same classifier under fuzzing: client-supplied gun ids (web
+    # spawnNear, `bot player`, `bot weapon`) decide every bot's fire rate,
+    # burst, damage, range and magazine pacing, so an arbitrary id must
+    # never throw, never come back as a different gun than the one asked
+    # for, and never yield a non-finite or non-positive stat.
+    run_game_suite weaponprofilefuzz \
+      "${config_src[@]}" \
+      "$root/tests/BotMod.Tests/WeaponProfileFuzzTests.cs"
   else
-    declared_suites+=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith)
-    echo "skip neuralfuzz, neuraleval, configfuzz, charfuzz, adminsettersfuzz, botchararith (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
+    declared_suites+=(neuralfuzz neuraleval configfuzz charfuzz adminsettersfuzz botchararith weaponprofile weaponprofilefuzz)
+    echo "skip neuralfuzz, neuraleval, configfuzz, charfuzz, adminsettersfuzz, botchararith, weaponprofile, weaponprofilefuzz (Newtonsoft.Json.dll not found; set SEVENDTD_DS_DIR or SEVENDTD_GAME_DIR to a game install)"
   fi
 
   need_refs=(netstandard.dll System.Runtime.dll UnityEngine.CoreModule.dll UnityEngine.PhysicsModule.dll Assembly-CSharp.dll Newtonsoft.Json.dll Utf8Json.dll System.Xml.dll LogLibrary.dll SpaceWizards_HttpListener.dll)

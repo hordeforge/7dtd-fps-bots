@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Xml;
 using BotMod.Config;
 using BotMod.Foundation;
 using UnityEngine;
@@ -365,29 +364,15 @@ namespace BotMod.Core
                 foreach (var path in roots)
                 {
                     if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
-                    // World files are shared, semi-trusted content: load with DTD
-                    // and entity resolution off so a crafted spawnpoints.xml cannot
-                    // expand external entities (file:// read, http:// SSRF) or run
-                    // an entity-expansion DoS. The format has no DTD.
-                    var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null };
-                    var doc = new XmlDocument { XmlResolver = null };
-                    using (var reader = XmlReader.Create(path, settings))
-                        doc.Load(reader);
-                    var list = new List<Vector3>();
-                    foreach (XmlNode n in doc.SelectNodes("//spawnpoint"))
-                    {
-                        var posAttr = n.Attributes["position"];
-                        if (posAttr == null) continue;
-                        var parts = posAttr.Value.Split(',');
-                        if (parts.Length < 3) continue;
-                        // spawnpoints.xml is machine data with dot decimals; parse
-                        // invariantly so a comma-decimal host locale cannot reject
-                        // every spawnpoint (which silently drops DM spawn selection).
-                        if (float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
-                            && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float y)
-                            && float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float z))
-                            list.Add(new Vector3(x, y, z));
-                    }
+                    // World files are shared, semi-trusted content: SpawnPointXml
+                    // loads with DTD and entity resolution off (no file:// read,
+                    // no http:// SSRF, no entity-expansion DoS) and drops
+                    // non-finite coordinates. A malformed document throws and
+                    // is reported by the catch below, which leaves the memoized
+                    // list untouched.
+                    var points = SpawnPointXml.Parse(File.ReadAllText(path));
+                    var list = new List<Vector3>(points.Count);
+                    foreach (var p in points) list.Add(new Vector3(p.X, p.Y, p.Z));
                     if (list.Count > 0) { _dmSpawns = list; _dmSpawnsWorld = worldName; ModApi.Log($"DM spawns: {list.Count} from {path} (world={worldName})"); return list; }
                 }
             }
