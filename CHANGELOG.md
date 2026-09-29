@@ -66,6 +66,22 @@ Under the 0.x policy above, these change what an existing consumer sees.
 
 ### Changed
 
+- The web panel uses the HordeForge terminal palette from one set of `--bm-*`
+  custom properties on `.botmod-panel` and paints its own ground, so its
+  contrast no longer depends on the host dashboard theme. Controls get a
+  visible edge and a green focus ring, the scoreboard keeps a minimum width and
+  scrolls sideways on a narrow panel instead of wrapping every cell one letter
+  per line, numbers use tabular digits, and the sidebar icon is the Clanker
+  bot glyph.
+- The GA dashboard, report and replay take the HordeForge brand tokens from
+  `tools/ga/theme.py`: terminal palette for the dashboard and replay, paper for
+  the report, and every chart on the terminal plate. The evolution chart shows
+  one legend entry per role instead of one per run (the legend used to cover
+  the plot), the held-out chart is a horizontal bar chart with a readable row
+  per run, the runs table scrolls inside its own box on a phone, the replay
+  gets a viewport meta, icon buttons and a canvas capped to the window, and
+  the report closes its `<section>` elements. `docs/ga-dashboard.html` is
+  rebuilt from the same 57 runs.
 - `make install` renames the running mod dir aside instead of deleting it, and
   puts it back if the swap fails, so a failed rename no longer leaves the
   server with no `Mods/BotMod`. `make install` and `make uninstall` also take a

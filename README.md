@@ -1,6 +1,6 @@
 # 🤖 Clanker (7DTD FPS Bots Mod)
 
-> **Part of [HordeForge](https://github.com/hordeforge)**: High-Performance Systems Engineering for 7 Days to Die.
+> Part of [HordeForge](https://github.com/hordeforge), tools for running, loading and measuring 7 Days to Die dedicated servers.
 
 ![CI](https://github.com/hordeforge/7dtd-fps-bots/actions/workflows/ci.yml/badge.svg)
 ![license](https://img.shields.io/github/license/hordeforge/7dtd-fps-bots)
@@ -8,7 +8,7 @@
 ![languages](https://img.shields.io/github/languages/count/hordeforge/7dtd-fps-bots)
 ![top language](https://img.shields.io/github/languages/top/hordeforge/7dtd-fps-bots)
 
-Server-side mod that spawns real FPS bots in 7 Days to Die dedicated servers. Names are prefixed `[Bot] Grunt_42` so they are instantly distinguishable in the player list and HUD. Bots spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
+Server-side mod that spawns armed combat bots on a 7 Days to Die dedicated server. Bot names carry a `[Bot]` prefix (`[Bot] Grunt_42`), so they stand apart from players in the player list and HUD. Bots spawn with weapons, pathfind, hunt and shoot players, zombies and each other. Vanilla clients need no mod. Default 6 mixed-loadout bots, DM spawnpoints, difficulty 0-4.
 
 ## What it does
 
@@ -68,9 +68,14 @@ sidebar entry (admin login required; hidden while logged out, same pattern as
   click; the scoreboard scrolls sideways inside its own box on a narrow
   sidebar.
 
+The panel draws on the HordeForge terminal palette (ground `#101418`, signal
+green `#5fd894`, red `#ff7364`) declared once as `--bm-*` custom properties on
+`.botmod-panel` in `styling.css`, so it reads the same whatever theme the host
+dashboard uses. Every control shows a green focus ring for keyboard use.
+
 The stock webserver serves `WebMod/bundle.js` and `WebMod/styling.css`
 uncompressed, so their shipped sizes are the whole download per panel open:
-14,145 and 8,874 bytes (`make lint-webui` prints the current pair). `make
+14,334 and 10,109 bytes (`make lint-webui` prints the current pair). `make
 check` holds both under a wire budget (14 KiB and 12 KiB, the initial congestion
 window) so the panel arrives in one round trip. State comes from one same-origin
 `GET /api/bot` polled every 5 s, with only the fields the panel reads in the
