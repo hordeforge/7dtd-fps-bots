@@ -35,7 +35,10 @@ jobs:
       # scripts/tool-versions.sh, the same single source of truth the other
       # analyzers use.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - run: source scripts/tool-versions.sh && uv tool install "ruff==$RUFF_VERSION" && uv tool install "yamllint==$YAMLLINT_VERSION"
+      - run: |
+          source scripts/tool-versions.sh
+          uv tool install "ruff==$RUFF_VERSION"
+          uv tool install "yamllint==$YAMLLINT_VERSION"
       # The lint scripts run oxlint, tsc, terser and vnu through bunx at pinned
       # versions; the runner preinstalls node, but not bun.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
