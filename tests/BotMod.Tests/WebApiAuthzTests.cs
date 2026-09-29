@@ -113,7 +113,7 @@ static class WebApiAuthzTests
     /// comparison does not.</summary>
     static void CheckCsrfOrigin()
     {
-        var origin = BotMod.Web.Bot.OriginAllowed;
+        System.Func<string, string, bool> origin = BotMod.Web.Bot.OriginAllowed;
         Check("no Origin header is allowed (scripted/API-token callers)", origin(null, "admin.example:26900"));
         Check("empty Origin header is allowed", origin("", "admin.example:26900"));
         Check("same origin over http is allowed", origin("http://admin.example:26900", "admin.example:26900"));
