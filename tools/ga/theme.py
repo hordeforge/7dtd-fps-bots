@@ -1,185 +1,200 @@
-"""theme.py: one visual language for the generated GA HTML (report + dashboard).
+"""theme.py: one visual language for the generated GA HTML (report, dashboard,
+replay) and the matplotlib charts inside them.
 
-The GA pages are read by the mod's own maintainers while a training run is
-going on: an instrumentation console, not a product page. So the sheet is
-built from three decisions and nothing else:
+Values come from the HordeForge brand tokens (hordeforge/.github
+brand/tokens.css). The GA pages are data tools, so they use the brand's
+terminal palette: one dark ground, one signal green for whatever the reader
+should look at first, red for bad, amber for keys and warnings. The report
+keeps a paper face from the same tokens, and every chart renders on the
+terminal plate whichever page it sits on, so a chart reads the same in both.
+Sans for sentences, mono for ids and numbers.
 
-  - one warm near-black ramp (a warm ramp on a cold one is the difference you
-    can see without naming it) with a single rust signal hue for anything the
-    reader should look at first,
-  - two faces (console dark, report light) from the same tokens, so a report
-    and a dashboard side by side read as one family,
-  - mono for every number, sans for every sentence, and no other ideas.
-
-Matplotlib is a consumer of the same hues (report.py, dashboard.py), so a
-chart and the page it sits on cannot drift apart.
+This module is the only place a color or a size is set: the generators and
+viz.py read the constants below, never a hex of their own.
 """
 
 from __future__ import annotations
 
-# Console dark face.
-BG = "#0f0e0c"
-SURFACE = "#171512"
-LINE = "#2b2724"
-FG = "#e8e2d9"
-MUTED = "#a29a8f"
+# Terminal face (brand --term-*).
+BG = "#101418"
+SURFACE = "#1a2129"
+LINE = "#2a333d"
+FG = "#d8e2dc"
+MUTED = "#7f8b94"      # 5.3:1 on BG, 4.7:1 on SURFACE
+ACCENT = "#5fd894"     # the signal; 10.3:1 on BG, so it also carries text
+BAD = "#ff7364"
+KEY = "#ffd8a0"
 
-# Rust signal hue. ACCENT draws lines, rules and dots; ACCENT_TEXT carries
-# small text (it is a step lighter so 12px labels keep 8:1 on BG).
-ACCENT = "#e2762f"
-ACCENT_TEXT = "#f2954a"
+# Paper face (brand --background, --card, --foreground, --muted-foreground,
+# --border, --secondary, --primary), used by report.py.
+PAPER = "#f7f5f0"
+PAPER_CARD = "#fffdf8"
+PAPER_FG = "#1a1d21"
+PAPER_MUTED = "#4d545c"  # 7.0:1 on PAPER
+PAPER_LINE = "#e2ddd0"
+PAPER_CODE = "#efece4"
+PAPER_ACCENT = "#0f5c37"  # 7.4:1 on PAPER
 
-# Report face: the same ramp inverted onto warm paper.
-PAPER = "#f6f3ee"
-PAPER_FG = "#1a1714"
-PAPER_MUTED = "#5d564d"
-PAPER_LINE = "#ddd6ca"
+FONT_SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+FONT_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'
 
-# Chart series. The champion line is the accent, everything else is muted, so
-# the reader never hunts for which run is which.
+# Chart series. The champion line is the signal, everything else is muted, so
+# the reader never hunts for which run is which. SERIES_BEST is the brightest
+# ink, for the report's best-so-far line.
 SERIES = ACCENT
-SERIES_DIM = "#8c8378"
-SERIES_BEST = "#3a332c"
+SERIES_DIM = MUTED
+SERIES_BEST = FG
 
 # Render resolution for every chart these tools emit. The figures are 8.5-13.5
-# in wide and land in a max-width 1040 px container, so the old 150-165 dpi
-# spent up to 2.1x more pixels than any display shows, and the charts are
-# base64-embedded in a committed HTML page where their bytes are the document's
-# first-paint cost. 120 dpi still renders a 1080 px figure at 1:1 there and
-# leaves a 1.5x margin on a 2x display, and cuts the champion diagram from 67 KB
-# to 45 KB.
+# in wide and land in a max-width 1080 px container; 120 dpi renders a 1080 px
+# figure at 1:1 and leaves a 1.5x margin on a 2x display. The charts are
+# base64-embedded, so their bytes are the page's first-paint cost.
 CHART_DPI = 120
 
-# Chart ink, tuned against the white plate the PNGs sit on rather than against
-# BG: matplotlib always renders on white, and the dark dashboard puts the figure
-# on a white .fig for the same reason. viz.py reads these, so the largest
-# figure on the page cannot carry a palette the page does not have.
-CHART_INK = PAPER_FG        # 17.9:1 on white
-CHART_INK_MUTED = PAPER_MUTED  # 7.2:1
-CHART_RING = SERIES_DIM     # 3.7:1, a non-text ring so it only has to clear 3:1
-# Layer fills step down the warm ramp so input -> hidden -> output reads as one
-# progression instead of three unrelated dots. All clear 4.7:1 on white. The
-# same three steps are the ordered scale for the activation traces, which are
-# themselves ordered (healthy, wounded, camping), so an ordered ramp is the
-# honest encoding there too and a second hue buys nothing.
-CHART_LAYERS = ("#a8622c", "#7d3a1a", "#3a332c")
-# Weight sign is data, not decoration, so it keeps a diverging pair instead of
-# joining the one-hue ramp: a warm red negative against a blue from the same
-# RdBu family the W1/W2 matrices are painted with, so an edge and the cell it
-# weights never disagree about sign. 6.0:1 and 6.9:1 on white.
-WEIGHT_NEG = "#b03a2e"
-WEIGHT_POS = "#2f5d8a"
+# Chart plate and ink: every figure renders on SURFACE, one step above the
+# page ground, with FG / MUTED text (12.2:1 and 4.7:1 on SURFACE).
+CHART_BG = SURFACE
+CHART_INK = FG
+CHART_INK_MUTED = MUTED
+CHART_GRID = LINE
+CHART_RING = MUTED
+# Layer fills step down one green ramp so input -> hidden -> output reads as
+# one progression. The same three steps are the ordered scale for the
+# activation traces (healthy, wounded, camping), which are themselves ordered.
+# All clear 3:1 on CHART_BG as non-text marks.
+CHART_LAYERS = ("#a8ecc4", ACCENT, "#3aa56c")
+# Weight sign is data, so it keeps a diverging pair: the mid-strength red and
+# blue of the RdBu map the W1/W2 matrices are painted with, so an edge and the
+# cell it weights never disagree about sign. 4.4:1 and 4.8:1 on CHART_BG.
+WEIGHT_NEG = "#d6604d"
+WEIGHT_POS = "#4393c3"
 
-# The arena replay is a canvas, so it cannot read the CSS custom properties the
-# page above it uses; these are the same tokens inlined into the script (see
-# replay.py's @ARENA@). The ground is a step under BG so the arena reads as a
-# lit surface inside the dark page.
-ARENA_BG = "#14110e"
-ARENA_EDGE = "#4a433c"
-ARENA_WALL = SERIES_DIM
+# The arena replay is a canvas, so it cannot read CSS custom properties; these
+# are handed to replay.py's draw loop as JSON (@ARENA@). The arena is the
+# raised surface inside the dark page.
+ARENA_BG = SURFACE
+ARENA_EDGE = LINE
+ARENA_WALL = MUTED
 # Weapon is the one categorical scale in the family: six loadouts have to be
-# told apart at a glance in a replay that plays at 80ms a frame, so it is the
-# one place six hues are allowed. They sit in a mid-chroma band rather than the
-# pastel row a default palette hands you, and the pistol step is the accent
-# because it is the most common. All clear 5.4:1 on ARENA_BG.
+# told apart at a glance in a replay that plays at 80 ms a frame. All clear
+# 4.7:1 on ARENA_BG, and the tag letter cut out of each (TAG_INK) clears the
+# same against its ring.
 WEAPON_RING = ("#e0644a", "#d9a441", "#c9c05a", "#5fa88f", "#7f9fd6", "#c98fc0")
-# The bot's tag letter is cut out of its own ring, so the ink is the ground.
 TAG_INK = ARENA_BG
-# Muzzle flash and the held aim line are the same two steps theme.py already
-# uses for "look at this": ACCENT_TEXT at full strength for the shot, a quarter
-# of it for the aim the bot is holding. 9.9:1 on ARENA_BG.
-SHOT = "#e8b53c"
-AIM = ACCENT_TEXT
-# Zombie green, then the bot's own health ramp. HP_WARN is a warmer yellow than
-# SHOT on purpose: one is a bullet leaving the barrel, the other is a bar that
-# is about to change state, and they are never drawn over each other.
+# Muzzle flash is the key amber; the held aim line is the signal at a quarter
+# alpha. Zombies take a desaturated teal so they do not read as the signal.
+SHOT = KEY
+AIM = ACCENT
 ZOMBIE = "#4f9d78"
 ZOMBIE_EDGE = "#3f7d61"
-HP_TRACK = SURFACE
-HP_OK = "#5fa860"
-HP_WARN = "#c9962f"
-HP_BAD = "#cc5148"
+HP_TRACK = LINE
+HP_OK = ACCENT
+HP_WARN = KEY
+HP_BAD = BAD
+
+# Clanker product tile (hordeforge/.github brand/tiles/clanker.svg) as the
+# page icon: guard-violet ground, paper glyph (Lucide "bot", ISC license).
+FAVICON = (
+    '<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27'
+    '%20viewBox=%270%200%2032%2032%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20rx=%277%27%20fill=%27%234b2f8a%27/%3E'
+    '%3Cg%20transform=%27translate(4%204)%27%20fill=%27none%27%20stroke=%27%23f7f5f0%27%20stroke-width=%272%27'
+    '%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27M12%208V4H8M2%2014h2M20%2014h2M15%2013v2M9%2013v2%27/%3E'
+    '%3Crect%20width=%2716%27%20height=%2712%27%20x=%274%27%20y=%278%27%20rx=%272%27/%3E%3C/g%3E%3C/svg%3E">'
+)
+
+
+def chart_rc() -> dict[str, object]:
+    """matplotlib rcParams for every GA chart: the terminal plate and ink.
+    Callers apply it with plt.rcParams.update(theme.chart_rc()) after import."""
+    return {
+        "figure.facecolor": CHART_BG,
+        "savefig.facecolor": CHART_BG,
+        "axes.facecolor": CHART_BG,
+        "axes.edgecolor": CHART_GRID,
+        "axes.labelcolor": CHART_INK_MUTED,
+        "axes.titlecolor": CHART_INK,
+        "text.color": CHART_INK,
+        "xtick.color": CHART_INK_MUTED,
+        "ytick.color": CHART_INK_MUTED,
+        "grid.color": CHART_GRID,
+        "grid.alpha": 1.0,
+        "legend.labelcolor": CHART_INK,
+        "axes.axisbelow": True,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    }
+
 
 _BASE = """
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; padding: 0 20px 56px; }
+body { margin: 0; padding: 0 16px 56px; font-family: var(--sans); background: var(--bg); color: var(--fg); }
 .wrap { max-width: 1080px; margin: 0 auto; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Type scale: 20 / 14 / 13 / 11.5, with mono for every number. */
-h1 { font-size: 20px; line-height: 1.25; font-weight: 600; margin: 0; letter-spacing: -.01em; }
-h2 { font-size: 13px; margin: 0 0 12px; font-weight: 600; }
+/* Type scale: 22 / 16 / 14 / 12, sans for sentences, mono for ids. */
+h1 { font-size: 22px; line-height: 1.25; font-weight: 700; margin: 0; }
+h2 { font-size: 16px; line-height: 1.3; margin: 0 0 12px; font-weight: 600; }
 p { font-size: 14px; line-height: 1.6; max-width: 68ch; }
-.lede { margin: 6px 0 0; }
-.meta { font-family: var(--mono); font-size: 12px; }
+.lede { margin: 6px 0 0; color: var(--muted); }
+.meta { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 /* The header is the page's one anchor: title and champion readout on the
    same baseline, so the eye lands on the champion numbers first. */
-.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px;
-  flex-wrap: wrap; padding: 30px 0 20px; border-bottom: 1px solid var(--line); }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px;
+  flex-wrap: wrap; padding: 28px 0 4px; }
 .head dl { display: grid; grid-template-columns: auto auto; gap: 3px 14px; margin: 0; text-align: end; }
 .head dt { color: var(--muted); }
-.head dd { margin: 0; color: var(--accent-text); }
+.head dd { margin: 0; color: var(--accent); }
 code, .num { font-family: var(--mono); }
-.foot { font-size: 11.5px; margin: 40px 0 0; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.foot { font-size: 12px; margin: 40px 0 0; color: var(--muted); }
 
-/* Sections are separated by a rule, not by a box: a chart, a replay and a
-   table are different objects and one card radius around all three says
-   nothing about any of them. */
-.sec { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); }
+/* Sections are separated by a rule, not by a box. */
+.sec { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line); }
 .sec .lede { margin-bottom: 18px; }
 .sec .grid { margin-top: 18px; }
 figure { margin: 0; }
-.fig { border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.fig { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: """ + CHART_BG + """; }
 .fig img { display: block; width: 100%; height: auto; }
-.fig iframe { display: block; width: 100%; height: 430px; border: 0; }
-.fig figcaption { font-family: var(--mono); font-size: 12px; color: var(--accent-text);
-  padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.fig iframe { display: block; width: 100%; height: 480px; border: 0; }
+.fig figcaption { font-family: var(--mono); font-size: 12px; color: """ + FG + """;
+  padding: 7px 10px; border-bottom: 1px solid """ + LINE + """; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-@media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
 
-table { width: 100%; border-collapse: collapse; }
-caption { text-align: start; font-size: 11.5px; margin-bottom: 8px; }
-th, td { text-align: start; padding: 6px 10px 6px 0; font-size: 13px; }
-thead th { font-weight: 600; font-size: 11.5px; letter-spacing: .04em; }
+/* Wide tables scroll inside their own box on a narrow screen instead of
+   running off the page. */
+.tablescroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+caption { text-align: start; font-size: 12px; margin-bottom: 8px; color: var(--muted); }
+th, td { text-align: start; padding: 7px 16px 7px 0; font-size: 13px; white-space: nowrap; }
+thead th { font-weight: 600; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
 tbody td { font-family: var(--mono); border-top: 1px solid var(--line); }
 tbody td:first-child { font-family: inherit; }
+td.n, th.n { text-align: end; }
+
+@media (max-width: 820px) {
+  .grid { grid-template-columns: 1fr; }
+  .head dl { text-align: start; }
+}
 """
 
 DARK_STYLE = f"""
 :root {{ --bg: {BG}; --surface: {SURFACE}; --line: {LINE}; --fg: {FG}; --muted: {MUTED};
-  --accent: {ACCENT}; --accent-text: {ACCENT_TEXT}; --arena: {ARENA_BG};
-  --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace; }}
-body {{ background: {BG}; color: {FG}; font-family: var(--sans); }}
-h1 {{ color: {FG}; }}
-h2 {{ color: var(--accent-text); font-family: var(--mono); letter-spacing: .06em; }}
-.lede, .foot, caption {{ color: var(--muted); }}
-{_BASE}
-thead th {{ color: var(--muted); border-bottom: 1px solid var(--line); }}
-code {{ background: {SURFACE}; color: {FG}; padding: 1px 5px; border-radius: 3px; font-size: 12px; }}
-/* Charts are rendered on white by matplotlib; the plate keeps them from
-   floating on the dark page with nothing under them. */
-.fig {{ background: #fff; }}
-"""
+  --accent: {ACCENT}; --code: {SURFACE}; --arena: {ARENA_BG};
+  --sans: {FONT_SANS};
+  --mono: {FONT_MONO}; color-scheme: dark; }}
+{_BASE}"""
 
 LIGHT_STYLE = f"""
-:root {{ --bg: {PAPER}; --surface: #fff; --line: {PAPER_LINE}; --fg: {PAPER_FG}; --muted: {PAPER_MUTED};
-  --accent: #b4551a; --accent-text: #9c4a15;
-  --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace; }}
-body {{ background: {PAPER}; color: {PAPER_FG}; font-family: var(--sans); }}
-h1 {{ color: {PAPER_FG}; }}
-h2 {{ color: var(--accent-text); font-family: var(--mono); letter-spacing: .06em; }}
-.lede, .foot, caption {{ color: var(--muted); }}
-{_BASE}
-thead th {{ color: var(--muted); border-bottom: 1px solid var(--line); }}
-code {{ background: #ece7de; color: {PAPER_FG}; padding: 1px 5px; border-radius: 3px; font-size: 12px; }}
-"""
+:root {{ --bg: {PAPER}; --surface: {PAPER_CARD}; --line: {PAPER_LINE}; --fg: {PAPER_FG}; --muted: {PAPER_MUTED};
+  --accent: {PAPER_ACCENT}; --code: {PAPER_CODE};
+  --sans: {FONT_SANS};
+  --mono: {FONT_MONO}; color-scheme: light; }}
+{_BASE}"""
 
 # The canvas cannot read the custom properties above, so replay.py is handed
 # this dict as JSON and the draw loop reads A.<token> like the CSS reads
-# var(--token). One source for both surfaces is the point: a legend dot and the
-# ring it labels are the same value, so they cannot disagree.
+# var(--token). A legend dot and the ring it labels are the same value.
 ARENA = {
     "BG": ARENA_BG,
     "EDGE": ARENA_EDGE,

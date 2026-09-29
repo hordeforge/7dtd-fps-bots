@@ -387,7 +387,7 @@ def _weapon_key():
     parts = []
     for color, tag in zip(theme.WEAPON_RING, tags, strict=True):
         chip = f'<span class="dot" style="background:{color}" aria-hidden="true"></span>'
-        parts.append(f"{chip} {html.escape(tag)}")
+        parts.append(f'<span class="wk">{chip}{html.escape(tag)}</span>')
     return " ".join(parts)
 
 
@@ -401,24 +401,32 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
     # markup; escaping the slash keeps it a JS string.
     js_frames = json.dumps(_round_floats(frames)).replace("</", "<\\/")
     js_walls = json.dumps(walls).replace("</", "<\\/")
+    # Button icons are Lucide play, pause and refresh-cw (ISC license, vendored
+    # from hordeforge/.github brand/icons).
     # Build with token substitution (not an f-string) so the embedded JS/CSS braces are literal.
     # The template is a local named page, not html: the module name has to stay
     # reachable for the escaping of the values substituted into it.
     page = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>@TITLE@</title>
+@FAVICON@
 <style>
 @THEME@
- h1{font-size:19px;line-height:1.3;font-weight:600;margin:0}
- .sum{display:flex;gap:22px;flex-wrap:wrap;margin:14px 0 0;font-family:var(--mono);font-size:12px}
+ body{padding-top:16px}
+ h1{font-size:18px;line-height:1.3;font-weight:700;margin:0}
+ .sum{display:flex;gap:8px 22px;flex-wrap:wrap;margin:12px 0 0;font-size:12px;font-variant-numeric:tabular-nums}
  .sum span{color:var(--muted)}
- .sum b{color:var(--accent-text);font-weight:600}
- canvas{background:var(--arena);border:1px solid var(--line);border-radius:3px;width:100%;display:block;margin-top:16px}
+ .sum b{color:var(--accent);font-family:var(--mono);font-weight:600}
+ canvas{background:var(--arena);border:1px solid var(--line);border-radius:8px;display:block;margin-top:14px;width:auto;height:auto;max-width:100%;max-height:85vh}
  .ctl{display:flex;gap:10px;align-items:center;margin:12px 0 0;flex-wrap:wrap}
- button{background:transparent;color:var(--accent-text);border:1px solid var(--line);border-radius:3px;padding:7px 14px;cursor:pointer;font:inherit;font-size:13px;min-height:32px}
- button:hover{border-color:var(--accent)}
+ button{display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--fg);border:1px solid var(--muted);border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px;min-height:32px}
+ button:hover{border-color:var(--accent);color:var(--accent)}
+ button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+ #frame{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
  input[type=range]{flex:1;min-width:180px;accent-color:var(--accent)}
  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:12px 0 0;color:var(--muted)}
- .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+ .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:4px}
+ .wk{white-space:nowrap;margin-inline-start:8px}
  #log{background:var(--surface);padding:8px 12px;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:12px;color:var(--muted);max-height:80px;overflow:auto;margin-top:10px}
 </style></head><body><div class="wrap">
 <h1>@TITLE@</h1>
@@ -437,10 +445,10 @@ def render_html(summary, frames, walls, out: Path, title="GA Arena Replay"):
  <span>Walls block LOS (aim around them)</span>
 </div>
 <div class="ctl">
- <button onclick="play()">&#9654; Play</button>
- <button onclick="pause()">&#9208; Pause</button>
- <button onclick="reset()" aria-label="Reset to first frame">&#9198;</button>
- <span style="font-size:12px" id="frame">0/0</span>
+ <button onclick="play()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>Play</button>
+ <button onclick="pause()"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></svg>Pause</button>
+ <button onclick="reset()" aria-label="Reset to first frame"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Reset</button>
+ <span id="frame">0/0</span>
  <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Jump to frame" oninput="goto(this.value)">
 </div>
 <canvas id="c" width="@W@" height="@H@" role="img" aria-label="Top-down arena replay animation: bot circles versus zombie circles on the training map">Top-down arena replay animation (canvas unsupported).</canvas>
@@ -505,6 +513,7 @@ draw(F[0]);
     # report.py and dashboard.py escape, so it is escaped here too.
     page = (page
             .replace("@TITLE@", html.escape(str(title), quote=True))
+            .replace("@FAVICON@", theme.FAVICON)
             .replace("@THEME@", theme.DARK_STYLE)
             .replace("@KILLS@", str(summary["kills"]))
             .replace("@DEATHS@", str(summary["deaths"]))

@@ -33,6 +33,7 @@ try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    plt.rcParams.update(theme.chart_rc())
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
@@ -77,7 +78,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None, dpi=theme.CHART_
     for li, (n, x) in enumerate(zip(layers, xs, strict=True)):
         ys = yss[li]
         color = theme.CHART_LAYERS[li]
-        ax.scatter([x] * n, ys, s=68, c=color, alpha=0.92, edgecolors="white", linewidths=1.0, zorder=3)
+        ax.scatter([x] * n, ys, s=68, c=color, alpha=0.92, edgecolors=theme.CHART_BG, linewidths=1.0, zorder=3)
         labels = [INPUT_LABELS, [f"h{i}" for i in range(hidden)], OUT_LABELS][li]
         for y, lab in zip(ys, labels, strict=True):
             ax.text(x + 0.06, y, lab, fontsize=6.2, va="center", color=theme.CHART_INK_MUTED)
@@ -146,7 +147,7 @@ def draw(w, hidden, inputs, title: str, out: Path, traces=None, dpi=theme.CHART_
         off = (i - 1) * wbar
         ax3.bar(X + off, vals, width=wbar, label=name,
                 color=theme.CHART_LAYERS[i % len(theme.CHART_LAYERS)],
-                alpha=0.88, edgecolor="white", linewidth=0.7)
+                alpha=0.88, edgecolor=theme.CHART_BG, linewidth=0.7)
     ax3.set_xticks(X); ax3.set_xticklabels(OUT_LABELS, fontsize=8)
     ax3.set_ylabel("output (sigmoid/tanh)"); ax3.set_ylim(0, 1)
     ax3.set_title("Activation traces: canonical observations (healthy / wounded / camp) · aim is tanh ([-1,1] shown clipped)", fontsize=8)

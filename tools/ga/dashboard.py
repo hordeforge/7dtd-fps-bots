@@ -46,8 +46,14 @@ import ga  # noqa: E402 -- same bootstrap
 import report as _report  # noqa: E402 -- same bootstrap
 import theme  # noqa: E402 -- same bootstrap
 
+if HAS_MPL:
+    plt.rcParams.update(theme.chart_rc())
+
 REPO = TOOLS.parent.parent                         # repo root (TOOLS is already repo/tools/ga)
 RUNS_DIR = REPO / "evolved"                       # repo/evolved
+# Run table columns that hold numbers (pop, gens, islands, held): end-aligned.
+NUMERIC_COLS = frozenset((1, 2, 4, 5))
+NUMERIC_ATTR = ' class="n"'
 
 
 def fig_b64(fig) -> str:
@@ -132,23 +138,32 @@ def run_cfg(run: Path) -> dict:
 
 def curves_b64(runs, best_run_name: str | None):
     fig, ax = plt.subplots(figsize=(12, 5.2))
+    # One legend entry per role, not per run: with dozens of runs a per-run
+    # legend covers the plot. The run table below names every run.
+    others = 0
     for run in runs:
         gens, best, mean, q25, q75, _ = load_run_csv(run)
         if not gens:
             continue
-        label = run.name
         if run.name == best_run_name:
-            ax.plot(gens, best, color=theme.ACCENT, lw=2.2, label=f"{label} (BEST)")
-            ax.fill_between(gens, q25, q75, color=theme.ACCENT, alpha=0.10)
+            ax.plot(gens, best, color=theme.ACCENT, lw=2.2, zorder=3, label=f"champion run ({run.name})")
+            ax.fill_between(gens, q25, q75, color=theme.ACCENT, alpha=0.12, zorder=2)
         else:
-            ax.plot(gens, best, color=theme.SERIES_DIM, lw=1.0, alpha=0.85, label=label)
+            ax.plot(gens, best, color=theme.SERIES_DIM, lw=0.9, alpha=0.55,
+                    label=None if others else ("other runs" if best_run_name else "runs"))
+            others += 1
     ax.set_xlabel("generation", fontsize=10)
     ax.set_ylabel("fitness (scalar)", fontsize=10)
-    ax.set_title("Evolution: best fitness per generation (all runs)", fontsize=13)
-    ax.grid(True, alpha=0.15)
-    ax.legend(fontsize=7, ncols=3, frameon=False, loc="lower right")
+    ax.set_title("Best fitness per generation, all runs", fontsize=12, loc="left")
+    ax.grid(True)
+    ax.legend(fontsize=9, frameon=False, loc="lower right")
     fig.tight_layout()
     return fig_b64(fig)
+
+
+# Held-out chart geometry: inches per run row and for the axes and title.
+HELD_ROW_IN = 0.2
+HELD_PAD_IN = 1.2
 
 
 def held_strip_b64(runs):
@@ -172,13 +187,18 @@ def held_strip_b64(runs):
     order = np.argsort(helds)[::-1]
     labels = [labels[i] for i in order]
     helds = [helds[i] for i in order]
+    # Height grows with the run count so every run name keeps a readable row.
+    fig.set_size_inches(12, HELD_ROW_IN * len(helds) + HELD_PAD_IN)
     cols = [theme.ACCENT] + [theme.SERIES_DIM] * (len(helds) - 1)
-    ax.bar(range(len(helds)), helds, color=cols, alpha=0.9)
-    ax.set_xticks(range(len(helds)))
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
-    ax.set_ylabel("held (seed999)")
-    ax.set_title("Held-out stability: final held per run (champion on the left)")
-    ax.grid(True, axis="y", alpha=0.2)
+    ax.barh(range(len(helds)), helds, color=cols, height=0.7)
+    ax.set_yticks(range(len(helds)))
+    ax.set_yticklabels(labels, fontsize=7.5)
+    ax.invert_yaxis()
+    lo = min(helds)
+    ax.set_xlim(lo - (max(helds) - lo) * 0.1 - 0.05, max(helds) + 0.05)
+    ax.set_xlabel("final held-out score (seed 999)")
+    ax.set_title("Final held-out score per run, highest first", fontsize=12, loc="left")
+    ax.grid(True, axis="x")
     fig.tight_layout()
     return fig_b64(fig)
 
@@ -235,6 +255,7 @@ def build(runs, out: Path, replays):
     chunks.append(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clanker: bot evolution</title>
+{theme.FAVICON}
 <style>{theme.DARK_STYLE}</style></head><body><div class="wrap">
 <header class="head">
 <div>
@@ -266,15 +287,15 @@ def build(runs, out: Path, replays):
         # run recorded held-out scores, and feeding "" through chart_card would
         # crash the whole dashboard on the PNG header parse.
         if cd:
-            chunks.append(f"""<section class="sec"><h2>1 · Evolution curves</h2>{chart_card(cd, f'Line chart of the best fitness per generation across {len(runs)} runs; the champion run is highlighted')}</section>""")
+            chunks.append(f"""<section class="sec"><h2>Evolution curves</h2>{chart_card(cd, f'Line chart of the best fitness per generation across {len(runs)} runs; the champion run is highlighted')}</section>""")
         if hs:
-            chunks.append(f"""<section class="sec"><h2>2 · Held-out stability</h2>{chart_card(hs, 'Bar chart of the final held-out score per run, champion run on the left')}</section>""")
+            chunks.append(f"""<section class="sec"><h2>Held-out stability</h2>{chart_card(hs, 'Bar chart of the final held-out score per run, highest first')}</section>""")
         if net:
-            chunks.append(f"""<section class="sec"><h2>3 · Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'Diagram of the champion controller neural network: 14 inputs, 16 hidden units, 5 outputs')}</section>""")
+            chunks.append(f"""<section class="sec"><h2>Champion controller (14&rarr;16&rarr;5)</h2>{chart_card(net, 'Diagram of the champion controller neural network: 14 inputs, 16 hidden units, 5 outputs')}</section>""")
 
     # Arena replays
     if replays:
-        chunks.append('<section class="sec"><h2>4 · Arena replays</h2>')
+        chunks.append('<section class="sec"><h2>Arena replays</h2>')
         chunks.append('<p class="lede">Top-down matches of the champion in the sim, same seed as the run that promoted it.</p>')
         chunks.append('<div class="grid">')
         # Ids come from the frame's position, not from its label: str hashing is
@@ -323,18 +344,19 @@ if (typeof IntersectionObserver === "function") {
                      f"{heldv[-1]:.2f}" if heldv else "n/a"))
     rows.sort(key=lambda r: float(r[5]) if r[5] != "n/a" else 0, reverse=True)
     if rows:
-        chunks.append("""<section class="sec"><h2>5 · Runs</h2><table><caption>Population, generations, curriculum, islands and final held-out score (seed 999) per run, best held first.</caption><thead><tr><th scope="col">run</th><th scope="col">pop</th><th scope="col">gens</th><th scope="col">curriculum</th><th scope="col">islands</th><th scope="col">held</th></tr></thead><tbody>""")
+        chunks.append("""<section class="sec"><h2>Runs</h2><div class="tablescroll" role="region" aria-label="Runs table" tabindex="0"><table><caption>Population, generations, curriculum, islands and final held-out score (seed 999) per run, best held first.</caption><thead><tr><th scope="col">Run</th><th scope="col" class="n">Pop</th><th scope="col" class="n">Gens</th><th scope="col">Curriculum</th><th scope="col" class="n">Islands</th><th scope="col" class="n">Held</th></tr></thead><tbody>""")
         # Every cell is filesystem/config text (run dir names, hand-editable
         # config.json values), so it is HTML-escaped before it lands in the page:
         # a crafted run name must not execute in the browser of whoever opens the
         # generated dashboard.
         for r in rows:
-            cells = "".join(f"<td>{html.escape(str(c))}</td>" for c in r)
+            cells = "".join(f'<td{NUMERIC_ATTR if i in NUMERIC_COLS else ""}>{html.escape(str(c))}</td>'
+                            for i, c in enumerate(r))
             chunks.append(f"<tr>{cells}</tr>")
-        chunks.append("</tbody></table></section>")
+        chunks.append("</tbody></table></div></section>")
     else:
         # An empty table reads as a measured zero; name what is missing instead.
-        chunks.append('<section class="sec"><h2>5 · Runs</h2><p class="lede">'
+        chunks.append('<section class="sec"><h2>Runs</h2><p class="lede">'
                       'No run has recorded a fitness.csv yet. Run tools/ga/evolve.py, '
                       'then rebuild this dashboard.</p></section>')
     chunks.append(f"""<p class="foot">Built from {len(runs)} run(s) in evolved/runs. Replays are deterministic: the same seed replays the same match. Replay frames follow the pre-R10 sim rules, not the live game.</p></div>""")

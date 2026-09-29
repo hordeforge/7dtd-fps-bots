@@ -75,13 +75,15 @@ without `IntersectionObserver` mounts them all at once), and the payload
 script sits at the end of the document so the sections above it are parsed
 first.
 
-Both pages take their look from `theme.py`, which is the one place a color or
-a size is set: a warm near-black console face for the dashboard, the same
-tokens on warm paper for the report, a single rust hue for anything a reader
-should look at first, and mono for every number. `report.py` imports the same
-constants for its matplotlib series, so a chart and the page under it cannot
-drift apart. Change the value in `theme.py`, rebuild both pages; do not
-hardcode a hex in either generator.
+All three pages (dashboard, report, replay) take their look from `theme.py`,
+the one place a color or a size is set. The values are the HordeForge brand
+tokens: the terminal palette (ground `#101418`, signal green `#5fd894`) for the
+dashboard and replay, the brand paper face for the report, sans for sentences
+and mono for ids and numbers. Every chart renders on the terminal plate through
+`theme.chart_rc()`, so it reads the same on either page, and `report.py`,
+`dashboard.py` and `viz.py` take their series colors from the same constants.
+Change the value in `theme.py` and rebuild the pages; do not hardcode a hex in
+a generator.
 
 ## How to run
 

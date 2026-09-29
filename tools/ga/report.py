@@ -28,15 +28,15 @@ try:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
+    plt.rcParams.update(theme.chart_rc())
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
     np = None  # type: ignore[assignment]
 
-# One rust signal hue for the whole GA tooling family (theme.py owns the
-# tokens; the charts and the HTML page take the same values so a chart and
-# the page it sits on cannot drift apart). CAB is the secondary series, ACCENT
-# the one a reader should look at first, best stays the darkest ink.
+# theme.py owns the tokens; the charts and the HTML page take the same values
+# so a chart and the page it sits on cannot drift apart. CAB is the secondary
+# series, ACCENT the one a reader should look at first, best the brightest ink.
 CAB = theme.SERIES_DIM
 ACCENT = theme.ACCENT
 BEST_LINE = theme.SERIES_BEST
@@ -82,7 +82,7 @@ def img_tag(data: bytes, alt: str) -> str:
     w, h = png_dimensions(data)
     return (f"<img src='data:image/png;base64,{b64}' alt='{alt}' width='{w}' height='{h}'"
             f" loading='lazy' decoding='async'"
-            f" style='max-width:100%;height:auto;border:1px solid {theme.PAPER_LINE};border-radius:3px'>")
+            f" style='display:block;width:100%;height:auto;border-radius:8px'>")
 
 
 def load_csv(path: Path):
@@ -151,7 +151,7 @@ def weight_hist(run_dir: Path) -> bytes | None:
     if w is None:
         return None
     fig, ax = plt.subplots(figsize=(9, 2.6))
-    ax.hist(w, bins=28, color=CAB, alpha=0.88, edgecolor="white", lw=0.6)
+    ax.hist(w, bins=28, color=CAB, alpha=0.88, edgecolor=theme.CHART_BG, lw=0.6)
     ax.set_xlabel("weight value"); ax.set_ylabel("count")
     ax.set_title(f"Weight histogram: best of gen {last.get('gen', '?')}  (W={len(w)}, mean {np.mean(w):+.3f} σ {np.std(w):.3f})")
     ax.grid(True, axis="y", alpha=0.18)
@@ -252,17 +252,18 @@ def build(runs: list[Path], out: Path) -> int:
         if wh:   sec.append(f"<div style='margin:14px 0'>{img_tag(wh, 'weight histogram')}</div>")
         if topo: sec.append(f"<div style='margin:14px 0'>{img_tag(topo, 'best network topology')}</div>")
         if not HAS_MPL:
-            sec.append(f"<p class='foot' style='color:{theme.ACCENT_TEXT}'>matplotlib not installed, headline only. <code>uv pip install matplotlib</code></p>")
+            sec.append("<p class='foot'>matplotlib not installed, headline only. <code>uv pip install matplotlib</code></p>")
         parts.append("\n".join(sec))
         sections += 1
 
     page = f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clanker: evolution report</title>
+{theme.FAVICON}
 <style>{theme.LIGHT_STYLE}</style>
 <body><div class="wrap">
-<header class="head"><h1>Clanker: evolution report</h1>
-<p class="lede">Generated {datetime.datetime.now().astimezone().isoformat(timespec='seconds')} &middot; docs/research 00..06 &middot; evolved/runs &rarr; best.json</p></header>
-{"<section class='sec'>".join(parts) if parts else "<p>No runs.</p>"}
+<header class="head"><div><h1>Clanker: evolution report</h1>
+<p class="lede">Generated {datetime.datetime.now().astimezone().isoformat(timespec='seconds')} &middot; docs/research 00..06 &middot; evolved/runs &rarr; best.json</p></div></header>
+{"".join(f"<section class='sec'>{p}</section>" for p in parts) if parts else "<p>No runs.</p>"}
 <footer class="foot">Charts score the headless combat sim (tools/ga/harness.py). This report holds the runs it was built from; the cross-run champion lives in the evolution dashboard.</footer>
 </div></body></html>
 """
