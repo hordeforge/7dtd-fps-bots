@@ -112,7 +112,7 @@ jobs:
             echo "       cut the [Unreleased] entries into one before tagging" >&2
             exit 1
           fi
-          if ! printf '%s\n' "$BODY" | grep -qE '^(### |- )'; then
+          if ! grep -qE '^(### |- )' <<<"$BODY"; then
             echo "ERROR: '## [$VERSION]' in CHANGELOG.md is empty" >&2
             exit 1
           fi
