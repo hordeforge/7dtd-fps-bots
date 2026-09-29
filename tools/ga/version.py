@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The `--version` every GA CLI answers, read from the mod's own constants.
 
 A genome is only loadable by the mod build that declares the same shape and
