@@ -26,6 +26,8 @@ Cutting a release, in this order:
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-29
+
 ### Breaking
 
 Under the 0.x policy above, these change what an existing consumer sees.
