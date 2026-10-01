@@ -326,6 +326,11 @@ static class AtomicTextFileTests
         //    loss). One writer alternates two full payloads while readers
         //    hammer TryRead: every read must succeed with one of the exact
         //    payloads, never false, never partial.
+        //    The writer waits for a completed read before each rewrite.
+        //    WriteGate is a Monitor, which is not fair: a writer looping on it
+        //    reacquires before a woken reader runs, so without the handoff the
+        //    readers sat blocked through all 200 rewrites, each finished one
+        //    read after the storm, and the swap window went unobserved.
         {
             string dir = TempDir(), path = Path.Combine(dir, "botmod.json");
             const string pa = "{\"phase\":\"a\",\"pad\":\"0123456789\"}";
@@ -335,16 +340,29 @@ static class AtomicTextFileTests
             var doneWriters = new System.Threading.ManualResetEvent(false);
             var stopReaders = new System.Threading.ManualResetEvent(false);
             var doneReaders = new System.Threading.ManualResetEvent(false);
+            var readDone = new System.Threading.AutoResetEvent(false);
             int reads = 0;
             const int readers = 4;
             int readersLeft = readers;
             const int rewrites = 200;
+            // Readers drain behind whatever writes are still queued on
+            // WriteGate when the stop signal lands, so they get the storm's
+            // budget too rather than a second flat constant. The writer's
+            // per-rewrite wait for a read uses it as its hang bound.
+            int budget = BudgetMs(rewrites);
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
                     for (int i = 0; i < rewrites; i++)
+                    {
+                        if (!readDone.WaitOne(budget))
+                        {
+                            lock (errors) errors.Add("writer: no read completed before rewrite " + i);
+                            break;
+                        }
                         AtomicTextFile.Write(path, i % 2 == 0 ? pb : pa);
+                    }
                 }
                 catch (Exception ex) { lock (errors) errors.Add("writer: " + ex.ToString()); }
                 finally { doneWriters.Set(); }
@@ -363,16 +381,13 @@ static class AtomicTextFileTests
                             else if (s != pa && s != pb)
                                 lock (errors) errors.Add("torn or stale read: " + s);
                             System.Threading.Interlocked.Increment(ref reads);
+                            readDone.Set();
                         }
                     }
                     catch (Exception ex) { lock (errors) errors.Add("reader: " + ex.ToString()); }
                     finally { if (System.Threading.Interlocked.Decrement(ref readersLeft) == 0) doneReaders.Set(); }
                 });
             }
-            // Readers drain behind whatever writes are still queued on
-            // WriteGate when the stop signal lands, so they get the storm's
-            // budget too rather than a second flat constant.
-            int budget = BudgetMs(rewrites);
             bool finished = doneWriters.WaitOne(budget);
             stopReaders.Set();
             Check("writer finished within timeout", finished);
@@ -384,13 +399,11 @@ static class AtomicTextFileTests
             bool ok = AtomicTextFile.TryRead(path, out final, out readFrom);
             Check("final primary is the last written payload",
                 ok && final == pa); // 200 rewrites ending on an odd index rewrite pa last
-            // Floor, not just "> 0": a reader that gets scheduled once and
-            // exits would satisfy that while the swap window went unobserved,
-            // which is the whole thing this block exists to check. Runs land
-            // in the hundreds-to-thousands on a 200-rewrite storm, so 100 is
-            // far below any real run and far above "the hammer never ran".
-            Check("readers completed a meaningful number of reads (" + reads + ")",
-                reads >= 100);
+            // The handoff guarantees a completed read before every rewrite, so
+            // fewer reads than rewrites means the readers never ran between
+            // swaps, which is the whole thing this block exists to check.
+            Check("readers completed a read before every rewrite (" + reads + " reads)",
+                reads >= rewrites);
             Check("reads during concurrent writes all saw a complete payload (" + reads + " reads)",
                 errors.Count == 0);
             foreach (string e in errors) Console.WriteLine("     " + e);
