@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest release is supported: **0.8.0** (canonical constant in
+Only the latest release is supported: **0.9.0** (canonical constant in
 `Source/BotMod/Core/BotModVersion.cs`, mirrored by `Source/BotMod/ModInfo.xml`;
 older releases receive no fixes).
 

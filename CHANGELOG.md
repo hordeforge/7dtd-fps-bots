@@ -26,6 +26,10 @@ Cutting a release, in this order:
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.0] - 2026-10-25
+
 ### Changed
 
 - Retargeted to 7 Days to Die V3.3.0 b18. The stock names the mod relies on
