@@ -73,7 +73,9 @@ fi
 # read from the directory rather than from file mtimes, which a later restore
 # or an rsync would rewrite.
 now="$(date -u +%s)"
-taken="$(stat -c %Y "$newest")"
+# GNU stat and BSD stat disagree on the flag for mtime seconds; the
+# checkout runs on Linux and macOS, so try both rather than assume.
+taken="$(stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest")"
 age_hours=$(((now - taken) / 3600))
 
 # Verification is restore-state.sh's job (one place implements the MANIFEST
