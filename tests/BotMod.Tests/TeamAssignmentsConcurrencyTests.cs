@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using BotMod.Config;
+using BotMod.Foundation;
 
 static class TeamAssignmentsConcurrencyTests
 {
@@ -78,13 +79,12 @@ static class TeamAssignmentsConcurrencyTests
                         // AreAllies passes the already-canonical key, so
                         // canonicalize the way Bot.TeamKey does before asking;
                         // the raw admin spelling carries the "_NN" suffix
-                        // that GetTeamAssignment strips.
+                        // that GetTeamAssignment strips. The two accessors are
+                        // compared after the storm, never here: two separate
+                        // locked reads cannot be atomic while the writers keep
+                        // removing and re-adding the key, so a disagreement
+                        // here would measure the writer's timing, not a bug.
                         int t = cfg.GetTeamAssignment("Grunt_" + (i % 8));
-                        if (t != cfg.GetTeamAssignmentCanonical(BotText.BaseName("Grunt_" + (i % 8))))
-                        {
-                            lock (errors) errors.Add("canonical lookup disagrees with the general one");
-                            break;
-                        }
                         if (t > 0) Interlocked.Increment(ref sawAssigned);
                         if (t < 0 || t > cfg.BotTeamCount)
                         {
@@ -126,7 +126,9 @@ static class TeamAssignmentsConcurrencyTests
         Check("clear makes lookups answer free-for-all", cfg.GetTeamAssignment("Grunt") == 0);
 
         cfg.SetTeamAssignment("Grunt", 3);
-        Check("assign stores the team", cfg.GetTeamAssignment("Grunt") == 3);
+        Check("assign stores the team",
+            cfg.GetTeamAssignment("Grunt") == 3
+            && cfg.GetTeamAssignmentCanonical("Grunt") == 3);
         Check("assign stores the team in the snapshot",
             cfg.SnapshotTeamAssignments().ContainsKey("Grunt"));
         cfg.SetTeamAssignment("Grunt", 0);
@@ -162,10 +164,15 @@ static class TeamAssignmentsConcurrencyTests
             cfg.SetTeamAssignment("one_too_many", 1) == BotConfig.TeamAssignResult.AtCapacity);
         Check("an existing key past the cap is still updatable",
             cfg.SetTeamAssignment("cap0", 2) == BotConfig.TeamAssignResult.Ok && cfg.GetTeamAssignment("cap0") == 2);
-        Check("a full spawned name lands on the same canonical key",
-            cfg.SetTeamAssignment("[Bot] K\u00edra_42", 2) == BotConfig.TeamAssignResult.Ok
-            && cfg.GetTeamAssignment("K\u00edra") == 2
-            && cfg.SnapshotTeamAssignments().ContainsKey("K\u00edra"));
+        // At capacity a name whose canonical key does not exist yet is refused,
+        // exactly like its bare spelling; the full spawned spelling still
+        // resolves for a key that already exists (cap0 holds team 2 above).
+        Check("past the cap a new canonical key is refused",
+            cfg.SetTeamAssignment("[Bot] K\u00edra_42", 2) == BotConfig.TeamAssignResult.AtCapacity);
+        Check("at the cap a full spawned name still updates its existing key",
+            cfg.SetTeamAssignment("[Bot] cap0_42", 2) == BotConfig.TeamAssignResult.Ok
+            && cfg.GetTeamAssignment("cap0") == 2
+            && cfg.GetTeamAssignmentCanonical("cap0") == 2);
 
         Console.WriteLine(_failures == 0 ? "all team assignments concurrency tests passed" : _failures + " test(s) FAILED");
         return _failures == 0 ? 0 : 1;

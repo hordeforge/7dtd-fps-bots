@@ -15,6 +15,7 @@ Canonical modding guide: [MODDING_BEST_PRACTICES.md](https://github.com/hordefor
 
 ## Scope & Boundaries
 
+- Builds against 7 Days to Die **V3.3.0 b18** (dedicated `Assembly-CSharp.dll`). The stock names the mod relies on are present in b18 `Data/Config`: the `zombieSoldier` body class (`entityclasses.xml`), the `zombieBoe`/`npcTraderJoel`/`npcSurvivorRanged` fallbacks, and the six `LoadoutPool` weapons (`items.xml`). The negative EntityClass ids for appended classes and the trader-body render failure were observed on V3.1.0 b14 and are unverified on b18.
 - Requires Easy Anti-Cheat off (`<property name="EACEnabled" value="false"/>` in the server config; see README Install).
 - Vanilla clients require no client-side mod to play.
 - Keep performance overhead bounded: physics raycasts, vision cone calculations, and GA neural network inference must run efficiently within the 20 TPS (50 ms) tick budget.

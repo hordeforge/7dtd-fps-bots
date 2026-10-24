@@ -416,11 +416,13 @@ namespace BotMod.Core
 
         // Single body class, pinned to plain zombieSoldier. The vanilla humanoid
         // alternatives are NOT usable on this dedi: npcTraderJoel has a positive id
-        // but mod-spawned traders render NOTHING for clients (verified), EntityPlayer
-        // classes require the full player join path, and survivor/UMA classes
-        // (npcSurvivor*) return negative ids on this dedi build. A custom player-mesh
-        // class via the entityclasses patch is the path to true player models, pending
-        // the negative-id wall being solved.
+        // but mod-spawned traders render NOTHING for clients (verified on the
+        // V3.1.0 b14 run), EntityPlayer classes require the full player join path,
+        // and survivor/UMA classes (npcSurvivor*) return negative ids on this dedi
+        // build (also V3.1.0 b14; not re-checked on V3.3.0 b18, though every class
+        // name is still present in its entityclasses.xml). A custom player-mesh
+        // class via the entityclasses patch is the path to true player models,
+        // pending the negative-id wall being solved.
         const string BotClass = "zombieSoldier";
         public static Entity SpawnBotEntity(World world, Vector3 pos, string entityClassName, string botName)
         {
@@ -574,8 +576,10 @@ namespace BotMod.Core
                                 catch (Exception ex) { ModApi.WarnRateLimited(() => "weapon '" + gunId + "' could not be given to " + botName + ", bot is unarmed: " + ex.Message); }
                                 // Equip in hand so AvatarSDCS/UMA actually draws the rifle (rifle can't be seen if only in bag)
                                 try { alive.inventory.SetHoldingItemIdx(0); } catch { }
-                                try { alive.inventory.updateHoldingItem(); } catch { }
-                                try { alive.inventory.ForceHoldingItemUpdate(); } catch { }
+                                // V3.3.0 moved the held-item state into Inventory.Hand;
+                                // SetHoldingItemIdx selects the slot through it, and
+                                // ReconcileHeldItem is the old force-update equivalent.
+                                try { alive.inventory.ReconcileHeldItem(); } catch { }
                             }
                             // Both lookups missed: the bot spawns holding nothing
                             // and the caller logs it as a normal spawn, so the

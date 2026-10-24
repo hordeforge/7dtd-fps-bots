@@ -28,6 +28,15 @@ Cutting a release, in this order:
 
 ### Changed
 
+- Retargeted to 7 Days to Die V3.3.0 b18. The stock names the mod relies on
+  are unchanged in b18 `Data/Config` (`zombieSoldier` body, the three
+  fallback classes, the six `LoadoutPool` weapons), and `EntityClass.AddClass`
+  is still absent. The held-item force update moved with the V3.3.0 hand
+  rework: `Inventory.updateHoldingItem` and
+  `Inventory.ForceHoldingItemUpdate` are gone, so the spawn path calls
+  `Inventory.ReconcileHeldItem` after `SetHoldingItemIdx`. The negative-class
+  id and trader-body render observations are V3.1.0 b14 evidence and remain
+  unverified on b18.
 - Unread constants and write-only accumulators removed: the
   `WEAPON_SPREAD`/`WEAPON_FIRE_RATE`/`WEAPON_BURST_MAX` tables in
   `tools/ga/combat_sim.py` and `tools/ga/replay.py` (no reader in the repo),
@@ -40,6 +49,16 @@ Cutting a release, in this order:
   a torn row charted its held-out series against the wrong generations. The
   "newest `gen_*.json`" lookup is now `ga.latest_ckpt` rather than three
   inlined sorts.
+
+### Fixed
+
+- `make test` compiles and passes again. `TeamAssignmentsConcurrencyTests`
+  used `BotText` without importing `BotMod.Foundation`, compared two separate
+  locked reads while the writer storm mutated the same key (a timing
+  disagreement, not a bug), and expected an at-capacity write to a canonical
+  key that did not exist to succeed. The mod also builds through the `dotnet`
+  backend again only after `BotArgParser` initialized the count local it
+  reads on one branch.
 
 ## [0.8.0] - 2026-09-29
 

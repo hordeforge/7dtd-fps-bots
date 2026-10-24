@@ -107,7 +107,10 @@ namespace BotMod.Commands
             }
             // Two or three remaining tokens: [x z] or [count x z].
             int coordStart = mid == 3 ? start + 1 : start;
-            if (mid == 3 && !int.TryParse(args[start], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+            // Initialized for the compiler: n is only read when mid == 3, which
+            // is also the only branch that parses it.
+            int n = 0;
+            if (mid == 3 && !int.TryParse(args[start], NumberStyles.Integer, CultureInfo.InvariantCulture, out n))
             {
                 error = Unrecognized(args[start]); return false;
             }
