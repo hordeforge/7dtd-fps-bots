@@ -49,6 +49,7 @@ The neuroevolution and bot-AI research for the 7dtd-fps-bots bot mod. Two layers
 | [`REPORT-2026-08-21-R11-residual-sweep.md`](REPORT-2026-08-21-R11-residual-sweep.md) | Duel re-test, champion plateau, retreat-guardrail fix |
 | [`REPORT-2026-08-21-R12-duel-arena.md`](REPORT-2026-08-21-R12-duel-arena.md) | Discriminative duels, champion 11.91, GOAL MET |
 | [`REPORT-2026-08-21-R13-static-bot-parity.md`](REPORT-2026-08-21-R13-static-bot-parity.md) | Static (Q3/D3) bot parity audit vs zdtd guest |
+| [`REPORT-2026-11-05-b18-live.md`](REPORT-2026-11-05-b18-live.md) | b18 live acceptance: load and spawn pass; hits blocked, pathing unproven |
 
 ## Current state (2026-08-21)
 

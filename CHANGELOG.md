@@ -26,7 +26,16 @@ Cutting a release, in this order:
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Live V3.3.0 b18 dedicated acceptance found that the mod loads, patches,
+  loads the neural champion, and spawns 6/6 DM bots, but no hit lands and no
+  horizontal movement is observed. `EntityAlive.DamageEntity` returns -1 for
+  bot fire because attacker and victim share the `Zombie` entity flag, and
+  the no-player run had unstreamed chunks. Ammo insertion also reports a
+  rejected stack on b18. Evidence, hashes, and IL references:
+  `docs/research/REPORT-2026-11-05-b18-live.md`. No code changed in this
+  entry.
 
 ## [0.9.0] - 2026-10-25
 
