@@ -24,18 +24,26 @@ Cutting a release, in this order:
    published version is immutable, so a rebuild that has to change anything
    is a new version, not a moved tag.
 
-## [Unreleased]
+## [0.10.0] - 2026-11-05
 
 ### Changed
 
-- Live V3.3.0 b18 dedicated acceptance found that the mod loads, patches,
-  loads the neural champion, and spawns 6/6 DM bots, but no hit lands and no
-  horizontal movement is observed. `EntityAlive.DamageEntity` returns -1 for
-  bot fire because attacker and victim share the `Zombie` entity flag, and
-  the no-player run had unstreamed chunks. Ammo insertion also reports a
-  rejected stack on b18. Evidence, hashes, and IL references:
-  `docs/research/REPORT-2026-11-05-b18-live.md`. No code changed in this
-  entry.
+- Retargeted to 7 Days to Die V3.4.0 b10 (dedicated buildid `26310339`, depot
+  manifest `5022117301453546978`, `Assembly-CSharp.dll` sha256
+  `00a962dbbb5ef1bb454368322221f9eb4148dc2d548ed2b77244f9bda5ecc167`,
+  11752960 bytes). The stock names the mod relies on are unchanged in
+  V3.4.0 `Data/Config` (`zombieSoldier` body, the three fallback classes, the
+  six `LoadoutPool` weapons), and the mod builds, patches, loads the neural
+  champion, and spawns 6/6 DM bots on the new install.
+- Live acceptance on V3.4.0 repeats the b18 result: bots target each other
+  and enter Attack with burst counters cycling, but no hit lands and no
+  horizontal movement is observed. `EntityAlive.DamageEntity` is
+  byte-identical to b18 (591 bytes, including the `FriendlyFireCheck`
+  early-out that returns -1), so V3.4.0 did not change the refusal; the
+  no-player run also had unstreamed chunks. Evidence, hashes and IL:
+  `docs/research/REPORT-2026-11-05-v340-live.md`; the b18 run stays in
+  `docs/research/REPORT-2026-11-05-b18-live.md`. No source change beyond the
+  version declaration.
 
 ## [0.9.0] - 2026-10-25
 

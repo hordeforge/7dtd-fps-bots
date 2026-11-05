@@ -419,7 +419,7 @@ namespace BotMod.Core
         // but mod-spawned traders render NOTHING for clients (verified on the
         // V3.1.0 b14 run), EntityPlayer classes require the full player join path,
         // and survivor/UMA classes (npcSurvivor*) return negative ids on this dedi
-        // build (also V3.1.0 b14; not re-checked on V3.3.0 b18, though every class
+        // build (also V3.1.0 b14; not re-checked on V3.4.0 b10, though every class
         // name is still present in its entityclasses.xml). A custom player-mesh
         // class via the entityclasses patch is the path to true player models,
         // pending the negative-id wall being solved.
